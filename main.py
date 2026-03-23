@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QHeaderView, QMessageBox, QDialog, QLineEdit, QTextEdit, 
                              QLabel, QComboBox, QCheckBox, QDateEdit, QGroupBox, QSplitter,
                              QMenuBar, QMenu, QStatusBar, QToolBar, QAbstractItemView)
+from json_examples_dialog import JsonExamplesDialog
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QAction, QIcon, QColor
 from datetime import datetime, date
@@ -103,6 +104,10 @@ class TaskManagerMainWindow(QMainWindow):
         
         # 帮助菜单
         help_menu = menubar.addMenu('帮助')
+        
+        json_examples_action = QAction('JSON导入示例', self)
+        json_examples_action.triggered.connect(self.show_json_examples)
+        help_menu.addAction(json_examples_action)
         
         about_action = QAction('关于', self)
         about_action.triggered.connect(self.show_about)
@@ -680,8 +685,10 @@ class TaskManagerMainWindow(QMainWindow):
                 if success:
                     self.load_data()  # 重新加载数据
                     QMessageBox.information(self, '成功', '数据导入成功')
+                    self.status_bar.showMessage('数据导入成功')
                 else:
-                    QMessageBox.critical(self, '错误', '数据导入失败')
+                    QMessageBox.critical(self, '错误', '数据导入失败，请检查JSON文件格式是否正确')
+                    self.status_bar.showMessage('数据导入失败')
     
     def show_statistics(self):
         """显示统计信息"""
@@ -697,6 +704,11 @@ class TaskManagerMainWindow(QMainWindow):
 已完成：{stats['daily']['completed'] + stats['todo']['completed'] + stats['entertainment']['completed']} 个"""
         
         QMessageBox.information(self, '统计信息', msg)
+    
+    def show_json_examples(self):
+        """显示JSON导入示例"""
+        dialog = JsonExamplesDialog(self)
+        dialog.exec()
     
     def show_about(self):
         """显示关于信息"""

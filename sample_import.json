@@ -1,0 +1,75 @@
+{
+  "daily": [
+    {
+      "title": "晨间运动",
+      "description": "每天早上跑步30分钟",
+      "completed": false,
+      "week_day": "每天",
+      "category": "daily"
+    },
+    {
+      "title": "读书时间",
+      "description": "每天阅读至少30页书籍",
+      "completed": true,
+      "week_day": "星期一",
+      "category": "daily"
+    },
+    {
+      "title": "冥想练习",
+      "description": "每天进行10分钟冥想",
+      "completed": false,
+      "week_day": "每天",
+      "category": "daily"
+    }
+  ],
+  "todo": [
+    {
+      "title": "完成项目报告",
+      "description": "完成Q1季度项目总结报告",
+      "completed": false,
+      "deadline": "2026-04-15",
+      "urgency_score": 5,
+      "category": "todo"
+    },
+    {
+      "title": "购买生日礼物",
+      "description": "为朋友准备生日礼物",
+      "completed": true,
+      "deadline": "2026-03-30",
+      "urgency_score": 3,
+      "category": "todo"
+    },
+    {
+      "title": "预约医生",
+      "description": "预约年度体检",
+      "completed": false,
+      "deadline": "2026-04-10",
+      "urgency_score": 4,
+      "category": "todo"
+    }
+  ],
+  "entertainment": [
+    {
+      "title": "看电影《流浪地球》",
+      "description": "观看最近上映的科幻电影",
+      "completed": false,
+      "fun_category": "movies",
+      "category": "entertainment"
+    },
+    {
+      "title": "打游戏",
+      "description": "玩新出的游戏",
+      "completed": true,
+      "fun_category": "games",
+      "category": "entertainment"
+    },
+    {
+      "title": "听音乐",
+      "description": "聆听喜欢的音乐专辑",
+      "completed": false,
+      "fun_category": "music",
+      "category": "entertainment"
+    }
+  ],
+  "config": {}
+}

@@ -375,40 +375,61 @@ class DataManager:
             # 导入每日任务
             if "daily" in data:
                 for task_data in data["daily"]:
+                    # 使用合理的默认值
+                    created_at_str = task_data.get("created_at", date.today().strftime("%Y-%m-%d"))
+                    try:
+                        created_at = datetime.strptime(created_at_str, "%Y-%m-%d")
+                    except ValueError:
+                        created_at = datetime.now()
+                        
                     task = DailyTask(
-                        id=task_data.get("id", ""),
+                        id=task_data.get("id", str(uuid.uuid4())),  # 生成新ID以防冲突
                         title=task_data.get("title", ""),
                         description=task_data.get("description", ""),
                         completed=task_data.get("completed", False),
                         week_day=task_data.get("week_day", ""),
-                        created_at=datetime.strptime(task_data.get("created_at", date.today().strftime("%Y-%m-%d")), "%Y-%m-%d")
+                        created_at=created_at
                     )
                     self.session.add(task)
             
             # 导入待办事项
             if "todo" in data:
                 for task_data in data["todo"]:
+                    # 使用合理的默认值
+                    created_at_str = task_data.get("created_at", date.today().strftime("%Y-%m-%d"))
+                    try:
+                        created_at = datetime.strptime(created_at_str, "%Y-%m-%d")
+                    except ValueError:
+                        created_at = datetime.now()
+                        
                     task = TodoTask(
-                        id=task_data.get("id", ""),
+                        id=task_data.get("id", str(uuid.uuid4())),  # 生成新ID以防冲突
                         title=task_data.get("title", ""),
                         description=task_data.get("description", ""),
                         completed=task_data.get("completed", False),
                         deadline=task_data.get("deadline", ""),
                         urgency_score=task_data.get("urgency_score", 0),
-                        created_at=datetime.strptime(task_data.get("created_at", date.today().strftime("%Y-%m-%d")), "%Y-%m-%d")
+                        created_at=created_at
                     )
                     self.session.add(task)
             
             # 导入娱乐任务
             if "entertainment" in data:
                 for task_data in data["entertainment"]:
+                    # 使用合理的默认值
+                    created_at_str = task_data.get("created_at", date.today().strftime("%Y-%m-%d"))
+                    try:
+                        created_at = datetime.strptime(created_at_str, "%Y-%m-%d")
+                    except ValueError:
+                        created_at = datetime.now()
+                        
                     task = EntertainmentTask(
-                        id=task_data.get("id", ""),
+                        id=task_data.get("id", str(uuid.uuid4())),  # 生成新ID以防冲突
                         title=task_data.get("title", ""),
                         description=task_data.get("description", ""),
                         completed=task_data.get("completed", False),
                         fun_category=task_data.get("fun_category", "general"),
-                        created_at=datetime.strptime(task_data.get("created_at", date.today().strftime("%Y-%m-%d")), "%Y-%m-%d")
+                        created_at=created_at
                     )
                     self.session.add(task)
             
@@ -420,6 +441,12 @@ class DataManager:
             
             self.session.commit()
             return True
+        except FileNotFoundError:
+            print(f"文件未找到: {filepath}")
+            return False
+        except json.JSONDecodeError as e:
+            print(f"JSON格式错误: {str(e)}")
+            return False
         except Exception as e:
             print(f"导入JSON失败: {str(e)}")
             self.session.rollback()
