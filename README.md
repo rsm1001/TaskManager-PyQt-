@@ -35,7 +35,20 @@ TaskManager-PyQt/
 
 ## 安装和运行
 
-### 方法一：使用虚拟环境（推荐）
+### 方法一：使用启动脚本（推荐）
+
+对于 Windows 用户：
+```bash
+双击 launch.bat 文件运行
+```
+
+对于 Linux/macOS 用户：
+```bash
+chmod +x launch.sh
+./launch.sh
+```
+
+### 方法二：使用虚拟环境
 
 ```bash
 python launch.py
@@ -43,7 +56,7 @@ python launch.py
 
 脚本会自动创建虚拟环境并安装依赖。
 
-### 方法二：手动安装
+### 方法三：手动安装
 
 1. 安装依赖：
 ```bash
