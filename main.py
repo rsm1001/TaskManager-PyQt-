@@ -878,6 +878,33 @@ class TaskEditDialog(QDialog):
             self.deadline_date.setDate(QDate.currentDate())  # 设置为今天
             deadline_layout.addWidget(self.deadline_date)
             layout.addLayout(deadline_layout)
+            
+            # 添加快速设置截止日期按钮
+            quick_set_layout = QHBoxLayout()
+            quick_set_layout.addWidget(QLabel('快速设置:'))
+            
+            btn_3days = QPushButton('3天后')
+            btn_3days.clicked.connect(lambda: self.set_deadline_days(3))
+            quick_set_layout.addWidget(btn_3days)
+            
+            btn_7days = QPushButton('7天后')
+            btn_7days.clicked.connect(lambda: self.set_deadline_days(7))
+            quick_set_layout.addWidget(btn_7days)
+            
+            btn_14days = QPushButton('2周后')
+            btn_14days.clicked.connect(lambda: self.set_deadline_days(14))
+            quick_set_layout.addWidget(btn_14days)
+            
+            btn_30days = QPushButton('1个月后')
+            btn_30days.clicked.connect(lambda: self.set_deadline_days(30))
+            quick_set_layout.addWidget(btn_30days)
+            
+            btn_60days = QPushButton('2个月后')
+            btn_60days.clicked.connect(lambda: self.set_deadline_days(60))
+            quick_set_layout.addWidget(btn_60days)
+            
+            quick_set_layout.addStretch()  # 添加弹性空间，使按钮靠左对齐
+            layout.addLayout(quick_set_layout)
         elif self.task_type == TaskType.ENTERTAINMENT:
             category_layout = QHBoxLayout()
             category_layout.addWidget(QLabel('类别:'))
@@ -914,6 +941,22 @@ class TaskEditDialog(QDialog):
             return '待办事项'
         else:
             return '娱乐任务'
+    
+    def set_deadline_days(self, days):
+        """设置截止日期为几天后"""
+        from datetime import timedelta
+        import datetime
+        
+        # 获取当前日期并添加指定天数
+        current_qdate = self.deadline_date.date()
+        # 将QDate转换为Python datetime对象以便计算
+        py_date = current_qdate.toPyDate()
+        future_date = py_date + timedelta(days=days)
+        
+        # 将计算后的日期转换回QDate并设置
+        from PyQt6.QtCore import QDate
+        future_qdate = QDate(future_date.year, future_date.month, future_date.day)
+        self.deadline_date.setDate(future_qdate)
     
     def load_task_data(self):
         """加载任务数据到表单"""
