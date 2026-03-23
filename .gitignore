@@ -1,0 +1,78 @@
+# 智能体相关文件
+/.openclaw
+/memory
+AGENTS.md
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md
+
+# Python相关
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.db-journal
+
+# Logs
+*.log
+logs/
+
+# Compiled Files
+*.exe
+*.dll
+*.class
+*.o
+*.a
+*.dylib
+
+# Backup Files
+*~
+*.bak
+*.tmp
+
+# SQLite
+*.sqlite
+*.sqlite3
+
+# Export/Import directories
+exports/
+imports/
