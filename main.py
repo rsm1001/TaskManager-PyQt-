@@ -789,6 +789,9 @@ class TaskEditDialog(QDialog):
             self.deadline_date = QDateEdit()
             self.deadline_date.setDisplayFormat('yyyy-MM-dd')
             self.deadline_date.setCalendarPopup(True)
+            # 设置最小日期以避免2000年的默认值问题
+            self.deadline_date.setMinimumDate(QDate.currentDate())
+            self.deadline_date.setDate(QDate.currentDate())  # 设置为今天
             deadline_layout.addWidget(self.deadline_date)
             layout.addLayout(deadline_layout)
         elif self.task_type == TaskType.ENTERTAINMENT:
@@ -846,7 +849,11 @@ class TaskEditDialog(QDialog):
                         deadline_date = QDate.fromString(self.task.deadline, 'yyyy-MM-dd')
                         self.deadline_date.setDate(deadline_date)
                     except:
+                        # 如果解析失败，保持当前日期
                         pass
+                else:
+                    # 如果没有截止日期，则使用当前日期
+                    self.deadline_date.setDate(QDate.currentDate())
             elif self.task_type == TaskType.ENTERTAINMENT:
                 index = self.category_combo.findText(self.task.fun_category)
                 if index >= 0:
@@ -864,10 +871,13 @@ class TaskEditDialog(QDialog):
             weekday = self.weekday_combo.currentText()
             data['weekday'] = '' if weekday == '每天' else weekday
         elif self.task_type == TaskType.TODO:
-            if self.deadline_date.date() != QDate(2000, 1, 1):  # 检查是否设置了日期
-                data['deadline'] = self.deadline_date.date().toString('yyyy-MM-dd')
-            else:
+            # 获取日期文本而不是直接比较日期对象
+            deadline_text = self.deadline_date.text()
+            # 如果日期文本是默认的2000年或空，则视为未设置
+            if '2000' in deadline_text or not deadline_text.strip() or deadline_text == '2000-01-01':
                 data['deadline'] = ''
+            else:
+                data['deadline'] = self.deadline_date.date().toString('yyyy-MM-dd')
         elif self.task_type == TaskType.ENTERTAINMENT:
             data['fun_category'] = self.category_combo.currentText()
         
