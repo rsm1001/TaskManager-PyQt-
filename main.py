@@ -241,6 +241,20 @@ class TaskManagerMainWindow(QMainWindow):
         self.todo_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.todo_table.cellDoubleClicked.connect(self.edit_todo_task)
         
+        # 启用表头点击排序功能
+        self.todo_table.horizontalHeader().sectionClicked.connect(self.sort_todo_table_by_column)
+        
+        # 添加排序状态跟踪变量
+        self.todo_sort_column = -1  # 当前排序列(-1表示未排序)
+        self.todo_sort_order = Qt.SortOrder.AscendingOrder  # 排序顺序(升序)
+        
+        # 启用表头点击排序功能
+        self.todo_table.horizontalHeader().sectionClicked.connect(self.sort_todo_table_by_column)
+        
+        # 添加排序状态跟踪变量
+        self.todo_sort_column = -1  # 当前排序列(-1表示未排序)
+        self.todo_sort_order = Qt.SortOrder.AscendingOrder  # 排序顺序(升序)
+        
         todo_layout.addWidget(self.todo_table)
         self.tab_widget.addTab(todo_widget, '待办事项')
     
@@ -384,6 +398,76 @@ class TaskManagerMainWindow(QMainWindow):
             status_item.setData(Qt.ItemDataRole.UserRole, task.id)
         
         self.update_status_bar()
+    
+    def sort_todo_table_by_column(self, column):
+        """根据列进行排序（支持正序和倒序）"""
+        # 如果点击的是同一列，则切换排序顺序（升序->降序->原始顺序）
+        if self.todo_sort_column == column:
+            if self.todo_sort_order == Qt.SortOrder.AscendingOrder:
+                self.todo_sort_order = Qt.SortOrder.DescendingOrder
+            elif self.todo_sort_order == Qt.SortOrder.DescendingOrder:
+                # 第三次点击恢复原始顺序（不排序）
+                self.todo_sort_column = -1
+                self.todo_sort_order = Qt.SortOrder.AscendingOrder
+                self.load_todo_tasks()  # 重新加载原始数据
+                return
+        else:
+            # 如果点击的是不同列，开始新列的升序排序
+            self.todo_sort_column = column
+            self.todo_sort_order = Qt.SortOrder.AscendingOrder
+
+        # 获取当前筛选状态
+        status = self.todo_status_combo.currentText()
+        if status == '全部':
+            status_filter = 'all'
+        elif status == '进行中':
+            status_filter = 'pending'
+        else:  # '已完成' 或 '已过期'
+            status_filter = 'completed'
+
+        tasks = self.data_manager.get_todo_tasks(status=status_filter)
+        
+        # 根据列进行排序
+        if column == 0:  # 状态列
+            tasks.sort(key=lambda x: x.completed, reverse=(self.todo_sort_order == Qt.SortOrder.DescendingOrder))
+        elif column == 1:  # 标题列
+            tasks.sort(key=lambda x: x.title.lower(), reverse=(self.todo_sort_order == Qt.SortOrder.DescendingOrder))
+        elif column == 2:  # 截止日期列
+            # 处理可能的空截止日期
+            tasks.sort(key=lambda x: (x.deadline or ''), reverse=(self.todo_sort_order == Qt.SortOrder.DescendingOrder))
+        elif column == 3:  # 紧急程度列
+            tasks.sort(key=lambda x: x.urgency_score, reverse=(self.todo_sort_order == Qt.SortOrder.DescendingOrder))
+        elif column == 4:  # 描述列
+            tasks.sort(key=lambda x: (x.description or '').lower(), reverse=(self.todo_sort_order == Qt.SortOrder.DescendingOrder))
+        elif column == 5:  # 创建日期列
+            tasks.sort(key=lambda x: x.created_at, reverse=(self.todo_sort_order == Qt.SortOrder.DescendingOrder))
+
+        # 更新表格显示
+        self.todo_table.setRowCount(len(tasks))
+        for row, task in enumerate(tasks):
+            # 状态
+            status_item = QTableWidgetItem('✓' if task.completed else '○')
+            status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.todo_table.setItem(row, 0, status_item)
+            
+            # 标题
+            self.todo_table.setItem(row, 1, QTableWidgetItem(task.title))
+            
+            # 截止日期
+            deadline = task.deadline if task.deadline else '无'
+            self.todo_table.setItem(row, 2, QTableWidgetItem(deadline))
+            
+            # 紧急程度
+            self.todo_table.setItem(row, 3, QTableWidgetItem(str(task.urgency_score)))
+            
+            # 描述
+            self.todo_table.setItem(row, 4, QTableWidgetItem(task.description or '-'))
+            
+            # 创建日期
+            self.todo_table.setItem(row, 5, QTableWidgetItem(task.created_at.strftime('%Y-%m-%d')))
+            
+            # 存储任务ID用于后续操作
+            status_item.setData(Qt.ItemDataRole.UserRole, task.id)
     
     def load_entertainment_tasks(self):
         """加载娱乐任务"""
