@@ -179,6 +179,7 @@ class TaskManagerMainWindow(QMainWindow):
         daily_control_layout.addWidget(QLabel('状态:'))
         self.daily_status_combo = QComboBox()
         self.daily_status_combo.addItems(['全部', '进行中', '已完成'])
+        self.daily_status_combo.setCurrentText('进行中')  # 默认选择"进行中"
         self.daily_status_combo.currentTextChanged.connect(self.load_daily_tasks)
         daily_control_layout.addWidget(self.daily_status_combo)
         
@@ -225,6 +226,7 @@ class TaskManagerMainWindow(QMainWindow):
         todo_control_layout.addWidget(QLabel('状态:'))
         self.todo_status_combo = QComboBox()
         self.todo_status_combo.addItems(['全部', '进行中', '已完成', '已过期'])
+        self.todo_status_combo.setCurrentText('进行中')  # 默认选择"进行中"
         self.todo_status_combo.currentTextChanged.connect(self.load_todo_tasks)
         todo_control_layout.addWidget(self.todo_status_combo)
         
@@ -271,6 +273,7 @@ class TaskManagerMainWindow(QMainWindow):
         entertainment_control_layout.addWidget(QLabel('状态:'))
         self.entertainment_status_combo = QComboBox()
         self.entertainment_status_combo.addItems(['全部', '进行中', '已完成'])
+        self.entertainment_status_combo.setCurrentText('进行中')  # 默认选择"进行中"
         self.entertainment_status_combo.currentTextChanged.connect(self.load_entertainment_tasks)
         entertainment_control_layout.addWidget(self.entertainment_status_combo)
         
