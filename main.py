@@ -193,6 +193,7 @@ class TaskManagerMainWindow(QMainWindow):
         self.daily_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.daily_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.daily_table.cellDoubleClicked.connect(self.edit_daily_task)
+        self.daily_table.cellClicked.connect(self.toggle_daily_task_status)
         
         daily_layout.addWidget(self.daily_table)
         self.tab_widget.addTab(daily_widget, '每日必做')
@@ -255,6 +256,8 @@ class TaskManagerMainWindow(QMainWindow):
         self.todo_sort_column = -1  # 当前排序列(-1表示未排序)
         self.todo_sort_order = Qt.SortOrder.AscendingOrder  # 排序顺序(升序)
         
+        self.todo_table.cellClicked.connect(self.toggle_todo_task_status)
+        
         todo_layout.addWidget(self.todo_table)
         self.tab_widget.addTab(todo_widget, '待办事项')
     
@@ -301,6 +304,7 @@ class TaskManagerMainWindow(QMainWindow):
         self.entertainment_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.entertainment_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.entertainment_table.cellDoubleClicked.connect(self.edit_entertainment_task)
+        self.entertainment_table.cellClicked.connect(self.toggle_entertainment_task_status)
         
         entertainment_layout.addWidget(self.entertainment_table)
         self.tab_widget.addTab(entertainment_widget, '娱乐任务')
@@ -358,6 +362,24 @@ class TaskManagerMainWindow(QMainWindow):
         
         self.update_status_bar()
     
+    def toggle_daily_task_status(self, row, column):
+        """切换每日任务状态"""
+        if column == 0:  # 状态列
+            item = self.daily_table.item(row, 0)
+            task_id = item.data(Qt.ItemDataRole.UserRole)
+            if task_id:
+                # 切换状态
+                task = self.data_manager.get_daily_task_by_id(task_id)
+                if task:
+                    new_status = not task.completed
+                    self.data_manager.update_daily_task(task_id=task_id, completed=new_status)
+                    
+                    # 重新加载任务以确保数据一致性
+                    self.load_daily_tasks()
+                    
+                    # 清除选中状态
+                    self.daily_table.clearSelection()
+    
     def load_todo_tasks(self):
         """加载待办事项"""
         # 获取筛选条件
@@ -398,6 +420,24 @@ class TaskManagerMainWindow(QMainWindow):
             status_item.setData(Qt.ItemDataRole.UserRole, task.id)
         
         self.update_status_bar()
+    
+    def toggle_todo_task_status(self, row, column):
+        """切换待办事项状态"""
+        if column == 0:  # 状态列
+            item = self.todo_table.item(row, 0)
+            task_id = item.data(Qt.ItemDataRole.UserRole)
+            if task_id:
+                # 切换状态
+                task = self.data_manager.get_todo_task_by_id(task_id)
+                if task:
+                    new_status = not task.completed
+                    self.data_manager.update_todo_task(task_id=task_id, completed=new_status)
+                    
+                    # 重新加载任务以确保数据一致性
+                    self.load_todo_tasks()
+                    
+                    # 清除选中状态
+                    self.todo_table.clearSelection()
     
     def sort_todo_table_by_column(self, column):
         """根据列进行排序（支持正序和倒序）"""
@@ -505,6 +545,32 @@ class TaskManagerMainWindow(QMainWindow):
             status_item.setData(Qt.ItemDataRole.UserRole, task.id)
         
         self.update_status_bar()
+    
+    def toggle_entertainment_task_status(self, row, column):
+        """切换娱乐任务状态"""
+        if column == 0:  # 状态列
+            item = self.entertainment_table.item(row, 0)
+            task_id = item.data(Qt.ItemDataRole.UserRole)
+            if task_id:
+                # 切换状态
+                task = self.data_manager.get_entertainment_task_by_id(task_id)
+                if task:
+                    new_status = not task.completed
+                    self.data_manager.update_entertainment_task(task_id=task_id, completed=new_status)
+                    
+                    # 重新加载任务以确保数据一致性
+                    self.load_entertainment_tasks()
+                    
+                    # 清除选中状态
+                    self.entertainment_table.clearSelection()
+    
+    def update_task_row_style(self, table, row, is_completed):
+        """更新任务行样式（根据完成状态）"""
+        color = QColor(200, 200, 200) if is_completed else QColor(255, 255, 255)
+        for col in range(table.columnCount()):
+            item = table.item(row, col)
+            if item:
+                item.setBackground(color)
     
     def add_daily_task(self):
         """添加每日任务"""
