@@ -18,6 +18,14 @@ from models.model import DailyTask, TodoTask, EntertainmentTask
 from ui.task_edit_dialog import TaskEditDialog
 import config.config
 from ui_components import create_daily_tab_ui, create_todo_tab_ui, create_entertainment_tab_ui
+from ui_messages import (show_statistics_dialog, show_about_dialog, show_random_daily_task_dialog, 
+                        show_random_todo_task_dialog, show_random_entertainment_task_dialog,
+                        show_task_added_confirmation, show_task_updated_confirmation, 
+                        show_task_deleted_confirmation, confirm_task_deletion, confirm_data_import,
+                        show_import_success, show_import_failure, show_export_success, show_export_failure,
+                        warn_no_task_selected, inform_no_suitable_tasks, inform_no_pending_tasks,
+                        update_task_row_style)
+from ui_elements import create_menu_bar, create_toolbar
 
 
 class TaskManagerMainWindow(QMainWindow):
@@ -63,77 +71,11 @@ class TaskManagerMainWindow(QMainWindow):
     
     def create_menu_bar(self):
         """创建菜单栏"""
-        menubar = self.menuBar()
-        
-        # 文件菜单
-        file_menu = menubar.addMenu('文件')
-        
-        export_action = QAction('导出数据', self)
-        export_action.triggered.connect(self.export_data)
-        file_menu.addAction(export_action)
-        
-        import_action = QAction('导入数据', self)
-        import_action.triggered.connect(self.import_data)
-        file_menu.addAction(import_action)
-        
-        file_menu.addSeparator()
-        
-        exit_action = QAction('退出', self)
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
-        
-        # 编辑菜单
-        edit_menu = menubar.addMenu('编辑')
-        
-        add_daily_action = QAction('添加每日任务', self)
-        add_daily_action.triggered.connect(self.add_daily_task)
-        edit_menu.addAction(add_daily_action)
-        
-        add_todo_action = QAction('添加待办事项', self)
-        add_todo_action.triggered.connect(self.add_todo_task)
-        edit_menu.addAction(add_todo_action)
-        
-        add_entertainment_action = QAction('添加娱乐任务', self)
-        add_entertainment_action.triggered.connect(self.add_entertainment_task)
-        edit_menu.addAction(add_entertainment_action)
-        
-        # 工具菜单
-        tools_menu = menubar.addMenu('工具')
-        
-        stats_action = QAction('统计信息', self)
-        stats_action.triggered.connect(self.show_statistics)
-        tools_menu.addAction(stats_action)
-        
-        # 帮助菜单
-        help_menu = menubar.addMenu('帮助')
-        
-        json_examples_action = QAction('JSON导入示例', self)
-        json_examples_action.triggered.connect(self.show_json_examples)
-        help_menu.addAction(json_examples_action)
-        
-        about_action = QAction('关于', self)
-        about_action.triggered.connect(self.show_about)
-        help_menu.addAction(about_action)
+        create_menu_bar(self)
     
     def create_toolbar(self):
         """创建工具栏"""
-        toolbar = self.addToolBar('工具栏')
-        
-        # 每日任务工具
-        toolbar.addAction('添加每日', self.add_daily_task)
-        toolbar.addAction('随机每日', self.random_daily_task)
-        
-        toolbar.addSeparator()
-        
-        # 待办事项工具
-        toolbar.addAction('添加待办', self.add_todo_task)
-        toolbar.addAction('随机待办', self.random_todo_task)
-        
-        toolbar.addSeparator()
-        
-        # 娱乐任务工具
-        toolbar.addAction('添加娱乐', self.add_entertainment_task)
-        toolbar.addAction('随机娱乐', self.random_entertainment_task)
+        create_toolbar(self)
     
     def create_daily_tab(self):
         """创建每日任务标签页"""
@@ -407,11 +349,8 @@ class TaskManagerMainWindow(QMainWindow):
     
     def update_task_row_style(self, table, row, is_completed):
         """更新任务行样式（根据完成状态）"""
-        color = QColor(200, 200, 200) if is_completed else QColor(255, 255, 255)
-        for col in range(table.columnCount()):
-            item = table.item(row, col)
-            if item:
-                item.setBackground(color)
+        from ui_messages import update_task_row_style as update_style
+        update_style(table, row, is_completed)
     
     def add_daily_task(self):
         """添加每日任务"""
@@ -425,13 +364,13 @@ class TaskManagerMainWindow(QMainWindow):
                 completed=data['completed']
             )
             self.load_daily_tasks()
-            self.status_bar.showMessage('每日任务添加成功')
+            self.status_bar.showMessage(show_task_added_confirmation('daily'))
     
     def edit_daily_task(self):
         """编辑每日任务"""
         current_row = self.daily_table.currentRow()
         if current_row < 0:
-            QMessageBox.warning(self, '警告', '请先选择一个任务')
+            warn_no_task_selected()
             return
         
         item = self.daily_table.item(current_row, 0)
@@ -450,23 +389,22 @@ class TaskManagerMainWindow(QMainWindow):
                     completed=data['completed']
                 )
                 self.load_daily_tasks()
-                self.status_bar.showMessage('每日任务更新成功')
+                self.status_bar.showMessage(show_task_updated_confirmation('daily'))
     
     def delete_daily_task(self):
         """删除每日任务"""
         current_row = self.daily_table.currentRow()
         if current_row < 0:
-            QMessageBox.warning(self, '警告', '请先选择一个任务')
+            warn_no_task_selected()
             return
         
-        reply = QMessageBox.question(self, '确认', '确定要删除这个任务吗？', 
-                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        reply = confirm_task_deletion()
         if reply == QMessageBox.StandardButton.Yes:
             item = self.daily_table.item(current_row, 0)
             task_id = item.data(Qt.ItemDataRole.UserRole)
             self.data_manager.delete_daily_task(task_id)
             self.load_daily_tasks()
-            self.status_bar.showMessage('每日任务删除成功')
+            self.status_bar.showMessage(show_task_deleted_confirmation('daily'))
     
     def add_todo_task(self):
         """添加待办事项"""
@@ -480,13 +418,13 @@ class TaskManagerMainWindow(QMainWindow):
                 completed=data['completed']
             )
             self.load_todo_tasks()
-            self.status_bar.showMessage('待办事项添加成功')
+            self.status_bar.showMessage(show_task_added_confirmation('todo'))
     
     def edit_todo_task(self):
         """编辑待办事项"""
         current_row = self.todo_table.currentRow()
         if current_row < 0:
-            QMessageBox.warning(self, '警告', '请先选择一个任务')
+            warn_no_task_selected()
             return
         
         item = self.todo_table.item(current_row, 0)
@@ -505,23 +443,22 @@ class TaskManagerMainWindow(QMainWindow):
                     completed=data['completed']
                 )
                 self.load_todo_tasks()
-                self.status_bar.showMessage('待办事项更新成功')
+                self.status_bar.showMessage(show_task_updated_confirmation('todo'))
     
     def delete_todo_task(self):
         """删除待办事项"""
         current_row = self.todo_table.currentRow()
         if current_row < 0:
-            QMessageBox.warning(self, '警告', '请先选择一个任务')
+            warn_no_task_selected()
             return
         
-        reply = QMessageBox.question(self, '确认', '确定要删除这个任务吗？', 
-                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        reply = confirm_task_deletion()
         if reply == QMessageBox.StandardButton.Yes:
             item = self.todo_table.item(current_row, 0)
             task_id = item.data(Qt.ItemDataRole.UserRole)
             self.data_manager.delete_todo_task(task_id)
             self.load_todo_tasks()
-            self.status_bar.showMessage('待办事项删除成功')
+            self.status_bar.showMessage(show_task_deleted_confirmation('todo'))
     
     def add_entertainment_task(self):
         """添加娱乐任务"""
@@ -535,13 +472,13 @@ class TaskManagerMainWindow(QMainWindow):
                 completed=data['completed']
             )
             self.load_entertainment_tasks()
-            self.status_bar.showMessage('娱乐任务添加成功')
+            self.status_bar.showMessage(show_task_added_confirmation('entertainment'))
     
     def edit_entertainment_task(self):
         """编辑娱乐任务"""
         current_row = self.entertainment_table.currentRow()
         if current_row < 0:
-            QMessageBox.warning(self, '警告', '请先选择一个任务')
+            warn_no_task_selected()
             return
         
         item = self.entertainment_table.item(current_row, 0)
@@ -560,23 +497,22 @@ class TaskManagerMainWindow(QMainWindow):
                     completed=data['completed']
                 )
                 self.load_entertainment_tasks()
-                self.status_bar.showMessage('娱乐任务更新成功')
+                self.status_bar.showMessage(show_task_updated_confirmation('entertainment'))
     
     def delete_entertainment_task(self):
         """删除娱乐任务"""
         current_row = self.entertainment_table.currentRow()
         if current_row < 0:
-            QMessageBox.warning(self, '警告', '请先选择一个任务')
+            warn_no_task_selected()
             return
         
-        reply = QMessageBox.question(self, '确认', '确定要删除这个任务吗？', 
-                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        reply = confirm_task_deletion()
         if reply == QMessageBox.StandardButton.Yes:
             item = self.entertainment_table.item(current_row, 0)
             task_id = item.data(Qt.ItemDataRole.UserRole)
             self.data_manager.delete_entertainment_task(task_id)
             self.load_entertainment_tasks()
-            self.status_bar.showMessage('娱乐任务删除成功')
+            self.status_bar.showMessage(show_task_deleted_confirmation('entertainment'))
     
     def random_daily_task(self):
         """随机抽取每日任务（根据当前筛选条件）"""
@@ -603,15 +539,14 @@ class TaskManagerMainWindow(QMainWindow):
         
         if not pending_tasks:
             if not tasks:
-                QMessageBox.information(self, '提示', '没有符合条件的每日任务')
+                inform_no_suitable_tasks('没有符合条件的每日任务')
             else:
-                QMessageBox.information(self, '提示', '没有未完成的符合条件的每日任务')
+                inform_no_pending_tasks('daily')
             return
         
         import random
         task = random.choice(pending_tasks)
-        weekday_display = task.week_day if task.week_day else '每天'
-        QMessageBox.information(self, '随机抽取', f'建议处理任务：\n\n标题：{task.title}\n星期：{weekday_display}')
+        show_random_daily_task_dialog(task)
     
     def random_todo_task(self):
         """随机抽取待办事项（按权重）"""
@@ -619,7 +554,7 @@ class TaskManagerMainWindow(QMainWindow):
         pending_tasks = [t for t in tasks if not t.completed]
         
         if not pending_tasks:
-            QMessageBox.information(self, '提示', '没有未完成的待办事项')
+            inform_no_pending_tasks('todo')
             return
         
         # 按紧急度权重随机选择
@@ -640,8 +575,7 @@ class TaskManagerMainWindow(QMainWindow):
             else:
                 task = pending_tasks[-1]  # 防止索引越界
         
-        QMessageBox.information(self, '随机抽取', 
-                               f'建议处理任务：\n\n标题：{task.title}\n截止日期：{task.deadline or "无"}\n紧急度：{task.urgency_score}')
+        show_random_todo_task_dialog(task)
     
     def random_entertainment_task(self):
         """随机抽取娱乐任务"""
@@ -649,12 +583,12 @@ class TaskManagerMainWindow(QMainWindow):
         pending_tasks = [t for t in tasks if not t.completed]
         
         if not pending_tasks:
-            QMessageBox.information(self, '提示', '没有未完成的娱乐任务')
+            inform_no_pending_tasks('entertainment')
             return
         
         import random
         task = random.choice(pending_tasks)
-        QMessageBox.information(self, '随机抽取', f'建议娱乐：\n\n{task.title}')
+        show_random_entertainment_task_dialog(task)
     
     def export_data(self):
         """导出数据"""
@@ -663,41 +597,30 @@ class TaskManagerMainWindow(QMainWindow):
         if filepath:
             success = self.data_manager.export_to_json(filepath)
             if success:
-                QMessageBox.information(self, '成功', '数据导出成功')
+                show_export_success()
             else:
-                QMessageBox.critical(self, '错误', '数据导出失败')
+                show_export_failure()
     
     def import_data(self):
         """导入数据"""
         from PyQt6.QtWidgets import QFileDialog
         filepath, _ = QFileDialog.getOpenFileName(self, '导入数据', '', 'JSON Files (*.json)')
         if filepath:
-            reply = QMessageBox.question(self, '确认', '导入数据将会覆盖现有数据，确定继续？', 
-                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            reply = confirm_data_import()
             if reply == QMessageBox.StandardButton.Yes:
                 success = self.data_manager.import_from_json(filepath)
                 if success:
                     self.load_data()  # 重新加载数据
-                    QMessageBox.information(self, '成功', '数据导入成功')
+                    show_import_success()
                     self.status_bar.showMessage('数据导入成功')
                 else:
-                    QMessageBox.critical(self, '错误', '数据导入失败，请检查JSON文件格式是否正确')
+                    show_import_failure()
                     self.status_bar.showMessage('数据导入失败')
     
     def show_statistics(self):
         """显示统计信息"""
         stats = self.data_manager.get_statistics()
-        
-        msg = f"""统计信息：
-        
-每日任务：{stats['daily']['total']} 个 ({stats['daily']['completed']} 已完成)
-待办事项：{stats['todo']['total']} 个 ({stats['todo']['completed']} 已完成, {stats['todo']['expired']} 已过期)
-娱乐任务：{stats['entertainment']['total']} 个 ({stats['entertainment']['completed']} 已完成)
-        
-总计：{stats['daily']['total'] + stats['todo']['total'] + stats['entertainment']['total']} 个任务
-已完成：{stats['daily']['completed'] + stats['todo']['completed'] + stats['entertainment']['completed']} 个"""
-        
-        QMessageBox.information(self, '统计信息', msg)
+        show_statistics_dialog(stats)
     
     def show_json_examples(self):
         """显示JSON导入示例"""
@@ -706,20 +629,7 @@ class TaskManagerMainWindow(QMainWindow):
     
     def show_about(self):
         """显示关于信息"""
-        QMessageBox.about(self, '关于', '''任务管理系统 v1.0
-
-功能：
-- 每日必做任务管理（支持按星期分类）
-- 待办事项管理（带截止日期和紧急程度）
-- 娱乐任务管理
-- SQLite数据库存储
-- 数据导入导出（JSON格式）
-- 每日自动重置
-- 带权重的随机选择
-- 现代化图形界面
-
-作者：AI Assistant
-日期：2026年''')
+        show_about_dialog()
     
     def update_status_bar(self):
         """更新状态栏"""
