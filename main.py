@@ -17,15 +17,15 @@ from managers.data_manager import DataManager, TaskType
 from models.model import DailyTask, TodoTask, EntertainmentTask
 from ui.task_edit_dialog import TaskEditDialog
 import config.config
-from ui_components import create_daily_tab_ui, create_todo_tab_ui, create_entertainment_tab_ui
-from ui_messages import (show_statistics_dialog, show_about_dialog, show_random_daily_task_dialog, 
+from components.ui_components import create_daily_tab_ui, create_todo_tab_ui, create_entertainment_tab_ui
+from utils.ui_messages import (show_statistics_dialog, show_about_dialog, show_random_daily_task_dialog, 
                         show_random_todo_task_dialog, show_random_entertainment_task_dialog,
                         show_task_added_confirmation, show_task_updated_confirmation, 
                         show_task_deleted_confirmation, confirm_task_deletion, confirm_data_import,
                         show_import_success, show_import_failure, show_export_success, show_export_failure,
                         warn_no_task_selected, inform_no_suitable_tasks, inform_no_pending_tasks,
                         update_task_row_style)
-from ui_elements import create_menu_bar, create_toolbar
+from components.ui_elements import create_menu_bar, create_toolbar
 
 
 class TaskManagerMainWindow(QMainWindow):
@@ -349,7 +349,7 @@ class TaskManagerMainWindow(QMainWindow):
     
     def update_task_row_style(self, table, row, is_completed):
         """更新任务行样式（根据完成状态）"""
-        from ui_messages import update_task_row_style as update_style
+        from utils.ui_messages import update_task_row_style as update_style
         update_style(table, row, is_completed)
     
     def add_daily_task(self):
