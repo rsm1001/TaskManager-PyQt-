@@ -14,9 +14,9 @@ from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QAction, QIcon, QColor
 from datetime import datetime, date
 from data_manager import DataManager, TaskType
-from models import DailyTask, TodoTask, EntertainmentTask
-from task_edit_dialog import TaskEditDialog
-import config
+from models.model import DailyTask, TodoTask, EntertainmentTask
+from ui.task_edit_dialog import TaskEditDialog
+import config.config
 
 
 class TaskManagerMainWindow(QMainWindow):
@@ -30,8 +30,8 @@ class TaskManagerMainWindow(QMainWindow):
     
     def init_ui(self):
         """初始化用户界面"""
-        self.setWindowTitle(config.WINDOW_TITLE)
-        self.setGeometry(100, 100, config.WINDOW_WIDTH, config.WINDOW_HEIGHT)
+        self.setWindowTitle(config.config.WINDOW_TITLE)
+        self.setGeometry(100, 100, config.config.WINDOW_WIDTH, config.config.WINDOW_HEIGHT)
         
         # 创建中心部件
         central_widget = QWidget()

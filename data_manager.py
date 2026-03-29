@@ -3,12 +3,12 @@ Task Manager - 数据访问和管理类
 处理数据库的CRUD操作以及JSON导入导出功能
 """
 
-from models import DailyTask, TodoTask, EntertainmentTask, Config, init_db
+from models.model import DailyTask, TodoTask, EntertainmentTask, Config, init_db
 from datetime import datetime, date
 import json
 from typing import List, Dict, Any, Optional
 from enum import Enum
-import config
+import config.config
 
 
 class TaskType(Enum):
@@ -23,7 +23,7 @@ class DataManager:
     
     def __init__(self, db_path: str = None):
         if db_path is None:
-            db_path = config.DATABASE_PATH
+            db_path = config.config.DATABASE_PATH
         self.engine, self.Session = init_db(db_path)
         self.session = self.Session()
         
