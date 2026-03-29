@@ -13,7 +13,7 @@ from dialogs.json_examples_dialog import JsonExamplesDialog
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QAction, QIcon, QColor
 from datetime import datetime, date
-from data_manager import DataManager, TaskType
+from managers.data_manager import DataManager, TaskType
 from models.model import DailyTask, TodoTask, EntertainmentTask
 from ui.task_edit_dialog import TaskEditDialog
 import config.config

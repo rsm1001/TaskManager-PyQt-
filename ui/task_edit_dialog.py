@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QText
                              QLabel, QComboBox, QCheckBox, QDateEdit, QPushButton, QGridLayout)
 from PyQt6.QtCore import QDate
 from PyQt6.QtWidgets import QMessageBox
-from data_manager import TaskType
+from managers.data_manager import TaskType
 from datetime import timedelta
 import datetime
 import uuid

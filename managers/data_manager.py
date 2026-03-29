@@ -302,13 +302,13 @@ class DataManager:
     # JSON导入导出功能
     def export_to_json(self, filepath: str = "tasks_export.json") -> bool:
         """导出数据到JSON文件"""
-        from json_handler import JsonExportImportHandler
+        from handlers.json_handler import JsonExportImportHandler
         handler = JsonExportImportHandler(self.session)
         return handler.export_to_json(filepath)
     
     def import_from_json(self, filepath: str = "tasks_export.json") -> bool:
         """从JSON文件导入数据"""
-        from json_handler import JsonExportImportHandler
+        from handlers.json_handler import JsonExportImportHandler
         handler = JsonExportImportHandler(self.session)
         return handler.import_from_json(filepath)
     
