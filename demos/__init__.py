@@ -1,0 +1,3 @@
+"""
+Demos package initialization
+"""

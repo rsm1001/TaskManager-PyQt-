@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QHeaderView, QMessageBox, QDialog, QLineEdit, QTextEdit, 
                              QLabel, QComboBox, QCheckBox, QDateEdit, QGroupBox, QSplitter,
                              QMenuBar, QMenu, QStatusBar, QToolBar, QAbstractItemView)
-from json_examples_dialog import JsonExamplesDialog
+from dialogs.json_examples_dialog import JsonExamplesDialog
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QAction, QIcon, QColor
 from datetime import datetime, date
