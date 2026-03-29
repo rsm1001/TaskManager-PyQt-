@@ -49,10 +49,6 @@ venv.bak/
 .DS_Store
 Thumbs.db
 
-# Database
-*.db
-*.db-journal
-
 # Logs
 *.log
 logs/
