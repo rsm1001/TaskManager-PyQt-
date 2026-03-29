@@ -17,6 +17,7 @@ from data_manager import DataManager, TaskType
 from models.model import DailyTask, TodoTask, EntertainmentTask
 from ui.task_edit_dialog import TaskEditDialog
 import config.config
+from ui_components import create_daily_tab_ui, create_todo_tab_ui, create_entertainment_tab_ui
 
 
 class TaskManagerMainWindow(QMainWindow):
@@ -136,178 +137,17 @@ class TaskManagerMainWindow(QMainWindow):
     
     def create_daily_tab(self):
         """创建每日任务标签页"""
-        daily_widget = QWidget()
-        daily_layout = QVBoxLayout(daily_widget)
-        
-        # 控制按钮区域
-        daily_control_layout = QHBoxLayout()
-        
-        self.add_daily_btn = QPushButton('添加任务')
-        self.add_daily_btn.clicked.connect(self.add_daily_task)
-        daily_control_layout.addWidget(self.add_daily_btn)
-        
-        self.edit_daily_btn = QPushButton('编辑任务')
-        self.edit_daily_btn.clicked.connect(self.edit_daily_task)
-        daily_control_layout.addWidget(self.edit_daily_btn)
-        
-        self.delete_daily_btn = QPushButton('删除任务')
-        self.delete_daily_btn.clicked.connect(self.delete_daily_task)
-        daily_control_layout.addWidget(self.delete_daily_btn)
-        
-        self.random_daily_btn = QPushButton('随机抽取')
-        self.random_daily_btn.clicked.connect(self.random_daily_task)
-        daily_control_layout.addWidget(self.random_daily_btn)
-        
-        # 筛选下拉框
-        daily_control_layout.addStretch()
-        
-        # 星期筛选
-        daily_control_layout.addWidget(QLabel('星期:'))
-        self.daily_weekday_combo = QComboBox()
-        self.daily_weekday_combo.addItems(['全部', '每天'] + ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'])
-        # 设置默认值为今天是星期几
-        today_weekday_index = datetime.now().weekday()  # 0是星期一，6是星期日
-        weekday_names = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
-        if 0 <= today_weekday_index <= 6:
-            today_name = weekday_names[today_weekday_index]
-            index = self.daily_weekday_combo.findText(today_name)
-            if index >= 0:
-                self.daily_weekday_combo.setCurrentIndex(index)
-        self.daily_weekday_combo.currentTextChanged.connect(self.load_daily_tasks)
-        daily_control_layout.addWidget(self.daily_weekday_combo)
-        
-        # 状态筛选
-        daily_control_layout.addWidget(QLabel('状态:'))
-        self.daily_status_combo = QComboBox()
-        self.daily_status_combo.addItems(['全部', '进行中', '已完成'])
-        self.daily_status_combo.setCurrentText('进行中')  # 默认选择"进行中"
-        self.daily_status_combo.currentTextChanged.connect(self.load_daily_tasks)
-        daily_control_layout.addWidget(self.daily_status_combo)
-        
-        daily_layout.addLayout(daily_control_layout)
-        
-        # 任务表格
-        self.daily_table = QTableWidget()
-        self.daily_table.setColumnCount(5)
-        self.daily_table.setHorizontalHeaderLabels(['状态', '标题', '星期', '描述', '创建日期'])
-        self.daily_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.daily_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.daily_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.daily_table.cellDoubleClicked.connect(self.edit_daily_task)
-        self.daily_table.cellClicked.connect(self.toggle_daily_task_status)
-        
-        daily_layout.addWidget(self.daily_table)
+        daily_widget = create_daily_tab_ui(self)
         self.tab_widget.addTab(daily_widget, '每日必做')
     
     def create_todo_tab(self):
         """创建待办事项标签页"""
-        todo_widget = QWidget()
-        todo_layout = QVBoxLayout(todo_widget)
-        
-        # 控制按钮区域
-        todo_control_layout = QHBoxLayout()
-        
-        self.add_todo_btn = QPushButton('添加任务')
-        self.add_todo_btn.clicked.connect(self.add_todo_task)
-        todo_control_layout.addWidget(self.add_todo_btn)
-        
-        self.edit_todo_btn = QPushButton('编辑任务')
-        self.edit_todo_btn.clicked.connect(self.edit_todo_task)
-        todo_control_layout.addWidget(self.edit_todo_btn)
-        
-        self.delete_todo_btn = QPushButton('删除任务')
-        self.delete_todo_btn.clicked.connect(self.delete_todo_task)
-        todo_control_layout.addWidget(self.delete_todo_btn)
-        
-        self.random_todo_btn = QPushButton('随机抽取')
-        self.random_todo_btn.clicked.connect(self.random_todo_task)
-        todo_control_layout.addWidget(self.random_todo_btn)
-        
-        # 状态筛选下拉框
-        todo_control_layout.addStretch()
-        todo_control_layout.addWidget(QLabel('状态:'))
-        self.todo_status_combo = QComboBox()
-        self.todo_status_combo.addItems(['全部', '进行中', '已完成', '已过期'])
-        self.todo_status_combo.setCurrentText('进行中')  # 默认选择"进行中"
-        self.todo_status_combo.currentTextChanged.connect(self.load_todo_tasks)
-        todo_control_layout.addWidget(self.todo_status_combo)
-        
-        todo_layout.addLayout(todo_control_layout)
-        
-        # 任务表格
-        self.todo_table = QTableWidget()
-        self.todo_table.setColumnCount(6)
-        self.todo_table.setHorizontalHeaderLabels(['状态', '标题', '截止日期', '紧急程度', '描述', '创建日期'])
-        self.todo_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.todo_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.todo_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.todo_table.cellDoubleClicked.connect(self.edit_todo_task)
-        
-        # 启用表头点击排序功能
-        self.todo_table.horizontalHeader().sectionClicked.connect(self.sort_todo_table_by_column)
-        
-        # 添加排序状态跟踪变量
-        self.todo_sort_column = -1  # 当前排序列(-1表示未排序)
-        self.todo_sort_order = Qt.SortOrder.AscendingOrder  # 排序顺序(升序)
-        
-        # 启用表头点击排序功能
-        self.todo_table.horizontalHeader().sectionClicked.connect(self.sort_todo_table_by_column)
-        
-        # 添加排序状态跟踪变量
-        self.todo_sort_column = -1  # 当前排序列(-1表示未排序)
-        self.todo_sort_order = Qt.SortOrder.AscendingOrder  # 排序顺序(升序)
-        
-        self.todo_table.cellClicked.connect(self.toggle_todo_task_status)
-        
-        todo_layout.addWidget(self.todo_table)
+        todo_widget = create_todo_tab_ui(self)
         self.tab_widget.addTab(todo_widget, '待办事项')
     
     def create_entertainment_tab(self):
         """创建娱乐任务标签页"""
-        entertainment_widget = QWidget()
-        entertainment_layout = QVBoxLayout(entertainment_widget)
-        
-        # 控制按钮区域
-        entertainment_control_layout = QHBoxLayout()
-        
-        self.add_entertainment_btn = QPushButton('添加任务')
-        self.add_entertainment_btn.clicked.connect(self.add_entertainment_task)
-        entertainment_control_layout.addWidget(self.add_entertainment_btn)
-        
-        self.edit_entertainment_btn = QPushButton('编辑任务')
-        self.edit_entertainment_btn.clicked.connect(self.edit_entertainment_task)
-        entertainment_control_layout.addWidget(self.edit_entertainment_btn)
-        
-        self.delete_entertainment_btn = QPushButton('删除任务')
-        self.delete_entertainment_btn.clicked.connect(self.delete_entertainment_task)
-        entertainment_control_layout.addWidget(self.delete_entertainment_btn)
-        
-        self.random_entertainment_btn = QPushButton('随机抽取')
-        self.random_entertainment_btn.clicked.connect(self.random_entertainment_task)
-        entertainment_control_layout.addWidget(self.random_entertainment_btn)
-        
-        # 状态筛选下拉框
-        entertainment_control_layout.addStretch()
-        entertainment_control_layout.addWidget(QLabel('状态:'))
-        self.entertainment_status_combo = QComboBox()
-        self.entertainment_status_combo.addItems(['全部', '进行中', '已完成'])
-        self.entertainment_status_combo.setCurrentText('进行中')  # 默认选择"进行中"
-        self.entertainment_status_combo.currentTextChanged.connect(self.load_entertainment_tasks)
-        entertainment_control_layout.addWidget(self.entertainment_status_combo)
-        
-        entertainment_layout.addLayout(entertainment_control_layout)
-        
-        # 任务表格
-        self.entertainment_table = QTableWidget()
-        self.entertainment_table.setColumnCount(5)
-        self.entertainment_table.setHorizontalHeaderLabels(['状态', '标题', '类别', '描述', '创建日期'])
-        self.entertainment_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.entertainment_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.entertainment_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.entertainment_table.cellDoubleClicked.connect(self.edit_entertainment_task)
-        self.entertainment_table.cellClicked.connect(self.toggle_entertainment_task_status)
-        
-        entertainment_layout.addWidget(self.entertainment_table)
+        entertainment_widget = create_entertainment_tab_ui(self)
         self.tab_widget.addTab(entertainment_widget, '娱乐任务')
     
     def load_data(self):
