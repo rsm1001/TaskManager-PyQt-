@@ -23,15 +23,21 @@ def load_daily_tasks_to_table(window):
         status_filter = 'all'
     elif status == '进行中':
         status_filter = 'pending'
-    else:  # '已完成'
+    elif status == '已完成':
         status_filter = 'completed'
+    elif status == '暂弃':
+        status_filter = 'abandoned'
+    else:
+        status_filter = 'all'
 
     tasks = window.data_manager.get_daily_tasks(weekday=weekday_filter, status=status_filter)
 
     window.daily_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
         # 状态
-        status_item = QTableWidgetItem('✓' if task.completed else '○')
+        status_map = {'pending': '○', 'completed': '✓', 'abandoned': '✗'}
+        status_text = status_map.get(task.status, '○')
+        status_item = QTableWidgetItem(status_text)
         status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         window.daily_table.setItem(row, 0, status_item)
         
@@ -62,15 +68,21 @@ def load_todo_tasks_to_table(window):
         status_filter = 'all'
     elif status == '进行中':
         status_filter = 'pending'
-    else:  # '已完成'
+    elif status == '已完成':
         status_filter = 'completed'
+    elif status == '暂弃':
+        status_filter = 'abandoned'
+    else:  # '已过期'
+        status_filter = 'all'  # 已过期需要特殊处理
 
     tasks = window.data_manager.get_todo_tasks(status=status_filter)
 
     window.todo_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
         # 状态
-        status_item = QTableWidgetItem('✓' if task.completed else '○')
+        status_map = {'pending': '○', 'completed': '✓', 'abandoned': '✗'}
+        status_text = status_map.get(task.status, '○')
+        status_item = QTableWidgetItem(status_text)
         status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         window.todo_table.setItem(row, 0, status_item)
         
@@ -104,15 +116,21 @@ def load_entertainment_tasks_to_table(window):
         status_filter = 'all'
     elif status == '进行中':
         status_filter = 'pending'
-    else:  # '已完成'
+    elif status == '已完成':
         status_filter = 'completed'
+    elif status == '暂弃':
+        status_filter = 'abandoned'
+    else:
+        status_filter = 'all'
 
     tasks = window.data_manager.get_entertainment_tasks(status=status_filter)
 
     window.entertainment_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
         # 状态
-        status_item = QTableWidgetItem('✓' if task.completed else '○')
+        status_map = {'pending': '○', 'completed': '✓', 'abandoned': '✗'}
+        status_text = status_map.get(task.status, '○')
+        status_item = QTableWidgetItem(status_text)
         status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         window.entertainment_table.setItem(row, 0, status_item)
         
@@ -141,16 +159,13 @@ def toggle_daily_task_status(window, row, column):
         task_id = item.data(Qt.ItemDataRole.UserRole)
         if task_id:
             # 切换状态
-            task = window.data_manager.get_daily_task_by_id(task_id)
-            if task:
-                new_status = not task.completed
-                window.data_manager.update_daily_task(task_id=task_id, completed=new_status)
-                
-                # 重新加载任务以确保数据一致性
-                load_daily_tasks_to_table(window)
-                
-                # 清除选中状态
-                window.daily_table.clearSelection()
+            window.data_manager.toggle_daily_task_completion(task_id)
+            
+            # 重新加载任务以确保数据一致性
+            load_daily_tasks_to_table(window)
+            
+            # 清除选中状态
+            window.daily_table.clearSelection()
 
 
 def toggle_todo_task_status(window, row, column):
@@ -160,16 +175,13 @@ def toggle_todo_task_status(window, row, column):
         task_id = item.data(Qt.ItemDataRole.UserRole)
         if task_id:
             # 切换状态
-            task = window.data_manager.get_todo_task_by_id(task_id)
-            if task:
-                new_status = not task.completed
-                window.data_manager.update_todo_task(task_id=task_id, completed=new_status)
-                
-                # 重新加载任务以确保数据一致性
-                load_todo_tasks_to_table(window)
-                
-                # 清除选中状态
-                window.todo_table.clearSelection()
+            window.data_manager.toggle_todo_task_completion(task_id)
+            
+            # 重新加载任务以确保数据一致性
+            load_todo_tasks_to_table(window)
+            
+            # 清除选中状态
+            window.todo_table.clearSelection()
 
 
 def toggle_entertainment_task_status(window, row, column):
@@ -179,16 +191,13 @@ def toggle_entertainment_task_status(window, row, column):
         task_id = item.data(Qt.ItemDataRole.UserRole)
         if task_id:
             # 切换状态
-            task = window.data_manager.get_entertainment_task_by_id(task_id)
-            if task:
-                new_status = not task.completed
-                window.data_manager.update_entertainment_task(task_id=task_id, completed=new_status)
-                
-                # 重新加载任务以确保数据一致性
-                load_entertainment_tasks_to_table(window)
-                
-                # 清除选中状态
-                window.entertainment_table.clearSelection()
+            window.data_manager.toggle_entertainment_task_completion(task_id)
+            
+            # 重新加载任务以确保数据一致性
+            load_entertainment_tasks_to_table(window)
+            
+            # 清除选中状态
+            window.entertainment_table.clearSelection()
 
 
 def sort_todo_table_by_column(window, column):
@@ -214,6 +223,8 @@ def sort_todo_table_by_column(window, column):
         status_filter = 'all'
     elif status == '进行中':
         status_filter = 'pending'
+    elif status == '暂弃':
+        status_filter = 'abandoned'
     else:  # '已完成' 或 '已过期'
         status_filter = 'completed'
 
@@ -221,7 +232,7 @@ def sort_todo_table_by_column(window, column):
     
     # 根据列进行排序
     if column == 0:  # 状态列
-        tasks.sort(key=lambda x: x.completed, reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
+        tasks.sort(key=lambda x: x.status, reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
     elif column == 1:  # 标题列
         tasks.sort(key=lambda x: x.title.lower(), reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
     elif column == 2:  # 截止日期列
@@ -238,7 +249,9 @@ def sort_todo_table_by_column(window, column):
     window.todo_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
         # 状态
-        status_item = QTableWidgetItem('✓' if task.completed else '○')
+        status_map = {'pending': '○', 'completed': '✓', 'abandoned': '✗'}
+        status_text = status_map.get(task.status, '○')
+        status_item = QTableWidgetItem(status_text)
         status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         window.todo_table.setItem(row, 0, status_item)
         

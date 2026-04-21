@@ -29,6 +29,7 @@ class DailyTask(BaseModel):
     completed = Column(Boolean, default=False)
     week_day = Column(String(20))  # 如"Monday", "Tuesday", 或留空表示每天
     category = Column(String(50), default="daily")
+    status = Column(String(20), default="pending")  # pending, completed, abandoned
 
 
 class TodoTask(BaseModel):
@@ -41,6 +42,7 @@ class TodoTask(BaseModel):
     deadline = Column(String(20))  # YYYY-MM-DD格式
     urgency_score = Column(Integer, default=0)
     category = Column(String(50), default="todo")
+    status = Column(String(20), default="pending")  # pending, completed, abandoned
 
 
 class EntertainmentTask(BaseModel):
@@ -52,6 +54,7 @@ class EntertainmentTask(BaseModel):
     completed = Column(Boolean, default=False)
     fun_category = Column(String(50), default="general")
     category = Column(String(50), default="entertainment")
+    status = Column(String(20), default="pending")  # pending, completed, abandoned
 
 
 class Config(BaseModel):

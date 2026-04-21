@@ -100,8 +100,10 @@ class TaskEditDialog(QDialog):
 
         # 完成状态
         status_layout = QHBoxLayout()
-        self.completed_check = QCheckBox('已完成')
-        status_layout.addWidget(self.completed_check)
+        status_layout.addWidget(QLabel('状态:'))
+        self.status_combo = QComboBox()
+        self.status_combo.addItems(['进行中', '已完成', '暂弃'])
+        status_layout.addWidget(self.status_combo)
         status_layout.addStretch()
         layout.addLayout(status_layout)
 
@@ -144,7 +146,12 @@ class TaskEditDialog(QDialog):
         if self.task:
             self.title_edit.setText(self.task.title)
             self.desc_edit.setPlainText(self.task.description or '')
-            self.completed_check.setChecked(self.task.completed)
+            # 设置状态
+            status_map = {'pending': '进行中', 'completed': '已完成', 'abandoned': '暂弃'}
+            status_text = status_map.get(self.task.status, '进行中')
+            index = self.status_combo.findText(status_text)
+            if index >= 0:
+                self.status_combo.setCurrentIndex(index)
 
             if self.task_type == TaskType.DAILY:
                 weekday = self.task.week_day if self.task.week_day else '每天'
@@ -169,10 +176,16 @@ class TaskEditDialog(QDialog):
 
     def get_data(self):
         """获取表单数据"""
+        # 状态映射
+        status_map = {'进行中': 'pending', '已完成': 'completed', '暂弃': 'abandoned'}
+        status_text = self.status_combo.currentText()
+        status_value = status_map.get(status_text, 'pending')
+        
         data = {
             'title': self.title_edit.text().strip(),
             'description': self.desc_edit.toPlainText().strip(),
-            'completed': self.completed_check.isChecked()
+            'completed': status_value == 'completed',
+            'status': status_value
         }
 
         if self.task_type == TaskType.DAILY:

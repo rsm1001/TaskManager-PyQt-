@@ -146,7 +146,8 @@ class TaskManagerMainWindow(QMainWindow):
                 title=data['title'],
                 description=data['description'],
                 week_day=data['weekday'],
-                completed=data['completed']
+                completed=data['completed'],
+                status=data.get('status', 'pending')
             )
             self.load_daily_tasks()
             self.status_bar.showMessage(show_task_added_confirmation('daily'))
@@ -171,7 +172,8 @@ class TaskManagerMainWindow(QMainWindow):
                     title=data['title'],
                     description=data['description'],
                     week_day=data['weekday'],
-                    completed=data['completed']
+                    completed=data['completed'],
+                    status=data.get('status', 'pending')
                 )
                 self.load_daily_tasks()
                 self.status_bar.showMessage(show_task_updated_confirmation('daily'))
@@ -200,7 +202,8 @@ class TaskManagerMainWindow(QMainWindow):
                 title=data['title'],
                 description=data['description'],
                 deadline=data['deadline'] if data.get('deadline') else '',
-                completed=data['completed']
+                completed=data['completed'],
+                status=data.get('status', 'pending')
             )
             self.load_todo_tasks()
             self.status_bar.showMessage(show_task_added_confirmation('todo'))
@@ -225,7 +228,8 @@ class TaskManagerMainWindow(QMainWindow):
                     title=data['title'],
                     description=data['description'],
                     deadline=data['deadline'] if data.get('deadline') else '',
-                    completed=data['completed']
+                    completed=data['completed'],
+                    status=data.get('status', 'pending')
                 )
                 self.load_todo_tasks()
                 self.status_bar.showMessage(show_task_updated_confirmation('todo'))
@@ -254,7 +258,8 @@ class TaskManagerMainWindow(QMainWindow):
                 title=data['title'],
                 description=data['description'],
                 fun_category=data['fun_category'],
-                completed=data['completed']
+                completed=data['completed'],
+                status=data.get('status', 'pending')
             )
             self.load_entertainment_tasks()
             self.status_bar.showMessage(show_task_added_confirmation('entertainment'))
@@ -279,7 +284,8 @@ class TaskManagerMainWindow(QMainWindow):
                     title=data['title'],
                     description=data['description'],
                     fun_category=data['fun_category'],
-                    completed=data['completed']
+                    completed=data['completed'],
+                    status=data.get('status', 'pending')
                 )
                 self.load_entertainment_tasks()
                 self.status_bar.showMessage(show_task_updated_confirmation('entertainment'))

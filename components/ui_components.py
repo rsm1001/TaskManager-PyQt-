@@ -56,7 +56,7 @@ def create_daily_tab_ui(parent_window):
     # 状态筛选
     daily_control_layout.addWidget(QLabel('状态:'))
     parent_window.daily_status_combo = QComboBox()
-    parent_window.daily_status_combo.addItems(['全部', '进行中', '已完成'])
+    parent_window.daily_status_combo.addItems(['全部', '进行中', '已完成', '暂弃'])
     parent_window.daily_status_combo.setCurrentText('进行中')  # 默认选择"进行中"
     parent_window.daily_status_combo.currentTextChanged.connect(parent_window.load_daily_tasks)
     daily_control_layout.addWidget(parent_window.daily_status_combo)
@@ -105,7 +105,7 @@ def create_todo_tab_ui(parent_window):
     todo_control_layout.addStretch()
     todo_control_layout.addWidget(QLabel('状态:'))
     parent_window.todo_status_combo = QComboBox()
-    parent_window.todo_status_combo.addItems(['全部', '进行中', '已完成', '已过期'])
+    parent_window.todo_status_combo.addItems(['全部', '进行中', '已完成', '已过期', '暂弃'])
     parent_window.todo_status_combo.setCurrentText('进行中')  # 默认选择"进行中"
     parent_window.todo_status_combo.currentTextChanged.connect(parent_window.load_todo_tasks)
     todo_control_layout.addWidget(parent_window.todo_status_combo)
@@ -165,7 +165,7 @@ def create_entertainment_tab_ui(parent_window):
     entertainment_control_layout.addStretch()
     entertainment_control_layout.addWidget(QLabel('状态:'))
     parent_window.entertainment_status_combo = QComboBox()
-    parent_window.entertainment_status_combo.addItems(['全部', '进行中', '已完成'])
+    parent_window.entertainment_status_combo.addItems(['全部', '进行中', '已完成', '暂弃'])
     parent_window.entertainment_status_combo.setCurrentText('进行中')  # 默认选择"进行中"
     parent_window.entertainment_status_combo.currentTextChanged.connect(parent_window.load_entertainment_tasks)
     entertainment_control_layout.addWidget(parent_window.entertainment_status_combo)

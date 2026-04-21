@@ -67,9 +67,11 @@ class DataManager:
         # 按状态筛选
         if status and status != "all":
             if status == "completed":
-                query = query.filter(DailyTask.completed == True)
+                query = query.filter(DailyTask.status == "completed")
             elif status == "pending":
-                query = query.filter(DailyTask.completed == False)
+                query = query.filter(DailyTask.status == "pending")
+            elif status == "abandoned":
+                query = query.filter(DailyTask.status == "abandoned")
         
         return query.order_by(DailyTask.week_day, DailyTask.title).all()
     
@@ -77,13 +79,15 @@ class DataManager:
         """根据ID获取每日任务"""
         return self.session.query(DailyTask).filter(DailyTask.id == task_id).first()
     
-    def create_daily_task(self, title: str, description: str = "", week_day: str = "", completed: bool = False) -> DailyTask:
+    def create_daily_task(self, title: str, description: str = "", week_day: str = "", 
+                         completed: bool = False, status: str = "pending") -> DailyTask:
         """创建每日任务"""
         task = DailyTask(
             title=title,
             description=description,
             week_day=week_day,
-            completed=completed
+            completed=completed,
+            status=status
         )
         self.session.add(task)
         self.session.commit()
@@ -96,6 +100,11 @@ class DataManager:
             for key, value in kwargs.items():
                 if hasattr(task, key):
                     setattr(task, key, value)
+            # 同步 completed 和 status 字段
+            if 'status' in kwargs:
+                task.completed = (kwargs['status'] == 'completed')
+            elif 'completed' in kwargs:
+                task.status = 'completed' if kwargs['completed'] else 'pending'
             self.session.commit()
             return True
         return False
@@ -113,7 +122,16 @@ class DataManager:
         """切换每日任务完成状态"""
         task = self.get_daily_task_by_id(task_id)
         if task:
-            task.completed = not task.completed
+            # 循环切换: pending -> completed -> abandoned -> pending
+            if task.status == "pending":
+                task.status = "completed"
+                task.completed = True
+            elif task.status == "completed":
+                task.status = "abandoned"
+                task.completed = False
+            else:  # abandoned
+                task.status = "pending"
+                task.completed = False
             self.session.commit()
             return True
         return False
@@ -126,9 +144,11 @@ class DataManager:
         # 按状态筛选
         if status and status != "all":
             if status == "completed":
-                query = query.filter(TodoTask.completed == True)
+                query = query.filter(TodoTask.status == "completed")
             elif status == "pending":
-                query = query.filter(TodoTask.completed == False)
+                query = query.filter(TodoTask.status == "pending")
+            elif status == "abandoned":
+                query = query.filter(TodoTask.status == "abandoned")
         
         return query.order_by(TodoTask.deadline.desc(), TodoTask.urgency_score.desc()).all()
     
@@ -136,13 +156,15 @@ class DataManager:
         """根据ID获取待办事项"""
         return self.session.query(TodoTask).filter(TodoTask.id == task_id).first()
     
-    def create_todo_task(self, title: str, description: str = "", deadline: str = "", completed: bool = False) -> TodoTask:
+    def create_todo_task(self, title: str, description: str = "", deadline: str = "", 
+                        completed: bool = False, status: str = "pending") -> TodoTask:
         """创建待办事项"""
         task = TodoTask(
             title=title,
             description=description,
             deadline=deadline,
-            completed=completed
+            completed=completed,
+            status=status
         )
         self.session.add(task)
         self.session.commit()
@@ -158,6 +180,11 @@ class DataManager:
             for key, value in kwargs.items():
                 if hasattr(task, key):
                     setattr(task, key, value)
+            # 同步 completed 和 status 字段
+            if 'status' in kwargs:
+                task.completed = (kwargs['status'] == 'completed')
+            elif 'completed' in kwargs:
+                task.status = 'completed' if kwargs['completed'] else 'pending'
             self.calculate_urgency_for_task(task)
             self.session.commit()
             return True
@@ -176,7 +203,16 @@ class DataManager:
         """切换待办事项完成状态"""
         task = self.get_todo_task_by_id(task_id)
         if task:
-            task.completed = not task.completed
+            # 循环切换: pending -> completed -> abandoned -> pending
+            if task.status == "pending":
+                task.status = "completed"
+                task.completed = True
+            elif task.status == "completed":
+                task.status = "abandoned"
+                task.completed = False
+            else:  # abandoned
+                task.status = "pending"
+                task.completed = False
             self.calculate_urgency_for_task(task)
             self.session.commit()
             return True
@@ -190,9 +226,11 @@ class DataManager:
         # 按状态筛选
         if status and status != "all":
             if status == "completed":
-                query = query.filter(EntertainmentTask.completed == True)
+                query = query.filter(EntertainmentTask.status == "completed")
             elif status == "pending":
-                query = query.filter(EntertainmentTask.completed == False)
+                query = query.filter(EntertainmentTask.status == "pending")
+            elif status == "abandoned":
+                query = query.filter(EntertainmentTask.status == "abandoned")
         
         return query.order_by(EntertainmentTask.fun_category, EntertainmentTask.title).all()
     
@@ -201,13 +239,15 @@ class DataManager:
         return self.session.query(EntertainmentTask).filter(EntertainmentTask.id == task_id).first()
     
     def create_entertainment_task(self, title: str, description: str = "", 
-                                fun_category: str = "general", completed: bool = False) -> EntertainmentTask:
+                                fun_category: str = "general", completed: bool = False,
+                                status: str = "pending") -> EntertainmentTask:
         """创建娱乐任务"""
         task = EntertainmentTask(
             title=title,
             description=description,
             fun_category=fun_category,
-            completed=completed
+            completed=completed,
+            status=status
         )
         self.session.add(task)
         self.session.commit()
@@ -220,6 +260,11 @@ class DataManager:
             for key, value in kwargs.items():
                 if hasattr(task, key):
                     setattr(task, key, value)
+            # 同步 completed 和 status 字段
+            if 'status' in kwargs:
+                task.completed = (kwargs['status'] == 'completed')
+            elif 'completed' in kwargs:
+                task.status = 'completed' if kwargs['completed'] else 'pending'
             self.session.commit()
             return True
         return False
@@ -237,7 +282,16 @@ class DataManager:
         """切换娱乐任务完成状态"""
         task = self.get_entertainment_task_by_id(task_id)
         if task:
-            task.completed = not task.completed
+            # 循环切换: pending -> completed -> abandoned -> pending
+            if task.status == "pending":
+                task.status = "completed"
+                task.completed = True
+            elif task.status == "completed":
+                task.status = "abandoned"
+                task.completed = False
+            else:  # abandoned
+                task.status = "pending"
+                task.completed = False
             self.session.commit()
             return True
         return False
