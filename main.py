@@ -38,6 +38,8 @@ class TaskManagerMainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
+        # 延迟初始化目录（避免导入时副作用）
+        config.config.ensure_directories()
         self.data_manager = DataManager()
         self.init_ui()
         self.load_data()
@@ -150,7 +152,8 @@ class TaskManagerMainWindow(QMainWindow):
                 status=data.get('status', 'pending')
             )
             self.load_daily_tasks()
-            self.status_bar.showMessage(show_task_added_confirmation('daily'))
+            show_task_added_confirmation('daily', self)
+            self.status_bar.showMessage('每日任务添加成功')
     
     def edit_daily_task(self):
         """编辑每日任务"""
@@ -176,7 +179,8 @@ class TaskManagerMainWindow(QMainWindow):
                     status=data.get('status', 'pending')
                 )
                 self.load_daily_tasks()
-                self.status_bar.showMessage(show_task_updated_confirmation('daily'))
+                show_task_updated_confirmation('daily', self)
+                self.status_bar.showMessage('每日任务更新成功')
     
     def delete_daily_task(self):
         """删除每日任务"""
@@ -191,7 +195,8 @@ class TaskManagerMainWindow(QMainWindow):
             task_id = item.data(Qt.ItemDataRole.UserRole)
             self.data_manager.delete_daily_task(task_id)
             self.load_daily_tasks()
-            self.status_bar.showMessage(show_task_deleted_confirmation('daily'))
+            show_task_deleted_confirmation('daily', self)
+            self.status_bar.showMessage('每日任务删除成功')
     
     def add_todo_task(self):
         """添加待办事项"""
@@ -206,7 +211,8 @@ class TaskManagerMainWindow(QMainWindow):
                 status=data.get('status', 'pending')
             )
             self.load_todo_tasks()
-            self.status_bar.showMessage(show_task_added_confirmation('todo'))
+            show_task_added_confirmation('todo', self)
+            self.status_bar.showMessage('待办事项添加成功')
     
     def edit_todo_task(self):
         """编辑待办事项"""
@@ -232,7 +238,8 @@ class TaskManagerMainWindow(QMainWindow):
                     status=data.get('status', 'pending')
                 )
                 self.load_todo_tasks()
-                self.status_bar.showMessage(show_task_updated_confirmation('todo'))
+                show_task_updated_confirmation('todo', self)
+                self.status_bar.showMessage('待办事项更新成功')
     
     def delete_todo_task(self):
         """删除待办事项"""
@@ -247,7 +254,8 @@ class TaskManagerMainWindow(QMainWindow):
             task_id = item.data(Qt.ItemDataRole.UserRole)
             self.data_manager.delete_todo_task(task_id)
             self.load_todo_tasks()
-            self.status_bar.showMessage(show_task_deleted_confirmation('todo'))
+            show_task_deleted_confirmation('todo', self)
+            self.status_bar.showMessage('待办事项删除成功')
     
     def add_entertainment_task(self):
         """添加娱乐任务"""
@@ -262,7 +270,8 @@ class TaskManagerMainWindow(QMainWindow):
                 status=data.get('status', 'pending')
             )
             self.load_entertainment_tasks()
-            self.status_bar.showMessage(show_task_added_confirmation('entertainment'))
+            show_task_added_confirmation('entertainment', self)
+            self.status_bar.showMessage('娱乐任务添加成功')
     
     def edit_entertainment_task(self):
         """编辑娱乐任务"""
@@ -288,7 +297,8 @@ class TaskManagerMainWindow(QMainWindow):
                     status=data.get('status', 'pending')
                 )
                 self.load_entertainment_tasks()
-                self.status_bar.showMessage(show_task_updated_confirmation('entertainment'))
+                show_task_updated_confirmation('entertainment', self)
+                self.status_bar.showMessage('娱乐任务更新成功')
     
     def delete_entertainment_task(self):
         """删除娱乐任务"""
@@ -303,7 +313,8 @@ class TaskManagerMainWindow(QMainWindow):
             task_id = item.data(Qt.ItemDataRole.UserRole)
             self.data_manager.delete_entertainment_task(task_id)
             self.load_entertainment_tasks()
-            self.status_bar.showMessage(show_task_deleted_confirmation('entertainment'))
+            show_task_deleted_confirmation('entertainment', self)
+            self.status_bar.showMessage('娱乐任务删除成功')
     
     def random_daily_task(self):
         """随机抽取每日任务（根据当前筛选条件）"""

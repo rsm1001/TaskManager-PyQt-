@@ -1,7 +1,9 @@
 """
 应用程序配置文件
+固定参数集中管理，避免硬编码分散在代码各处
 """
 import os
+
 
 # 应用程序基本信息
 APP_NAME = "任务管理系统"
@@ -9,7 +11,7 @@ APP_VERSION = "1.0.0"
 APP_AUTHOR = "AI Assistant"
 
 # 数据库配置
-DATABASE_PATH = os.getenv("TASKMANAGER_DB_PATH", "taskmanager.db")
+DATABASE_PATH = "taskmanager.db"
 
 # 界面配置
 WINDOW_WIDTH = 1200
@@ -34,6 +36,8 @@ DEFAULT_BASE_COEFFICIENT = 1.5
 DEFAULT_EXPORT_PATH = "./exports"
 DEFAULT_IMPORT_PATH = "./imports"
 
-# 创建默认目录
-os.makedirs(DEFAULT_EXPORT_PATH, exist_ok=True)
-os.makedirs(DEFAULT_IMPORT_PATH, exist_ok=True)
+
+def ensure_directories():
+    """确保所需目录存在（延迟创建，避免导入时副作用）"""
+    os.makedirs(DEFAULT_EXPORT_PATH, exist_ok=True)
+    os.makedirs(DEFAULT_IMPORT_PATH, exist_ok=True)

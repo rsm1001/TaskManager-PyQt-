@@ -67,7 +67,11 @@ class Config(BaseModel):
 
 # 数据库连接和会话管理
 def init_db(db_path: str = "taskmanager.db"):
-    """初始化数据库"""
+    """初始化数据库
+    
+    Args:
+        db_path: 数据库文件路径，默认为 "taskmanager.db"
+    """
     engine = create_engine(f"sqlite:///{db_path}", echo=False)
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
