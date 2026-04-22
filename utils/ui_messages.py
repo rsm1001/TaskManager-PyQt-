@@ -6,34 +6,26 @@ Task Manager Messages and Utilities Module
 from PyQt6.QtWidgets import QMessageBox, QLabel, QGraphicsOpacityEffect
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QColor
+import config.config as config
 
 
 class ToastMessage(QLabel):
     """自动消失的提示消息（Toast样式）"""
     
-    def __init__(self, text, parent=None, duration=2000):
+    def __init__(self, text, parent=None, duration=None):
         """
         Args:
             text: 显示文本
             parent: 父窗口
-            duration: 显示时长（毫秒），默认2秒
+            duration: 显示时长（毫秒），默认从配置读取
         """
         super().__init__(text, parent)
-        self.duration = duration
+        self.duration = duration if duration is not None else config.TOAST_DURATION_MS
         self.setup_ui()
         
     def setup_ui(self):
         """设置UI样式"""
-        self.setStyleSheet("""
-            QLabel {
-                background-color: #333333;
-                color: white;
-                padding: 12px 24px;
-                border-radius: 6px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-        """)
+        self.setStyleSheet(config.TOAST_STYLE)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.adjustSize()
         
@@ -64,7 +56,7 @@ class ToastMessage(QLabel):
         
     def fade_step(self):
         """淡出步骤"""
-        self.current_opacity -= 0.1
+        self.current_opacity -= config.TOAST_FADE_STEP
         if self.current_opacity <= 0:
             self.fade_timer.stop()
             self.close()
@@ -73,42 +65,20 @@ class ToastMessage(QLabel):
             self.opacity_effect.setOpacity(self.current_opacity)
 
 
-def show_toast(parent, text, duration=2000):
+def show_toast(parent, text, duration=None):
     """显示自动消失的提示消息
     
     Args:
         parent: 父窗口
         text: 显示文本
-        duration: 显示时长（毫秒）
+        duration: 显示时长（毫秒），默认从配置读取
     """
     toast = ToastMessage(text, parent, duration)
     toast.show_at_center()
 
 
-# 消息文本集中配置，避免硬编码分散在代码各处
-MESSAGES = {
-    'task_added': {
-        'daily': '每日任务添加成功',
-        'todo': '待办事项添加成功',
-        'entertainment': '娱乐任务添加成功',
-    },
-    'task_updated': {
-        'daily': '每日任务更新成功',
-        'todo': '待办事项更新成功',
-        'entertainment': '娱乐任务更新成功',
-    },
-    'task_deleted': {
-        'daily': '每日任务删除成功',
-        'todo': '待办事项删除成功',
-        'entertainment': '娱乐任务删除成功',
-    },
-    'no_pending': {
-        'daily': '没有未完成的符合条件的每日任务',
-        'todo': '没有未完成的待办事项',
-        'entertainment': '没有未完成的娱乐任务',
-        'task': '没有符合条件的任务',
-    }
-}
+# 消息文本从配置文件导入
+MESSAGES = config.MESSAGES
 
 
 def show_statistics_dialog(stats):
@@ -167,7 +137,7 @@ def show_task_added_confirmation(task_type, parent=None):
         task_type: 任务类型（daily/todo/entertainment）
         parent: 父窗口，用于定位提示位置
     """
-    message = MESSAGES['task_added'].get(task_type, '任务添加成功')
+    message = config.MESSAGES['task_added'].get(task_type, '任务添加成功')
     if parent:
         show_toast(parent, message)
     return message
@@ -180,7 +150,7 @@ def show_task_updated_confirmation(task_type, parent=None):
         task_type: 任务类型（daily/todo/entertainment）
         parent: 父窗口，用于定位提示位置
     """
-    message = MESSAGES['task_updated'].get(task_type, '任务更新成功')
+    message = config.MESSAGES['task_updated'].get(task_type, '任务更新成功')
     if parent:
         show_toast(parent, message)
     return message
@@ -193,7 +163,7 @@ def show_task_deleted_confirmation(task_type, parent=None):
         task_type: 任务类型（daily/todo/entertainment）
         parent: 父窗口，用于定位提示位置
     """
-    message = MESSAGES['task_deleted'].get(task_type, '任务删除成功')
+    message = config.MESSAGES['task_deleted'].get(task_type, '任务删除成功')
     if parent:
         show_toast(parent, message)
     return message
@@ -251,7 +221,7 @@ def inform_no_suitable_tasks(message):
 
 def inform_no_pending_tasks(task_type='task'):
     """提示：没有未完成的任务"""
-    message = MESSAGES['no_pending'].get(task_type, MESSAGES['no_pending']['task'])
+    message = config.MESSAGES['no_pending'].get(task_type, config.MESSAGES['no_pending']['task'])
     return QMessageBox.information(None, '提示', message)
 
 

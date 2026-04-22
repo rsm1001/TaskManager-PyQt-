@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QT
 from PyQt6.QtCore import Qt, QDate
 from datetime import datetime, date
 from PyQt6.QtGui import QColor
+import config.config as config
 
 
 def create_daily_tab_ui(parent_window):
@@ -41,12 +42,11 @@ def create_daily_tab_ui(parent_window):
     # 星期筛选
     daily_control_layout.addWidget(QLabel('星期:'))
     parent_window.daily_weekday_combo = QComboBox()
-    parent_window.daily_weekday_combo.addItems(['全部', '每天'] + ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'])
+    parent_window.daily_weekday_combo.addItems(config.WEEKDAY_FILTER_OPTIONS)
     # 设置默认值为今天是星期几
     today_weekday_index = datetime.now().weekday()  # 0是星期一，6是星期日
-    weekday_names = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
     if 0 <= today_weekday_index <= 6:
-        today_name = weekday_names[today_weekday_index]
+        today_name = config.WEEKDAY_NAMES[today_weekday_index]
         index = parent_window.daily_weekday_combo.findText(today_name)
         if index >= 0:
             parent_window.daily_weekday_combo.setCurrentIndex(index)

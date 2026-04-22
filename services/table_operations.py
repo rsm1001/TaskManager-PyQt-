@@ -5,6 +5,42 @@ Task Table Operations Module
 
 from PyQt6.QtWidgets import QTableWidgetItem
 from PyQt6.QtCore import Qt
+import config.config as config
+
+
+def _get_status_filter(status_text):
+    """将界面状态文本转换为过滤器值
+    
+    Args:
+        status_text: 界面显示的状态文本
+        
+    Returns:
+        对应的状态过滤值
+    """
+    return config.STATUS_FILTER_MAP.get(status_text, 'all')
+
+
+def _set_task_row_data(table, row, task, columns):
+    """设置任务表格行的数据
+    
+    Args:
+        table: 表格控件
+        row: 行索引
+        task: 任务对象
+        columns: 列数据列表，每个元素为 (列索引, 值)
+    """
+    # 状态列（始终在第一列）
+    status_text = config.STATUS_DISPLAY_MAP.get(task.status, '○')
+    status_item = QTableWidgetItem(status_text)
+    status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+    table.setItem(row, 0, status_item)
+    
+    # 设置其他列
+    for col_idx, value in columns:
+        table.setItem(row, col_idx, QTableWidgetItem(value))
+    
+    # 存储任务ID用于后续操作
+    status_item.setData(Qt.ItemDataRole.UserRole, task.id)
 
 
 def load_daily_tasks_to_table(window):
@@ -18,44 +54,20 @@ def load_daily_tasks_to_table(window):
     else:
         weekday_filter = weekday
     
-    status = window.daily_status_combo.currentText()
-    if status == '全部':
-        status_filter = 'all'
-    elif status == '进行中':
-        status_filter = 'pending'
-    elif status == '已完成':
-        status_filter = 'completed'
-    elif status == '暂弃':
-        status_filter = 'abandoned'
-    else:
-        status_filter = 'all'
+    status_filter = _get_status_filter(window.daily_status_combo.currentText())
 
     tasks = window.data_manager.get_daily_tasks(weekday=weekday_filter, status=status_filter)
 
     window.daily_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
-        # 状态
-        status_map = {'pending': '○', 'completed': '✓', 'abandoned': '✗'}
-        status_text = status_map.get(task.status, '○')
-        status_item = QTableWidgetItem(status_text)
-        status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        window.daily_table.setItem(row, 0, status_item)
-        
-        # 标题
-        window.daily_table.setItem(row, 1, QTableWidgetItem(task.title))
-        
-        # 星期
-        weekday = task.week_day if task.week_day else '每天'
-        window.daily_table.setItem(row, 2, QTableWidgetItem(weekday))
-        
-        # 描述
-        window.daily_table.setItem(row, 3, QTableWidgetItem(task.description or '-'))
-        
-        # 创建日期
-        window.daily_table.setItem(row, 4, QTableWidgetItem(task.created_at.strftime('%Y-%m-%d')))
-        
-        # 存储任务ID用于后续操作
-        status_item.setData(Qt.ItemDataRole.UserRole, task.id)
+        # 准备列数据：(列索引, 值)
+        columns = [
+            (1, task.title),
+            (2, task.week_day if task.week_day else '每天'),
+            (3, task.description or '-'),
+            (4, task.created_at.strftime('%Y-%m-%d'))
+        ]
+        _set_task_row_data(window.daily_table, row, task, columns)
 
     window.update_status_bar()
 
@@ -63,47 +75,25 @@ def load_daily_tasks_to_table(window):
 def load_todo_tasks_to_table(window):
     """加载待办事项到表格"""
     # 获取筛选条件
-    status = window.todo_status_combo.currentText()
-    if status == '全部':
-        status_filter = 'all'
-    elif status == '进行中':
-        status_filter = 'pending'
-    elif status == '已完成':
-        status_filter = 'completed'
-    elif status == '暂弃':
-        status_filter = 'abandoned'
-    else:  # '已过期'
+    status_text = window.todo_status_combo.currentText()
+    if status_text == '已过期':
         status_filter = 'all'  # 已过期需要特殊处理
+    else:
+        status_filter = _get_status_filter(status_text)
 
     tasks = window.data_manager.get_todo_tasks(status=status_filter)
 
     window.todo_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
-        # 状态
-        status_map = {'pending': '○', 'completed': '✓', 'abandoned': '✗'}
-        status_text = status_map.get(task.status, '○')
-        status_item = QTableWidgetItem(status_text)
-        status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        window.todo_table.setItem(row, 0, status_item)
-        
-        # 标题
-        window.todo_table.setItem(row, 1, QTableWidgetItem(task.title))
-        
-        # 截止日期
-        deadline = task.deadline if task.deadline else '无'
-        window.todo_table.setItem(row, 2, QTableWidgetItem(deadline))
-        
-        # 紧急程度
-        window.todo_table.setItem(row, 3, QTableWidgetItem(str(task.urgency_score)))
-        
-        # 描述
-        window.todo_table.setItem(row, 4, QTableWidgetItem(task.description or '-'))
-        
-        # 创建日期
-        window.todo_table.setItem(row, 5, QTableWidgetItem(task.created_at.strftime('%Y-%m-%d')))
-        
-        # 存储任务ID用于后续操作
-        status_item.setData(Qt.ItemDataRole.UserRole, task.id)
+        # 准备列数据
+        columns = [
+            (1, task.title),
+            (2, task.deadline if task.deadline else '无'),
+            (3, str(task.urgency_score)),
+            (4, task.description or '-'),
+            (5, task.created_at.strftime('%Y-%m-%d'))
+        ]
+        _set_task_row_data(window.todo_table, row, task, columns)
 
     window.update_status_bar()
 
@@ -111,43 +101,20 @@ def load_todo_tasks_to_table(window):
 def load_entertainment_tasks_to_table(window):
     """加载娱乐任务到表格"""
     # 获取筛选条件
-    status = window.entertainment_status_combo.currentText()
-    if status == '全部':
-        status_filter = 'all'
-    elif status == '进行中':
-        status_filter = 'pending'
-    elif status == '已完成':
-        status_filter = 'completed'
-    elif status == '暂弃':
-        status_filter = 'abandoned'
-    else:
-        status_filter = 'all'
+    status_filter = _get_status_filter(window.entertainment_status_combo.currentText())
 
     tasks = window.data_manager.get_entertainment_tasks(status=status_filter)
 
     window.entertainment_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
-        # 状态
-        status_map = {'pending': '○', 'completed': '✓', 'abandoned': '✗'}
-        status_text = status_map.get(task.status, '○')
-        status_item = QTableWidgetItem(status_text)
-        status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        window.entertainment_table.setItem(row, 0, status_item)
-        
-        # 标题
-        window.entertainment_table.setItem(row, 1, QTableWidgetItem(task.title))
-        
-        # 类别
-        window.entertainment_table.setItem(row, 2, QTableWidgetItem(task.fun_category))
-        
-        # 描述
-        window.entertainment_table.setItem(row, 3, QTableWidgetItem(task.description or '-'))
-        
-        # 创建日期
-        window.entertainment_table.setItem(row, 4, QTableWidgetItem(task.created_at.strftime('%Y-%m-%d')))
-        
-        # 存储任务ID用于后续操作
-        status_item.setData(Qt.ItemDataRole.UserRole, task.id)
+        # 准备列数据
+        columns = [
+            (1, task.title),
+            (2, task.fun_category),
+            (3, task.description or '-'),
+            (4, task.created_at.strftime('%Y-%m-%d'))
+        ]
+        _set_task_row_data(window.entertainment_table, row, task, columns)
 
     window.update_status_bar()
 
@@ -218,15 +185,11 @@ def sort_todo_table_by_column(window, column):
         window.todo_sort_order = Qt.SortOrder.AscendingOrder
 
     # 获取当前筛选状态
-    status = window.todo_status_combo.currentText()
-    if status == '全部':
-        status_filter = 'all'
-    elif status == '进行中':
-        status_filter = 'pending'
-    elif status == '暂弃':
-        status_filter = 'abandoned'
-    else:  # '已完成' 或 '已过期'
-        status_filter = 'completed'
+    status_text = window.todo_status_combo.currentText()
+    if status_text == '已过期':
+        status_filter = 'all'  # 已过期需要特殊处理
+    else:
+        status_filter = _get_status_filter(status_text)
 
     tasks = window.data_manager.get_todo_tasks(status=status_filter)
     
@@ -248,28 +211,12 @@ def sort_todo_table_by_column(window, column):
     # 更新表格显示
     window.todo_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
-        # 状态
-        status_map = {'pending': '○', 'completed': '✓', 'abandoned': '✗'}
-        status_text = status_map.get(task.status, '○')
-        status_item = QTableWidgetItem(status_text)
-        status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        window.todo_table.setItem(row, 0, status_item)
-        
-        # 标题
-        window.todo_table.setItem(row, 1, QTableWidgetItem(task.title))
-        
-        # 截止日期
-        deadline = task.deadline if task.deadline else '无'
-        window.todo_table.setItem(row, 2, QTableWidgetItem(deadline))
-        
-        # 紧急程度
-        window.todo_table.setItem(row, 3, QTableWidgetItem(str(task.urgency_score)))
-        
-        # 描述
-        window.todo_table.setItem(row, 4, QTableWidgetItem(task.description or '-'))
-        
-        # 创建日期
-        window.todo_table.setItem(row, 5, QTableWidgetItem(task.created_at.strftime('%Y-%m-%d')))
-        
-        # 存储任务ID用于后续操作
-        status_item.setData(Qt.ItemDataRole.UserRole, task.id)
+        # 准备列数据
+        columns = [
+            (1, task.title),
+            (2, task.deadline if task.deadline else '无'),
+            (3, str(task.urgency_score)),
+            (4, task.description or '-'),
+            (5, task.created_at.strftime('%Y-%m-%d'))
+        ]
+        _set_task_row_data(window.todo_table, row, task, columns)
