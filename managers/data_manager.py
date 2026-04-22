@@ -395,7 +395,10 @@ class DataManager:
         for task in all_tasks:
             # 如果任务的星期设置为空（表示每天）或者等于今天，就重置
             if not task.week_day or task.week_day == today_name:
-                task.completed = False
+                # 只重置状态为 completed 的任务，因为还有 pending/abandoned 等其他状态
+                if task.status == 'completed':
+                    task.status = 'pending'
+                    task.completed = False
         self.session.commit()
     
     def get_statistics(self) -> Dict[str, Any]:
