@@ -30,6 +30,15 @@ class TagSelectorWidget(QWidget):
         tags_group = QGroupBox("标签选择")
         tags_layout = QVBoxLayout()
         
+        # 搜索框
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel('搜索:'))
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText('输入标签名称进行筛选...')
+        self.search_edit.textChanged.connect(self.filter_tags)
+        search_layout.addWidget(self.search_edit)
+        tags_layout.addLayout(search_layout)
+        
         # 创建滚动区域以容纳可能很多的标签
         self.scroll_area = QScrollArea()
         self.scroll_widget = QWidget()
@@ -133,6 +142,9 @@ class TagSelectorWidget(QWidget):
             label = QLabel('暂无标签，点击"添加标签"创建')
             label.setStyleSheet("color: gray;")
             self.tags_inner_layout.addWidget(label)
+        
+        # 应用当前的搜索过滤
+        self.filter_tags(self.search_edit.text() if hasattr(self, 'search_edit') else '')
 
     def get_selected_tags(self):
         """获取选中的标签（逗号分隔的字符串）"""
@@ -170,6 +182,49 @@ class TagSelectorWidget(QWidget):
         # 发出信号通知标签已更改
         self.tagsChanged.emit(self.get_selected_tags())
 
+    def filter_tags(self, search_text):
+        """根据搜索文本过滤标签显示
+        
+        Args:
+            search_text: 搜索关键词
+        """
+        search_text = search_text.lower().strip()
+        has_visible = False
+        
+        for tag, checkbox in self.tag_checkboxes.items():
+            if search_text in tag.lower():
+                checkbox.setVisible(True)
+                has_visible = True
+            else:
+                checkbox.setVisible(False)
+        
+        # 显示或隐藏"无匹配"提示
+        if not has_visible and self.all_tags:
+            # 检查是否已存在无匹配提示
+            found = False
+            for i in range(self.tags_inner_layout.count()):
+                item = self.tags_inner_layout.itemAt(i)
+                if item and item.widget():
+                    widget = item.widget()
+                    if isinstance(widget, QLabel) and widget.objectName() == 'no_match_label':
+                        widget.setVisible(True)
+                        found = True
+                        break
+            if not found:
+                no_match_label = QLabel('无匹配标签')
+                no_match_label.setObjectName('no_match_label')
+                no_match_label.setStyleSheet("color: gray;")
+                self.tags_inner_layout.addWidget(no_match_label)
+        else:
+            # 隐藏无匹配提示
+            for i in range(self.tags_inner_layout.count()):
+                item = self.tags_inner_layout.itemAt(i)
+                if item and item.widget():
+                    widget = item.widget()
+                    if isinstance(widget, QLabel) and widget.objectName() == 'no_match_label':
+                        widget.setVisible(False)
+                        break
+
     def add_new_tag(self):
         """添加新标签"""
         tag_name, ok = QInputDialog.getText(self, "添加新标签", "请输入标签名称:")
@@ -179,9 +234,13 @@ class TagSelectorWidget(QWidget):
                 self.all_tags.add(tag)
                 self.selected_tags.add(tag)
                 self._create_checkboxes()
+                # 清空搜索框以显示新标签
+                self.search_edit.clear()
                 self.tagsChanged.emit(self.get_selected_tags())
             else:
                 # 标签已存在，直接选中
                 self.selected_tags.add(tag)
                 self._update_checkbox_states()
+                # 清空搜索框以确保用户能看到选中的标签
+                self.search_edit.clear()
                 self.tagsChanged.emit(self.get_selected_tags())
