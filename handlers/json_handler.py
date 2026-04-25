@@ -34,7 +34,8 @@ class JsonExportImportHandler:
                     "created_at": task.created_at.strftime("%Y-%m-%d"),
                     "category": task.category,
                     "week_day": task.week_day or "",
-                    "status": task.status or "pending"
+                    "status": task.status or "pending",
+                    "tags": task.tags or ""
                 })
             
             # 导出待办事项
@@ -48,7 +49,8 @@ class JsonExportImportHandler:
                     "deadline": task.deadline or "",
                     "urgency_score": task.urgency_score,
                     "category": task.category,
-                    "status": task.status or "pending"
+                    "status": task.status or "pending",
+                    "tags": task.tags or ""
                 })
             
             # 导出娱乐任务
@@ -61,7 +63,8 @@ class JsonExportImportHandler:
                     "created_at": task.created_at.strftime("%Y-%m-%d"),
                     "fun_category": task.fun_category,
                     "category": task.category,
-                    "status": task.status or "pending"
+                    "status": task.status or "pending",
+                    "tags": task.tags or ""
                 })
             
             # 导出配置
@@ -107,7 +110,8 @@ class JsonExportImportHandler:
                         completed=task_data.get("completed", False),
                         week_day=task_data.get("week_day", ""),
                         created_at=created_at,
-                        status=task_data.get("status", "pending")
+                        status=task_data.get("status", "pending"),
+                        tags=task_data.get("tags", "")
                     )
                     self.session.add(task)
             
@@ -129,7 +133,8 @@ class JsonExportImportHandler:
                         deadline=task_data.get("deadline", ""),
                         urgency_score=task_data.get("urgency_score", 0),
                         created_at=created_at,
-                        status=task_data.get("status", "pending")
+                        status=task_data.get("status", "pending"),
+                        tags=task_data.get("tags", "")
                     )
                     self.session.add(task)
             
@@ -150,7 +155,8 @@ class JsonExportImportHandler:
                         completed=task_data.get("completed", False),
                         fun_category=task_data.get("fun_category", "general"),
                         created_at=created_at,
-                        status=task_data.get("status", "pending")
+                        status=task_data.get("status", "pending"),
+                        tags=task_data.get("tags", "")
                     )
                     self.session.add(task)
             

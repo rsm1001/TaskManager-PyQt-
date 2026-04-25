@@ -65,8 +65,8 @@ def create_daily_tab_ui(parent_window):
     
     # 任务表格
     parent_window.daily_table = QTableWidget()
-    parent_window.daily_table.setColumnCount(5)
-    parent_window.daily_table.setHorizontalHeaderLabels(['状态', '标题', '星期', '描述', '创建日期'])
+    parent_window.daily_table.setColumnCount(6)
+    parent_window.daily_table.setHorizontalHeaderLabels(['状态', '标题', '星期', '标签', '描述', '创建日期'])
     parent_window.daily_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.daily_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
     parent_window.daily_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -114,8 +114,8 @@ def create_todo_tab_ui(parent_window):
     
     # 任务表格
     parent_window.todo_table = QTableWidget()
-    parent_window.todo_table.setColumnCount(6)
-    parent_window.todo_table.setHorizontalHeaderLabels(['状态', '标题', '截止日期', '紧急程度', '描述', '创建日期'])
+    parent_window.todo_table.setColumnCount(7)
+    parent_window.todo_table.setHorizontalHeaderLabels(['状态', '标题', '截止日期', '紧急程度', '标签', '描述', '创建日期'])
     parent_window.todo_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.todo_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
     parent_window.todo_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -174,8 +174,8 @@ def create_entertainment_tab_ui(parent_window):
     
     # 任务表格
     parent_window.entertainment_table = QTableWidget()
-    parent_window.entertainment_table.setColumnCount(5)
-    parent_window.entertainment_table.setHorizontalHeaderLabels(['状态', '标题', '类别', '描述', '创建日期'])
+    parent_window.entertainment_table.setColumnCount(6)
+    parent_window.entertainment_table.setHorizontalHeaderLabels(['状态', '标题', '类别', '标签', '描述', '创建日期'])
     parent_window.entertainment_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.entertainment_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
     parent_window.entertainment_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)

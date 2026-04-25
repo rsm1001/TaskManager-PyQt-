@@ -64,8 +64,9 @@ def load_daily_tasks_to_table(window):
         columns = [
             (1, task.title),
             (2, task.week_day if task.week_day else '每天'),
-            (3, task.description or '-'),
-            (4, task.created_at.strftime('%Y-%m-%d'))
+            (3, task.tags if task.tags else '-'),
+            (4, task.description or '-'),
+            (5, task.created_at.strftime('%Y-%m-%d'))
         ]
         _set_task_row_data(window.daily_table, row, task, columns)
 
@@ -90,8 +91,9 @@ def load_todo_tasks_to_table(window):
             (1, task.title),
             (2, task.deadline if task.deadline else '无'),
             (3, str(task.urgency_score)),
-            (4, task.description or '-'),
-            (5, task.created_at.strftime('%Y-%m-%d'))
+            (4, task.tags if task.tags else '-'),
+            (5, task.description or '-'),
+            (6, task.created_at.strftime('%Y-%m-%d'))
         ]
         _set_task_row_data(window.todo_table, row, task, columns)
 
@@ -111,8 +113,9 @@ def load_entertainment_tasks_to_table(window):
         columns = [
             (1, task.title),
             (2, task.fun_category),
-            (3, task.description or '-'),
-            (4, task.created_at.strftime('%Y-%m-%d'))
+            (3, task.tags if task.tags else '-'),
+            (4, task.description or '-'),
+            (5, task.created_at.strftime('%Y-%m-%d'))
         ]
         _set_task_row_data(window.entertainment_table, row, task, columns)
 
@@ -216,7 +219,8 @@ def sort_todo_table_by_column(window, column):
             (1, task.title),
             (2, task.deadline if task.deadline else '无'),
             (3, str(task.urgency_score)),
-            (4, task.description or '-'),
-            (5, task.created_at.strftime('%Y-%m-%d'))
+            (4, task.tags if task.tags else '-'),
+            (5, task.description or '-'),
+            (6, task.created_at.strftime('%Y-%m-%d'))
         ]
         _set_task_row_data(window.todo_table, row, task, columns)

@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QText
 from PyQt6.QtCore import QDate
 from PyQt6.QtWidgets import QMessageBox
 from managers.data_manager import TaskType
+from widgets.tag_selector_widget import TagSelectorWidget
 from datetime import timedelta
 import datetime
 import uuid
@@ -16,10 +17,11 @@ import uuid
 class TaskEditDialog(QDialog):
     """任务编辑对话框"""
 
-    def __init__(self, task_type: TaskType, parent=None, task=None):
+    def __init__(self, task_type: TaskType, parent=None, task=None, data_manager=None):
         super().__init__(parent)
         self.task_type = task_type
         self.task = task
+        self.data_manager = data_manager
         self.init_ui()
         if task:
             self.load_task_data()
@@ -43,6 +45,11 @@ class TaskEditDialog(QDialog):
         layout.addWidget(QLabel('描述:'))
         self.desc_edit = QTextEdit()
         layout.addWidget(self.desc_edit)
+
+        # 标签选择组件
+        self.tag_selector = TagSelectorWidget(parent=self, data_manager=self.data_manager, 
+                                             initial_tags=self.task.tags if self.task else "")
+        layout.addWidget(self.tag_selector)
 
         # 任务特定字段
         if self.task_type == TaskType.DAILY:
@@ -153,6 +160,10 @@ class TaskEditDialog(QDialog):
             if index >= 0:
                 self.status_combo.setCurrentIndex(index)
 
+            # 加载标签
+            if hasattr(self.task, 'tags') and self.task.tags:
+                self.tag_selector.set_selected_tags(self.task.tags)
+
             if self.task_type == TaskType.DAILY:
                 weekday = self.task.week_day if self.task.week_day else '每天'
                 index = self.weekday_combo.findText(weekday)
@@ -185,7 +196,8 @@ class TaskEditDialog(QDialog):
             'title': self.title_edit.text().strip(),
             'description': self.desc_edit.toPlainText().strip(),
             'completed': status_value == 'completed',
-            'status': status_value
+            'status': status_value,
+            'tags': self.tag_selector.get_selected_tags()
         }
 
         if self.task_type == TaskType.DAILY:

@@ -141,7 +141,7 @@ class TaskManagerMainWindow(QMainWindow):
     
     def add_daily_task(self):
         """添加每日任务"""
-        dialog = TaskEditDialog(TaskType.DAILY, self)
+        dialog = TaskEditDialog(TaskType.DAILY, self, data_manager=self.data_manager)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             data = dialog.get_data()
             self.data_manager.create_daily_task(
@@ -149,7 +149,8 @@ class TaskManagerMainWindow(QMainWindow):
                 description=data['description'],
                 week_day=data['weekday'],
                 completed=data['completed'],
-                status=data.get('status', 'pending')
+                status=data.get('status', 'pending'),
+                tags=data.get('tags', '')
             )
             self.load_daily_tasks()
             show_task_added_confirmation('daily', self)
@@ -167,7 +168,7 @@ class TaskManagerMainWindow(QMainWindow):
         task = self.data_manager.get_daily_task_by_id(task_id)
         
         if task:
-            dialog = TaskEditDialog(TaskType.DAILY, self, task)
+            dialog = TaskEditDialog(TaskType.DAILY, self, task, data_manager=self.data_manager)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 data = dialog.get_data()
                 self.data_manager.update_daily_task(
@@ -176,7 +177,8 @@ class TaskManagerMainWindow(QMainWindow):
                     description=data['description'],
                     week_day=data['weekday'],
                     completed=data['completed'],
-                    status=data.get('status', 'pending')
+                    status=data.get('status', 'pending'),
+                    tags=data.get('tags', '')
                 )
                 self.load_daily_tasks()
                 show_task_updated_confirmation('daily', self)
@@ -200,7 +202,7 @@ class TaskManagerMainWindow(QMainWindow):
     
     def add_todo_task(self):
         """添加待办事项"""
-        dialog = TaskEditDialog(TaskType.TODO, self)
+        dialog = TaskEditDialog(TaskType.TODO, self, data_manager=self.data_manager)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             data = dialog.get_data()
             self.data_manager.create_todo_task(
@@ -208,7 +210,8 @@ class TaskManagerMainWindow(QMainWindow):
                 description=data['description'],
                 deadline=data['deadline'] if data.get('deadline') else '',
                 completed=data['completed'],
-                status=data.get('status', 'pending')
+                status=data.get('status', 'pending'),
+                tags=data.get('tags', '')
             )
             self.load_todo_tasks()
             show_task_added_confirmation('todo', self)
@@ -226,7 +229,7 @@ class TaskManagerMainWindow(QMainWindow):
         task = self.data_manager.get_todo_task_by_id(task_id)
         
         if task:
-            dialog = TaskEditDialog(TaskType.TODO, self, task)
+            dialog = TaskEditDialog(TaskType.TODO, self, task, data_manager=self.data_manager)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 data = dialog.get_data()
                 self.data_manager.update_todo_task(
@@ -235,7 +238,8 @@ class TaskManagerMainWindow(QMainWindow):
                     description=data['description'],
                     deadline=data['deadline'] if data.get('deadline') else '',
                     completed=data['completed'],
-                    status=data.get('status', 'pending')
+                    status=data.get('status', 'pending'),
+                    tags=data.get('tags', '')
                 )
                 self.load_todo_tasks()
                 show_task_updated_confirmation('todo', self)
@@ -259,7 +263,7 @@ class TaskManagerMainWindow(QMainWindow):
     
     def add_entertainment_task(self):
         """添加娱乐任务"""
-        dialog = TaskEditDialog(TaskType.ENTERTAINMENT, self)
+        dialog = TaskEditDialog(TaskType.ENTERTAINMENT, self, data_manager=self.data_manager)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             data = dialog.get_data()
             self.data_manager.create_entertainment_task(
@@ -267,7 +271,8 @@ class TaskManagerMainWindow(QMainWindow):
                 description=data['description'],
                 fun_category=data['fun_category'],
                 completed=data['completed'],
-                status=data.get('status', 'pending')
+                status=data.get('status', 'pending'),
+                tags=data.get('tags', '')
             )
             self.load_entertainment_tasks()
             show_task_added_confirmation('entertainment', self)
@@ -285,7 +290,7 @@ class TaskManagerMainWindow(QMainWindow):
         task = self.data_manager.get_entertainment_task_by_id(task_id)
         
         if task:
-            dialog = TaskEditDialog(TaskType.ENTERTAINMENT, self, task)
+            dialog = TaskEditDialog(TaskType.ENTERTAINMENT, self, task, data_manager=self.data_manager)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 data = dialog.get_data()
                 self.data_manager.update_entertainment_task(
@@ -294,7 +299,8 @@ class TaskManagerMainWindow(QMainWindow):
                     description=data['description'],
                     fun_category=data['fun_category'],
                     completed=data['completed'],
-                    status=data.get('status', 'pending')
+                    status=data.get('status', 'pending'),
+                    tags=data.get('tags', '')
                 )
                 self.load_entertainment_tasks()
                 show_task_updated_confirmation('entertainment', self)

@@ -80,14 +80,15 @@ class DataManager:
         return self.session.query(DailyTask).filter(DailyTask.id == task_id).first()
     
     def create_daily_task(self, title: str, description: str = "", week_day: str = "", 
-                         completed: bool = False, status: str = "pending") -> DailyTask:
+                         completed: bool = False, status: str = "pending", tags: str = "") -> DailyTask:
         """创建每日任务"""
         task = DailyTask(
             title=title,
             description=description,
             week_day=week_day,
             completed=completed,
-            status=status
+            status=status,
+            tags=tags
         )
         self.session.add(task)
         self.session.commit()
@@ -157,14 +158,15 @@ class DataManager:
         return self.session.query(TodoTask).filter(TodoTask.id == task_id).first()
     
     def create_todo_task(self, title: str, description: str = "", deadline: str = "", 
-                        completed: bool = False, status: str = "pending") -> TodoTask:
+                        completed: bool = False, status: str = "pending", tags: str = "") -> TodoTask:
         """创建待办事项"""
         task = TodoTask(
             title=title,
             description=description,
             deadline=deadline,
             completed=completed,
-            status=status
+            status=status,
+            tags=tags
         )
         self.session.add(task)
         self.session.commit()
@@ -240,14 +242,15 @@ class DataManager:
     
     def create_entertainment_task(self, title: str, description: str = "", 
                                 fun_category: str = "general", completed: bool = False,
-                                status: str = "pending") -> EntertainmentTask:
+                                status: str = "pending", tags: str = "") -> EntertainmentTask:
         """创建娱乐任务"""
         task = EntertainmentTask(
             title=title,
             description=description,
             fun_category=fun_category,
             completed=completed,
-            status=status
+            status=status,
+            tags=tags
         )
         self.session.add(task)
         self.session.commit()

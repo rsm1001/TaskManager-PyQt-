@@ -30,6 +30,7 @@ class DailyTask(BaseModel):
     week_day = Column(String(20))  # 如"Monday", "Tuesday", 或留空表示每天
     category = Column(String(50), default="daily")
     status = Column(String(20), default="pending")  # pending, completed, abandoned
+    tags = Column(String(500), default="")  # 逗号分隔的标签，如"工作,紧急,项目A"
 
 
 class TodoTask(BaseModel):
@@ -43,6 +44,7 @@ class TodoTask(BaseModel):
     urgency_score = Column(Integer, default=0)
     category = Column(String(50), default="todo")
     status = Column(String(20), default="pending")  # pending, completed, abandoned
+    tags = Column(String(500), default="")  # 逗号分隔的标签，如"工作,紧急,项目A"
 
 
 class EntertainmentTask(BaseModel):
@@ -55,6 +57,7 @@ class EntertainmentTask(BaseModel):
     fun_category = Column(String(50), default="general")
     category = Column(String(50), default="entertainment")
     status = Column(String(20), default="pending")  # pending, completed, abandoned
+    tags = Column(String(500), default="")  # 逗号分隔的标签，如"游戏,周末,多人"
 
 
 class Config(BaseModel):
@@ -65,15 +68,50 @@ class Config(BaseModel):
     value = Column(Text)
 
 
+def migrate_db(engine):
+    """数据库迁移：添加新字段"""
+    from sqlalchemy import inspect, text
+    
+    inspector = inspect(engine)
+    
+    # 检查并添加 daily_tasks.tags 字段
+    daily_columns = [col['name'] for col in inspector.get_columns('daily_tasks')]
+    if 'tags' not in daily_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE daily_tasks ADD COLUMN tags VARCHAR(500) DEFAULT ''"))
+            conn.commit()
+        print("已添加 daily_tasks.tags 字段")
+    
+    # 检查并添加 todo_tasks.tags 字段
+    todo_columns = [col['name'] for col in inspector.get_columns('todo_tasks')]
+    if 'tags' not in todo_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE todo_tasks ADD COLUMN tags VARCHAR(500) DEFAULT ''"))
+            conn.commit()
+        print("已添加 todo_tasks.tags 字段")
+    
+    # 检查并添加 entertainment_tasks.tags 字段
+    entertainment_columns = [col['name'] for col in inspector.get_columns('entertainment_tasks')]
+    if 'tags' not in entertainment_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE entertainment_tasks ADD COLUMN tags VARCHAR(500) DEFAULT ''"))
+            conn.commit()
+        print("已添加 entertainment_tasks.tags 字段")
+
+
 # 数据库连接和会话管理
-def init_db(db_path: str = "taskmanager.db"):
+def init_db(db_path: str = "taskmanager.db", run_migration: bool = False):
     """初始化数据库
     
     Args:
         db_path: 数据库文件路径，默认为 "taskmanager.db"
+        run_migration: 是否执行数据库迁移，默认为 False
     """
     engine = create_engine(f"sqlite:///{db_path}", echo=False)
     Base.metadata.create_all(engine)
+    # 仅在手动调用时执行迁移
+    if run_migration:
+        migrate_db(engine)
     Session = sessionmaker(bind=engine)
     return engine, Session
 
