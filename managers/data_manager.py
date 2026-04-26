@@ -48,7 +48,7 @@ class DataManager:
         self.session.rollback()
     
     # DailyTask 相关方法
-    def get_daily_tasks(self, weekday: Optional[str] = None, status: Optional[str] = None) -> List[DailyTask]:
+    def get_daily_tasks(self, weekday: Optional[str] = None, status: Optional[str] = None, tag: Optional[str] = None) -> List[DailyTask]:
         """获取每日任务"""
         query = self.session.query(DailyTask)
         
@@ -72,6 +72,10 @@ class DataManager:
                 query = query.filter(DailyTask.status == "pending")
             elif status == "abandoned":
                 query = query.filter(DailyTask.status == "abandoned")
+        
+        # 按标签筛选
+        if tag:
+            query = query.filter(DailyTask.tags.contains(tag))
         
         return query.order_by(DailyTask.week_day, DailyTask.title).all()
     
@@ -138,7 +142,7 @@ class DataManager:
         return False
     
     # TodoTask 相关方法
-    def get_todo_tasks(self, status: Optional[str] = None) -> List[TodoTask]:
+    def get_todo_tasks(self, status: Optional[str] = None, tag: Optional[str] = None) -> List[TodoTask]:
         """获取待办事项"""
         query = self.session.query(TodoTask)
         
@@ -150,6 +154,10 @@ class DataManager:
                 query = query.filter(TodoTask.status == "pending")
             elif status == "abandoned":
                 query = query.filter(TodoTask.status == "abandoned")
+        
+        # 按标签筛选
+        if tag:
+            query = query.filter(TodoTask.tags.contains(tag))
         
         return query.order_by(TodoTask.deadline.desc(), TodoTask.urgency_score.desc()).all()
     
@@ -221,7 +229,7 @@ class DataManager:
         return False
     
     # EntertainmentTask 相关方法
-    def get_entertainment_tasks(self, status: Optional[str] = None) -> List[EntertainmentTask]:
+    def get_entertainment_tasks(self, status: Optional[str] = None, tag: Optional[str] = None) -> List[EntertainmentTask]:
         """获取娱乐任务"""
         query = self.session.query(EntertainmentTask)
         
@@ -233,6 +241,10 @@ class DataManager:
                 query = query.filter(EntertainmentTask.status == "pending")
             elif status == "abandoned":
                 query = query.filter(EntertainmentTask.status == "abandoned")
+        
+        # 按标签筛选
+        if tag:
+            query = query.filter(EntertainmentTask.tags.contains(tag))
         
         return query.order_by(EntertainmentTask.fun_category, EntertainmentTask.title).all()
     

@@ -75,6 +75,9 @@ STATUS_FILTER_MAP = {
     '暂弃': TaskStatus.ABANDONED
 }
 
+# 标签筛选配置
+TAG_FILTER_MAX_DISPLAY = 10  # 标签栏默认显示上限
+
 # 消息文本配置
 MESSAGES = {
     'task_added': {

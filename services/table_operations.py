@@ -55,8 +55,11 @@ def load_daily_tasks_to_table(window):
         weekday_filter = weekday
     
     status_filter = _get_status_filter(window.daily_status_combo.currentText())
+    
+    # 获取标签筛选
+    tag_filter = getattr(window, 'current_tag_filter', '')
 
-    tasks = window.data_manager.get_daily_tasks(weekday=weekday_filter, status=status_filter)
+    tasks = window.data_manager.get_daily_tasks(weekday=weekday_filter, status=status_filter, tag=tag_filter)
 
     window.daily_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
@@ -81,8 +84,11 @@ def load_todo_tasks_to_table(window):
         status_filter = 'all'  # 已过期需要特殊处理
     else:
         status_filter = _get_status_filter(status_text)
+    
+    # 获取标签筛选
+    tag_filter = getattr(window, 'current_tag_filter', '')
 
-    tasks = window.data_manager.get_todo_tasks(status=status_filter)
+    tasks = window.data_manager.get_todo_tasks(status=status_filter, tag=tag_filter)
 
     window.todo_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
@@ -104,8 +110,11 @@ def load_entertainment_tasks_to_table(window):
     """加载娱乐任务到表格"""
     # 获取筛选条件
     status_filter = _get_status_filter(window.entertainment_status_combo.currentText())
+    
+    # 获取标签筛选
+    tag_filter = getattr(window, 'current_tag_filter', '')
 
-    tasks = window.data_manager.get_entertainment_tasks(status=status_filter)
+    tasks = window.data_manager.get_entertainment_tasks(status=status_filter, tag=tag_filter)
 
     window.entertainment_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):

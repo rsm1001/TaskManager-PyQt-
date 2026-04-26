@@ -4,6 +4,11 @@ Task Manager - PyQt6 主界面
 """
 
 import sys
+import os
+
+# 添加项目根目录到路径
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QTabWidget, QPushButton, QTableWidget, QTableWidgetItem, 
                              QHeaderView, QMessageBox, QDialog, QLineEdit, QTextEdit, 
@@ -41,6 +46,7 @@ class TaskManagerMainWindow(QMainWindow):
         # 延迟初始化目录（避免导入时副作用）
         config.config.ensure_directories()
         self.data_manager = DataManager()
+        self.current_tag_filter = ""  # 当前标签筛选
         self.init_ui()
         self.load_data()
     

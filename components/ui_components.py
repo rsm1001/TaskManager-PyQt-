@@ -10,12 +10,20 @@ from PyQt6.QtCore import Qt, QDate
 from datetime import datetime, date
 from PyQt6.QtGui import QColor
 import config.config as config
+from components.tag_filter_bar import TagFilterBar
+from managers.data_manager import TaskType
 
 
 def create_daily_tab_ui(parent_window):
     """创建每日任务标签页"""
     daily_widget = QWidget()
     daily_layout = QVBoxLayout(daily_widget)
+    
+    # 【新增】标签分类栏（位于控制按钮下方、表格上方）
+    parent_window.daily_tag_filter = TagFilterBar(parent=parent_window, data_manager=parent_window.data_manager)
+    parent_window.daily_tag_filter.set_task_type(TaskType.DAILY)
+    parent_window.daily_tag_filter.tagClicked.connect(lambda tag: on_tag_filter_clicked(parent_window, tag, 'daily'))
+    daily_layout.addWidget(parent_window.daily_tag_filter)
     
     # 控制按钮区域
     daily_control_layout = QHBoxLayout()
@@ -82,6 +90,12 @@ def create_todo_tab_ui(parent_window):
     todo_widget = QWidget()
     todo_layout = QVBoxLayout(todo_widget)
     
+    # 【新增】标签分类栏
+    parent_window.todo_tag_filter = TagFilterBar(parent=parent_window, data_manager=parent_window.data_manager)
+    parent_window.todo_tag_filter.set_task_type(TaskType.TODO)
+    parent_window.todo_tag_filter.tagClicked.connect(lambda tag: on_tag_filter_clicked(parent_window, tag, 'todo'))
+    todo_layout.addWidget(parent_window.todo_tag_filter)
+    
     # 控制按钮区域
     todo_control_layout = QHBoxLayout()
     
@@ -142,6 +156,12 @@ def create_entertainment_tab_ui(parent_window):
     entertainment_widget = QWidget()
     entertainment_layout = QVBoxLayout(entertainment_widget)
     
+    # 【新增】标签分类栏
+    parent_window.entertainment_tag_filter = TagFilterBar(parent=parent_window, data_manager=parent_window.data_manager)
+    parent_window.entertainment_tag_filter.set_task_type(TaskType.ENTERTAINMENT)
+    parent_window.entertainment_tag_filter.tagClicked.connect(lambda tag: on_tag_filter_clicked(parent_window, tag, 'entertainment'))
+    entertainment_layout.addWidget(parent_window.entertainment_tag_filter)
+    
     # 控制按钮区域
     entertainment_control_layout = QHBoxLayout()
     
@@ -184,3 +204,14 @@ def create_entertainment_tab_ui(parent_window):
     
     entertainment_layout.addWidget(parent_window.entertainment_table)
     return entertainment_widget
+
+
+def on_tag_filter_clicked(parent_window, tag: str, task_type: str):
+    """标签筛选点击处理"""
+    parent_window.current_tag_filter = tag
+    if task_type == 'daily':
+        parent_window.load_daily_tasks()
+    elif task_type == 'todo':
+        parent_window.load_todo_tasks()
+    elif task_type == 'entertainment':
+        parent_window.load_entertainment_tasks()
