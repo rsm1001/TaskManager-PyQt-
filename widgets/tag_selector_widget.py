@@ -4,7 +4,7 @@
 """
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, 
                             QScrollArea, QCheckBox, QPushButton, QInputDialog, 
-                            QMessageBox, QLineEdit, QLabel)
+                            QMessageBox, QLineEdit, QLabel, QGridLayout)
 from PyQt6.QtCore import Qt, pyqtSignal
 
 
@@ -42,7 +42,7 @@ class TagSelectorWidget(QWidget):
         # 创建滚动区域以容纳可能很多的标签
         self.scroll_area = QScrollArea()
         self.scroll_widget = QWidget()
-        self.tags_inner_layout = QVBoxLayout()
+        self.tags_inner_layout = QGridLayout()  # 改为网格布局，多列显示
         
         self.scroll_widget.setLayout(self.tags_inner_layout)
         self.scroll_area.setWidget(self.scroll_widget)
@@ -116,7 +116,7 @@ class TagSelectorWidget(QWidget):
             self._create_checkboxes()
 
     def _create_checkboxes(self):
-        """创建标签复选框"""
+        """创建标签复选框（多列网格布局）"""
         # 清除现有的复选框
         for checkbox in self.tag_checkboxes.values():
             checkbox.setParent(None)
@@ -129,19 +129,28 @@ class TagSelectorWidget(QWidget):
             if item.widget():
                 item.widget().setParent(None)
 
-        # 创建标签复选框（按字母排序）
+        # 网格布局列数
+        num_columns = 3
+        
+        # 创建标签复选框（按字母排序），按行优先填充网格
+        row, col = 0, 0
         for tag in sorted(self.all_tags):
             checkbox = QCheckBox(tag)
             checkbox.setChecked(tag in self.selected_tags)
             checkbox.stateChanged.connect(self.on_tag_state_changed)
             self.tag_checkboxes[tag] = checkbox
-            self.tags_inner_layout.addWidget(checkbox)
+            self.tags_inner_layout.addWidget(checkbox, row, col)
+            
+            col += 1
+            if col >= num_columns:
+                col = 0
+                row += 1
         
         # 如果没有标签，显示提示
         if not self.all_tags:
             label = QLabel('暂无标签，点击"添加标签"创建')
             label.setStyleSheet("color: gray;")
-            self.tags_inner_layout.addWidget(label)
+            self.tags_inner_layout.addWidget(label, 0, 0, 1, num_columns)
         
         # 应用当前的搜索过滤
         self.filter_tags(self.search_edit.text() if hasattr(self, 'search_edit') else '')
@@ -214,7 +223,8 @@ class TagSelectorWidget(QWidget):
                 no_match_label = QLabel('无匹配标签')
                 no_match_label.setObjectName('no_match_label')
                 no_match_label.setStyleSheet("color: gray;")
-                self.tags_inner_layout.addWidget(no_match_label)
+                # 跨 3 列显示
+                self.tags_inner_layout.addWidget(no_match_label, 0, 0, 1, 3)
         else:
             # 隐藏无匹配提示
             for i in range(self.tags_inner_layout.count()):
