@@ -40,6 +40,10 @@ def create_daily_tab_ui(parent_window):
     parent_window.delete_daily_btn.clicked.connect(parent_window.delete_daily_task)
     daily_control_layout.addWidget(parent_window.delete_daily_btn)
     
+    parent_window.reset_today_btn = QPushButton('重置今日')
+    parent_window.reset_today_btn.clicked.connect(parent_window.reset_today_daily_tasks)
+    daily_control_layout.addWidget(parent_window.reset_today_btn)
+    
     parent_window.random_daily_btn = QPushButton('随机抽取')
     parent_window.random_daily_btn.clicked.connect(parent_window.random_daily_task)
     daily_control_layout.addWidget(parent_window.random_daily_btn)

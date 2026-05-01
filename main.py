@@ -206,6 +206,20 @@ class TaskManagerMainWindow(QMainWindow):
             show_task_deleted_confirmation('daily', self)
             self.status_bar.showMessage('每日任务删除成功')
     
+    def reset_today_daily_tasks(self):
+        """手动重置今日已完成的每日任务"""
+        reply = QMessageBox.question(
+            self,
+            '确认',
+            '确定要重置今日已完成的每日任务吗？',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.data_manager.reset_daily_tasks()
+            self.load_daily_tasks()
+            self.update_status_bar()
+            self.status_bar.showMessage('今日任务已重置')
+    
     def add_todo_task(self):
         """添加待办事项"""
         dialog = TaskEditDialog(TaskType.TODO, self, data_manager=self.data_manager)
