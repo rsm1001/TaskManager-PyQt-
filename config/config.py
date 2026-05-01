@@ -12,6 +12,10 @@ APP_AUTHOR = "AI Assistant"
 
 # 数据库配置
 DATABASE_PATH = "taskmanager.db"
+TRASH_DATABASE_PATH = "task_trash.db"  # 垃圾桶独立数据库
+
+# 任务数量上限（每种类型独立计数）
+TASK_CACHE_LIMIT = 100
 
 # 界面配置
 WINDOW_WIDTH = 1200

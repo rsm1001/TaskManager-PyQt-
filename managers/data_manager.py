@@ -11,6 +11,10 @@ from typing import List, Dict, Any, Optional
 from enum import Enum
 import config.config
 
+# 垃圾桶数据库
+import sqlite3
+import os
+
 
 class TaskType(Enum):
     """任务类型枚举"""
@@ -28,6 +32,9 @@ class DataManager:
         self.engine, self.Session = init_db(db_path)
         self.session = self.Session()
         
+        # 初始化垃圾桶数据库
+        self._init_trash_db()
+        
         # 检查并执行每日重置
         self.check_daily_reset()
     
@@ -38,6 +45,7 @@ class DataManager:
     def close_session(self):
         """关闭数据库会话"""
         self.session.close()
+        self.close_trash_db()
     
     def commit(self):
         """提交更改"""
@@ -46,6 +54,197 @@ class DataManager:
     def rollback(self):
         """回滚更改"""
         self.session.rollback()
+    
+    # ==================== 垃圾桶管理 ====================
+    
+    def _init_trash_db(self):
+        """初始化垃圾桶数据库"""
+        trash_path = config.config.TRASH_DATABASE_PATH
+        self.trash_conn = sqlite3.connect(trash_path)
+        self.trash_conn.execute('''
+            CREATE TABLE IF NOT EXISTS trashed_tasks (
+                id TEXT PRIMARY KEY,
+                task_type TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                data_json TEXT NOT NULL,
+                deleted_at TEXT NOT NULL
+            )
+        ''')
+        self.trash_conn.commit()
+    
+    def _move_to_trash(self, task_type, task_id, task_data):
+        """将任务移入垃圾桶
+        
+        Args:
+            task_type: 'daily' / 'todo' / 'entertainment'
+            task_id: 原任务ID
+            task_data: 任务对象的字典表示
+        """
+        trash_id = str(uuid.uuid4())
+        self.trash_conn.execute(
+            'INSERT INTO trashed_tasks (id, task_type, task_id, data_json, deleted_at) '
+            'VALUES (?, ?, ?, ?, ?)',
+            (trash_id, task_type, task_id, json.dumps(task_data), datetime.now().isoformat())
+        )
+        self.trash_conn.commit()
+        return trash_id
+    
+    def get_trashed_tasks(self, task_type=None):
+        """获取垃圾桶中的任务列表
+        
+        Args:
+            task_type: 可选，按类型筛选
+            
+        Returns:
+            列表，每项包含 (id, task_type, task_id, data_json, deleted_at)
+        """
+        if task_type:
+            cursor = self.trash_conn.execute(
+                'SELECT id, task_type, task_id, data_json, deleted_at '
+                'FROM trashed_tasks WHERE task_type = ? ORDER BY deleted_at DESC',
+                (task_type,)
+            )
+        else:
+            cursor = self.trash_conn.execute(
+                'SELECT id, task_type, task_id, data_json, deleted_at '
+                'FROM trashed_tasks ORDER BY deleted_at DESC'
+            )
+        return cursor.fetchall()
+    
+    def restore_trashed_task(self, trash_id):
+        """恢复垃圾桶中的任务到主数据库
+        
+        Returns:
+            True 成功，False 失败
+        """
+        cursor = self.trash_conn.execute(
+            'SELECT task_type, data_json FROM trashed_tasks WHERE id = ?',
+            (trash_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return False
+        
+        task_type, data_json = row
+        data = json.loads(data_json)
+        
+        # 根据类型插入到对应表
+        if task_type == 'daily':
+            task = DailyTask(
+                id=data.get('id', str(uuid.uuid4())),
+                title=data.get('title', ''),
+                description=data.get('description', ''),
+                week_day=data.get('week_day', ''),
+                completed=data.get('completed', False),
+                status=data.get('status', 'pending'),
+                tags=data.get('tags', '')
+            )
+        elif task_type == 'todo':
+            task = TodoTask(
+                id=data.get('id', str(uuid.uuid4())),
+                title=data.get('title', ''),
+                description=data.get('description', ''),
+                deadline=data.get('deadline', ''),
+                completed=data.get('completed', False),
+                status=data.get('status', 'pending'),
+                tags=data.get('tags', '')
+            )
+        elif task_type == 'entertainment':
+            task = EntertainmentTask(
+                id=data.get('id', str(uuid.uuid4())),
+                title=data.get('title', ''),
+                description=data.get('description', ''),
+                fun_category=data.get('fun_category', 'general'),
+                completed=data.get('completed', False),
+                status=data.get('status', 'pending'),
+                tags=data.get('tags', '')
+            )
+        else:
+            return False
+        
+        self.session.add(task)
+        self.session.commit()
+        
+        # 从垃圾桶删除
+        self.trash_conn.execute('DELETE FROM trashed_tasks WHERE id = ?', (trash_id,))
+        self.trash_conn.commit()
+        
+        return True
+    
+    def purge_trashed_task(self, trash_id):
+        """彻底删除垃圾桶中的任务（不可恢复）"""
+        self.trash_conn.execute('DELETE FROM trashed_tasks WHERE id = ?', (trash_id,))
+        self.trash_conn.commit()
+    
+    def purge_all_trashed(self, task_type=None):
+        """清空垃圾桶（可选按类型）"""
+        if task_type:
+            self.trash_conn.execute('DELETE FROM trashed_tasks WHERE task_type = ?', (task_type,))
+        else:
+            self.trash_conn.execute('DELETE FROM trashed_tasks')
+        self.trash_conn.commit()
+    
+    def close_trash_db(self):
+        """关闭垃圾桶数据库连接"""
+        if hasattr(self, 'trash_conn') and self.trash_conn:
+            self.trash_conn.close()
+            self.trash_conn = None
+    
+    def _enforce_task_limit(self, task_type, task_model):
+        """检查并执行任务数量上限，超出时将最老任务移入垃圾桶"""
+        limit = config.config.TASK_CACHE_LIMIT
+        total = self.session.query(task_model).count()
+        if total <= limit:
+            return
+        
+        # 按 created_at 升序取最老任务
+        oldest = self.session.query(task_model).order_by(task_model.created_at).first()
+        if not oldest:
+            return
+        
+        # 将最老任务移入垃圾桶
+        if task_type == 'daily':
+            task_data = {
+                'id': oldest.id,
+                'title': oldest.title,
+                'description': oldest.description or '',
+                'week_day': oldest.week_day or '',
+                'completed': oldest.completed,
+                'status': oldest.status,
+                'tags': oldest.tags or '',
+                'created_at': oldest.created_at.isoformat() if oldest.created_at else '',
+                'updated_at': oldest.updated_at.isoformat() if oldest.updated_at else '',
+            }
+        elif task_type == 'todo':
+            task_data = {
+                'id': oldest.id,
+                'title': oldest.title,
+                'description': oldest.description or '',
+                'deadline': oldest.deadline or '',
+                'completed': oldest.completed,
+                'status': oldest.status,
+                'tags': oldest.tags or '',
+                'created_at': oldest.created_at.isoformat() if oldest.created_at else '',
+                'updated_at': oldest.updated_at.isoformat() if oldest.updated_at else '',
+            }
+        elif task_type == 'entertainment':
+            task_data = {
+                'id': oldest.id,
+                'title': oldest.title,
+                'description': oldest.description or '',
+                'fun_category': oldest.fun_category or 'general',
+                'completed': oldest.completed,
+                'status': oldest.status,
+                'tags': oldest.tags or '',
+                'created_at': oldest.created_at.isoformat() if oldest.created_at else '',
+                'updated_at': oldest.updated_at.isoformat() if oldest.updated_at else '',
+            }
+        else:
+            return
+        
+        self._move_to_trash(task_type, oldest.id, task_data)
+        self.session.delete(oldest)
+        self.session.commit()
     
     # DailyTask 相关方法
     def get_daily_tasks(self, weekday: Optional[str] = None, status: Optional[str] = None, tag: Optional[str] = None) -> List[DailyTask]:
@@ -85,7 +284,7 @@ class DataManager:
     
     def create_daily_task(self, title: str, description: str = "", week_day: str = "", 
                          completed: bool = False, status: str = "pending", tags: str = "") -> DailyTask:
-        """创建每日任务"""
+        """创建每日任务（超出上限时自动移走最老任务到垃圾桶）"""
         task = DailyTask(
             title=title,
             description=description,
@@ -96,6 +295,10 @@ class DataManager:
         )
         self.session.add(task)
         self.session.commit()
+        
+        # 检查是否超出数量上限
+        self._enforce_task_limit('daily', DailyTask)
+        
         return task
     
     def update_daily_task(self, task_id: str, **kwargs) -> bool:
@@ -115,9 +318,23 @@ class DataManager:
         return False
     
     def delete_daily_task(self, task_id: str) -> bool:
-        """删除每日任务"""
+        """删除每日任务（移入垃圾桶，可恢复）"""
         task = self.get_daily_task_by_id(task_id)
         if task:
+            # 先移入垃圾桶
+            task_data = {
+                'id': task.id,
+                'title': task.title,
+                'description': task.description or '',
+                'week_day': task.week_day or '',
+                'completed': task.completed,
+                'status': task.status,
+                'tags': task.tags or '',
+                'created_at': task.created_at.isoformat() if task.created_at else '',
+                'updated_at': task.updated_at.isoformat() if task.updated_at else '',
+            }
+            self._move_to_trash('daily', task_id, task_data)
+            # 再从主库删除
             self.session.delete(task)
             self.session.commit()
             return True
@@ -167,7 +384,7 @@ class DataManager:
     
     def create_todo_task(self, title: str, description: str = "", deadline: str = "", 
                         completed: bool = False, status: str = "pending", tags: str = "") -> TodoTask:
-        """创建待办事项"""
+        """创建待办事项（超出上限时自动移走最老任务到垃圾桶）"""
         task = TodoTask(
             title=title,
             description=description,
@@ -181,6 +398,10 @@ class DataManager:
         # 重新计算紧急度
         self.calculate_urgency_for_task(task)
         self.session.commit()
+        
+        # 检查是否超出数量上限
+        self._enforce_task_limit('todo', TodoTask)
+        
         return task
     
     def update_todo_task(self, task_id: str, **kwargs) -> bool:
@@ -201,9 +422,23 @@ class DataManager:
         return False
     
     def delete_todo_task(self, task_id: str) -> bool:
-        """删除待办事项"""
+        """删除待办事项（移入垃圾桶，可恢复）"""
         task = self.get_todo_task_by_id(task_id)
         if task:
+            # 先移入垃圾桶
+            task_data = {
+                'id': task.id,
+                'title': task.title,
+                'description': task.description or '',
+                'deadline': task.deadline or '',
+                'completed': task.completed,
+                'status': task.status,
+                'tags': task.tags or '',
+                'created_at': task.created_at.isoformat() if task.created_at else '',
+                'updated_at': task.updated_at.isoformat() if task.updated_at else '',
+            }
+            self._move_to_trash('todo', task_id, task_data)
+            # 再从主库删除
             self.session.delete(task)
             self.session.commit()
             return True
@@ -255,7 +490,7 @@ class DataManager:
     def create_entertainment_task(self, title: str, description: str = "", 
                                 fun_category: str = "general", completed: bool = False,
                                 status: str = "pending", tags: str = "") -> EntertainmentTask:
-        """创建娱乐任务"""
+        """创建娱乐任务（超出上限时自动移走最老任务到垃圾桶）"""
         task = EntertainmentTask(
             title=title,
             description=description,
@@ -266,6 +501,10 @@ class DataManager:
         )
         self.session.add(task)
         self.session.commit()
+        
+        # 检查是否超出数量上限
+        self._enforce_task_limit('entertainment', EntertainmentTask)
+        
         return task
     
     def update_entertainment_task(self, task_id: str, **kwargs) -> bool:
@@ -285,9 +524,23 @@ class DataManager:
         return False
     
     def delete_entertainment_task(self, task_id: str) -> bool:
-        """删除娱乐任务"""
+        """删除娱乐任务（移入垃圾桶，可恢复）"""
         task = self.get_entertainment_task_by_id(task_id)
         if task:
+            # 先移入垃圾桶
+            task_data = {
+                'id': task.id,
+                'title': task.title,
+                'description': task.description or '',
+                'fun_category': task.fun_category or 'general',
+                'completed': task.completed,
+                'status': task.status,
+                'tags': task.tags or '',
+                'created_at': task.created_at.isoformat() if task.created_at else '',
+                'updated_at': task.updated_at.isoformat() if task.updated_at else '',
+            }
+            self._move_to_trash('entertainment', task_id, task_data)
+            # 再从主库删除
             self.session.delete(task)
             self.session.commit()
             return True

@@ -51,6 +51,12 @@ def create_menu_bar(window):
     stats_action.triggered.connect(window.show_statistics)
     tools_menu.addAction(stats_action)
     
+    tools_menu.addSeparator()
+    
+    trash_action = QAction('垃圾桶', window)
+    trash_action.triggered.connect(window.open_trash_dialog)
+    tools_menu.addAction(trash_action)
+    
     # 帮助菜单
     help_menu = menubar.addMenu('帮助')
     
