@@ -6,15 +6,17 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
                             QScrollArea, QCheckBox, QPushButton, QInputDialog, 
                             QMessageBox, QLineEdit, QLabel, QGridLayout)
 from PyQt6.QtCore import Qt, pyqtSignal
+from managers.data_manager import TaskType
 
 
 class TagSelectorWidget(QWidget):
     """可重用的标签选择组件"""
     tagsChanged = pyqtSignal(str)  # 发出标签变化信号（逗号分隔的字符串）
 
-    def __init__(self, parent=None, data_manager=None, initial_tags=""):
+    def __init__(self, parent=None, data_manager=None, initial_tags="", task_type=None):
         super().__init__(parent)
         self.data_manager = data_manager
+        self.task_type = task_type  # 任务类型，用于隔离标签库
         self.all_tags = set()  # 存储所有可用标签
         self.selected_tags = set()  # 存储当前选中的标签
         self.tag_checkboxes = {}  # 存储标签复选框映射
@@ -72,29 +74,31 @@ class TagSelectorWidget(QWidget):
         self.setLayout(layout)
 
     def refresh_tags(self):
-        """刷新标签列表（从所有任务中收集）"""
+        """刷新标签列表（仅从当前任务类型的任务中收集）"""
         if not self.data_manager:
             return
-        
-        # 从所有任务中收集标签
+
         self.all_tags = set()
-        
-        # 收集每日任务的标签
-        for task in self.data_manager.get_daily_tasks():
+
+        # 仅从当前任务类型对应的任务表中收集标签
+        if self.task_type == TaskType.DAILY:
+            tasks = self.data_manager.get_daily_tasks()
+        elif self.task_type == TaskType.TODO:
+            tasks = self.data_manager.get_todo_tasks()
+        elif self.task_type == TaskType.ENTERTAINMENT:
+            tasks = self.data_manager.get_entertainment_tasks()
+        else:
+            # 未指定类型时，收集所有（向后兼容）
+            tasks = (
+                list(self.data_manager.get_daily_tasks()) +
+                list(self.data_manager.get_todo_tasks()) +
+                list(self.data_manager.get_entertainment_tasks())
+            )
+
+        for task in tasks:
             if task.tags:
                 self.all_tags.update(tag.strip() for tag in task.tags.split(',') if tag.strip())
-        
-        # 收集待办事项的标签
-        for task in self.data_manager.get_todo_tasks():
-            if task.tags:
-                self.all_tags.update(tag.strip() for tag in task.tags.split(',') if tag.strip())
-        
-        # 收集娱乐任务的标签
-        for task in self.data_manager.get_entertainment_tasks():
-            if task.tags:
-                self.all_tags.update(tag.strip() for tag in task.tags.split(',') if tag.strip())
-        
-        # 重新创建复选框
+
         self._create_checkboxes()
 
     def load_tags(self, tags_str=""):

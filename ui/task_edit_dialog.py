@@ -47,8 +47,12 @@ class TaskEditDialog(QDialog):
         layout.addWidget(self.desc_edit)
 
         # 标签选择组件
-        self.tag_selector = TagSelectorWidget(parent=self, data_manager=self.data_manager, 
-                                             initial_tags=self.task.tags if self.task else "")
+        self.tag_selector = TagSelectorWidget(
+            parent=self,
+            data_manager=self.data_manager,
+            initial_tags=self.task.tags if self.task else "",
+            task_type=self.task_type
+        )
         layout.addWidget(self.tag_selector)
 
         # 任务特定字段
