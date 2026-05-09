@@ -1,6 +1,6 @@
 """
 标签选择组件 - 可重用的标签选择控件
-简化版：使用逗号分隔字符串存储标签
+支持全局标签库管理与任务标签隔离
 """
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, 
                             QScrollArea, QCheckBox, QPushButton, QInputDialog, 
@@ -56,15 +56,15 @@ class TagSelectorWidget(QWidget):
         # 标签按钮区域
         button_layout = QHBoxLayout()
         
-        # 刷新标签按钮
-        self.refresh_tags_btn = QPushButton("刷新标签")
-        self.refresh_tags_btn.clicked.connect(self.refresh_tags)
-        button_layout.addWidget(self.refresh_tags_btn)
-        
         # 添加新标签按钮
         self.add_tag_btn = QPushButton("添加标签")
         self.add_tag_btn.clicked.connect(self.add_new_tag)
         button_layout.addWidget(self.add_tag_btn)
+        
+        # 删除选中标签按钮
+        self.delete_tag_btn = QPushButton("删除标签")
+        self.delete_tag_btn.clicked.connect(self.delete_selected_tag)
+        button_layout.addWidget(self.delete_tag_btn)
         
         button_layout.addStretch()  # 弹性空间
         tags_layout.addLayout(button_layout)
@@ -73,32 +73,37 @@ class TagSelectorWidget(QWidget):
         layout.addWidget(tags_group)
         self.setLayout(layout)
 
-    def refresh_tags(self):
-        """刷新标签列表（仅从当前任务类型的任务中收集）"""
-        if not self.data_manager:
-            return
-
+    def load_tags_from_global(self):
+        """从全局标签库加载标签"""
         self.all_tags = set()
+        
+        # 1. 首先从全局标签库加载
+        if self.data_manager:
+            global_tags = self.data_manager.get_all_tags()
+            self.all_tags.update(global_tags)
+        
+        # 2. 然后从当前任务类型的任务中收集标签（保持向后兼容）
+        if self.data_manager:
+            if self.task_type == TaskType.DAILY:
+                tasks = self.data_manager.get_daily_tasks()
+            elif self.task_type == TaskType.TODO:
+                tasks = self.data_manager.get_todo_tasks()
+            elif self.task_type == TaskType.ENTERTAINMENT:
+                tasks = self.data_manager.get_entertainment_tasks()
+            else:
+                tasks = (
+                    list(self.data_manager.get_daily_tasks()) +
+                    list(self.data_manager.get_todo_tasks()) +
+                    list(self.data_manager.get_entertainment_tasks())
+                )
 
-        # 仅从当前任务类型对应的任务表中收集标签
-        if self.task_type == TaskType.DAILY:
-            tasks = self.data_manager.get_daily_tasks()
-        elif self.task_type == TaskType.TODO:
-            tasks = self.data_manager.get_todo_tasks()
-        elif self.task_type == TaskType.ENTERTAINMENT:
-            tasks = self.data_manager.get_entertainment_tasks()
-        else:
-            # 未指定类型时，收集所有（向后兼容）
-            tasks = (
-                list(self.data_manager.get_daily_tasks()) +
-                list(self.data_manager.get_todo_tasks()) +
-                list(self.data_manager.get_entertainment_tasks())
-            )
+            for task in tasks:
+                if task.tags:
+                    self.all_tags.update(tag.strip() for tag in task.tags.split(',') if tag.strip())
 
-        for task in tasks:
-            if task.tags:
-                self.all_tags.update(tag.strip() for tag in task.tags.split(',') if tag.strip())
-
+    def refresh_tags(self):
+        """刷新标签列表（从全局标签库和任务中收集）"""
+        self.load_tags_from_global()
         self._create_checkboxes()
 
     def load_tags(self, tags_str=""):
@@ -111,13 +116,15 @@ class TagSelectorWidget(QWidget):
         self.selected_tags = set()
         if tags_str:
             self.selected_tags = set(tag.strip() for tag in tags_str.split(',') if tag.strip())
+        
+        # 从全局标签库和任务中加载所有可用标签
+        self.load_tags_from_global()
+        
+        # 如果有初始标签，确保它们也在 all_tags 中
+        if tags_str:
             self.all_tags.update(self.selected_tags)
         
-        # 如果有数据管理器，从所有任务中收集标签
-        if self.data_manager:
-            self.refresh_tags()
-        else:
-            self._create_checkboxes()
+        self._create_checkboxes()
 
     def _create_checkboxes(self):
         """创建标签复选框（多列网格布局）"""
@@ -240,21 +247,82 @@ class TagSelectorWidget(QWidget):
                         break
 
     def add_new_tag(self):
-        """添加新标签"""
+        """添加新标签（保存到全局标签库）"""
         tag_name, ok = QInputDialog.getText(self, "添加新标签", "请输入标签名称:")
         if ok and tag_name.strip():
             tag = tag_name.strip()
+            
+            # 保存到全局标签库
+            if self.data_manager:
+                self.data_manager.add_tag(tag)
+            
+            # 更新本地标签集
             if tag not in self.all_tags:
                 self.all_tags.add(tag)
-                self.selected_tags.add(tag)
-                self._create_checkboxes()
-                # 清空搜索框以显示新标签
+            
+            # 选中新添加的标签
+            self.selected_tags.add(tag)
+            
+            # 重新创建复选框
+            self._create_checkboxes()
+            
+            # 清空搜索框以显示新标签
+            if hasattr(self, 'search_edit'):
                 self.search_edit.clear()
-                self.tagsChanged.emit(self.get_selected_tags())
+            
+            self.tagsChanged.emit(self.get_selected_tags())
+
+    def delete_selected_tag(self):
+        """删除选中的标签（仅删除未使用的标签）"""
+        if not self.selected_tags:
+            QMessageBox.information(self, "提示", "请先选择一个标签进行删除")
+            return
+        
+        # 获取选中的标签
+        tags_to_delete = sorted(self.selected_tags)
+        if len(tags_to_delete) == 1:
+            tag = tags_to_delete[0]
+            confirm_msg = f"确定要删除标签 '{tag}' 吗？"
+        else:
+            tag = tags_to_delete[0]
+            confirm_msg = f"确定要删除选中的 {len(tags_to_delete)} 个标签吗？"
+        
+        reply = QMessageBox.question(self, "确认删除", confirm_msg,
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # 尝试删除每个选中的标签
+        deleted_tags = []
+        failed_tags = []
+        
+        for tag in tags_to_delete:
+            if self.data_manager:
+                # 检查标签是否被使用，如果未被使用则删除
+                if self.data_manager.delete_tag(tag):
+                    deleted_tags.append(tag)
+                    # 从本地标签集中移除
+                    self.all_tags.discard(tag)
+                    self.selected_tags.discard(tag)
+                else:
+                    failed_tags.append(tag)
             else:
-                # 标签已存在，直接选中
-                self.selected_tags.add(tag)
-                self._update_checkbox_states()
-                # 清空搜索框以确保用户能看到选中的标签
+                # 没有 data_manager，只从本地移除
+                self.all_tags.discard(tag)
+                self.selected_tags.discard(tag)
+                deleted_tags.append(tag)
+        
+        # 显示结果
+        if failed_tags:
+            QMessageBox.warning(self, "部分删除失败", 
+                              f"以下标签正在被任务使用，无法删除：\n{', '.join(failed_tags)}")
+        
+        if deleted_tags:
+            # 重新创建复选框
+            self._create_checkboxes()
+            
+            # 清空搜索框
+            if hasattr(self, 'search_edit'):
                 self.search_edit.clear()
-                self.tagsChanged.emit(self.get_selected_tags())
+            
+            self.tagsChanged.emit(self.get_selected_tags())
