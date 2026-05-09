@@ -4,9 +4,8 @@ Task Table Operations Module
 """
 
 from PyQt6.QtWidgets import QTableWidgetItem, QPushButton
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QUrl, QProcess
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtCore import QUrl
 import config.config as config
 import os
 
@@ -84,7 +83,11 @@ def _open_shortcut_path(path):
     """打开快捷入口路径（文件直接打开，文件夹打开目录）"""
     if not path:
         return
-    if os.path.isfile(path):
+    if os.path.isfile(path) and path.lower().endswith(('.bat', '.cmd')):
+        # bat/cmd 文件：用 QProcess 执行，设置正确的工作目录
+        working_dir = os.path.dirname(os.path.abspath(path))
+        QProcess.startDetached('cmd.exe', ['/c', 'start', '', path], working_dir)
+    elif os.path.isfile(path):
         # 文件：直接打开
         QDesktopServices.openUrl(QUrl.fromLocalFile(path))
     elif os.path.isdir(path):
