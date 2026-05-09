@@ -1,6 +1,6 @@
 """
 标签选择组件 - 可重用的标签选择控件
-支持全局标签库管理与任务标签隔离
+支持各类别独立标签库
 """
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, 
                             QScrollArea, QCheckBox, QPushButton, QInputDialog, 
@@ -73,37 +73,24 @@ class TagSelectorWidget(QWidget):
         layout.addWidget(tags_group)
         self.setLayout(layout)
 
-    def load_tags_from_global(self):
-        """从全局标签库加载标签"""
-        self.all_tags = set()
-        
-        # 1. 首先从全局标签库加载
-        if self.data_manager:
-            global_tags = self.data_manager.get_all_tags()
-            self.all_tags.update(global_tags)
-        
-        # 2. 然后从当前任务类型的任务中收集标签（保持向后兼容）
-        if self.data_manager:
-            if self.task_type == TaskType.DAILY:
-                tasks = self.data_manager.get_daily_tasks()
-            elif self.task_type == TaskType.TODO:
-                tasks = self.data_manager.get_todo_tasks()
-            elif self.task_type == TaskType.ENTERTAINMENT:
-                tasks = self.data_manager.get_entertainment_tasks()
-            else:
-                tasks = (
-                    list(self.data_manager.get_daily_tasks()) +
-                    list(self.data_manager.get_todo_tasks()) +
-                    list(self.data_manager.get_entertainment_tasks())
-                )
+    def _get_category(self) -> str:
+        """获取当前类别标识"""
+        if self.task_type is None:
+            return ''
+        return self.task_type.value if hasattr(self.task_type, 'value') else str(self.task_type)
 
-            for task in tasks:
-                if task.tags:
-                    self.all_tags.update(tag.strip() for tag in task.tags.split(',') if tag.strip())
+    def load_tags_from_category(self):
+        """从类别独立标签库加载标签"""
+        self.all_tags = set()
+        category = self._get_category()
+        
+        if self.data_manager and category:
+            category_tags = self.data_manager.get_all_tags(category)
+            self.all_tags.update(category_tags)
 
     def refresh_tags(self):
-        """刷新标签列表（从全局标签库和任务中收集）"""
-        self.load_tags_from_global()
+        """刷新标签列表（从类别独立标签库加载）"""
+        self.load_tags_from_category()
         self._create_checkboxes()
 
     def load_tags(self, tags_str=""):
@@ -117,8 +104,8 @@ class TagSelectorWidget(QWidget):
         if tags_str:
             self.selected_tags = set(tag.strip() for tag in tags_str.split(',') if tag.strip())
         
-        # 从全局标签库和任务中加载所有可用标签
-        self.load_tags_from_global()
+        # 从类别独立标签库加载所有可用标签
+        self.load_tags_from_category()
         
         # 如果有初始标签，确保它们也在 all_tags 中
         if tags_str:
@@ -247,14 +234,15 @@ class TagSelectorWidget(QWidget):
                         break
 
     def add_new_tag(self):
-        """添加新标签（保存到全局标签库）"""
+        """添加新标签（保存到类别独立标签库）"""
         tag_name, ok = QInputDialog.getText(self, "添加新标签", "请输入标签名称:")
         if ok and tag_name.strip():
             tag = tag_name.strip()
+            category = self._get_category()
             
-            # 保存到全局标签库
-            if self.data_manager:
-                self.data_manager.add_tag(tag)
+            # 保存到类别独立标签库
+            if self.data_manager and category:
+                self.data_manager.add_tag(tag, category)
             
             # 更新本地标签集
             if tag not in self.all_tags:
@@ -298,8 +286,9 @@ class TagSelectorWidget(QWidget):
         
         for tag in tags_to_delete:
             if self.data_manager:
-                # 检查标签是否被使用，如果未被使用则删除
-                if self.data_manager.delete_tag(tag):
+                category = self._get_category()
+                # 检查标签是否被使用，如果未被使用则删除（类别独立）
+                if self.data_manager.delete_tag(tag, category):
                     deleted_tags.append(tag)
                     # 从本地标签集中移除
                     self.all_tags.discard(tag)

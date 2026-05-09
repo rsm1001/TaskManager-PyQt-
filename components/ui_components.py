@@ -208,6 +208,16 @@ def create_shortcuts_tab_ui(parent_window):
     shortcuts_widget = QWidget()
     shortcuts_layout = QVBoxLayout(shortcuts_widget)
 
+    # 标签分类栏
+    from managers.tag_manager import TagManager
+    parent_window.shortcut_tag_filter = TagFilterBar(parent=parent_window, data_manager=parent_window.data_manager)
+    # 临时设置一个假的 task_type 用于快捷入口
+    class ShortcutTaskType:
+        value = "shortcut"
+    parent_window.shortcut_tag_filter.set_task_type(ShortcutTaskType())
+    parent_window.shortcut_tag_filter.tagClicked.connect(lambda tag: on_shortcut_tag_filter_clicked(parent_window, tag))
+    shortcuts_layout.addWidget(parent_window.shortcut_tag_filter)
+
     # 控制按钮区域
     control_layout = QHBoxLayout()
 
@@ -233,8 +243,8 @@ def create_shortcuts_tab_ui(parent_window):
 
     # 快捷入口表格
     parent_window.shortcuts_table = QTableWidget()
-    parent_window.shortcuts_table.setColumnCount(4)
-    parent_window.shortcuts_table.setHorizontalHeaderLabels(['名称', '类型', '路径', '创建日期'])
+    parent_window.shortcuts_table.setColumnCount(5)
+    parent_window.shortcuts_table.setHorizontalHeaderLabels(['名称', '类型', '标签', '路径', '创建日期'])
     parent_window.shortcuts_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.shortcuts_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
     parent_window.shortcuts_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -245,12 +255,7 @@ def create_shortcuts_tab_ui(parent_window):
     return shortcuts_widget
 
 
-def on_tag_filter_clicked(parent_window, tag: str, task_type: str):
-    """标签筛选点击处理"""
-    parent_window.current_tag_filter = tag
-    if task_type == 'daily':
-        parent_window.load_daily_tasks()
-    elif task_type == 'todo':
-        parent_window.load_todo_tasks()
-    elif task_type == 'entertainment':
-        parent_window.load_entertainment_tasks()
+def on_shortcut_tag_filter_clicked(parent_window, tag: str):
+    """快捷入口标签筛选点击处理"""
+    parent_window.current_shortcut_tag_filter = tag
+    parent_window.load_shortcuts()

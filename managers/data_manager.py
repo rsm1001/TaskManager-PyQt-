@@ -226,13 +226,14 @@ class DataManager:
         """从垃圾桶恢复快捷入口"""
         now = datetime.now().isoformat()
         self.shortcut_manager._conn.execute(
-            "INSERT INTO shortcut_entries (id, title, shortcut_path, category, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO shortcut_entries (id, title, shortcut_path, category, tags, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 data.get('id', str(uuid.uuid4())),
                 data.get('title', ''),
                 data.get('shortcut_path', ''),
                 data.get('category', 'todo'),
+                data.get('tags', ''),
                 data.get('created_at', now),
                 now
             )
@@ -249,14 +250,14 @@ class DataManager:
 
     # ==================== 快捷入口相关方法 ====================
 
-    def get_all_shortcuts(self) -> list:
-        return self.shortcut_manager.get_all()
+    def get_all_shortcuts(self, tag: str = None) -> list:
+        return self.shortcut_manager.get_all(tag=tag)
 
-    def create_shortcut(self, task_type: str, title: str, shortcut_path: str) -> bool:
-        return self.shortcut_manager.create(task_type, title, shortcut_path)
+    def create_shortcut(self, task_type: str, title: str, shortcut_path: str, tags: str = '') -> bool:
+        return self.shortcut_manager.create(task_type, title, shortcut_path, tags)
 
-    def update_shortcut(self, shortcut_id: str, title: str = None, shortcut_path: str = None) -> bool:
-        return self.shortcut_manager.update(shortcut_id, title, shortcut_path)
+    def update_shortcut(self, shortcut_id: str, title: str = None, shortcut_path: str = None, tags: str = None) -> bool:
+        return self.shortcut_manager.update(shortcut_id, title, shortcut_path, tags)
 
     def delete_shortcut(self, shortcut_id: str) -> bool:
         shortcut_data = self.shortcut_manager.delete(shortcut_id)
@@ -316,36 +317,49 @@ class DataManager:
 
     # ==================== 标签管理 ====================
 
-    def get_all_tags(self) -> List[str]:
-        return self.tag_manager.get_all_tags()
+    def get_all_tags(self, category: str) -> List[str]:
+        """获取指定类别的所有标签"""
+        return self.tag_manager.get_all_tags(category)
 
-    def add_tag(self, tag: str) -> bool:
-        return self.tag_manager.add_tag(tag)
+    def add_tag(self, tag: str, category: str) -> bool:
+        """添加类别标签"""
+        return self.tag_manager.add_tag(tag, category)
 
-    def delete_tag(self, tag: str) -> bool:
-        # 构建任务标签检查函数
+    def delete_tag(self, tag: str, category: str) -> bool:
+        """删除类别标签（仅当标签未被该类别任务使用时可删除）"""
+        # 构建该类别任务标签检查函数
         def check_tag_in_tasks(tag_name):
-            for task in self.get_daily_tasks():
-                if task.tags:
-                    tag_list = [t.strip() for t in task.tags.split(',') if t.strip()]
-                    if tag_name in tag_list:
-                        return True
-            for task in self.get_todo_tasks():
-                if task.tags:
-                    tag_list = [t.strip() for t in task.tags.split(',') if t.strip()]
-                    if tag_name in tag_list:
-                        return True
-            for task in self.get_entertainment_tasks():
-                if task.tags:
-                    tag_list = [t.strip() for t in task.tags.split(',') if t.strip()]
-                    if tag_name in tag_list:
-                        return True
+            if category == 'daily':
+                for task in self.get_daily_tasks():
+                    if task.tags:
+                        tag_list = [t.strip() for t in task.tags.split(',') if t.strip()]
+                        if tag_name in tag_list:
+                            return True
+            elif category == 'todo':
+                for task in self.get_todo_tasks():
+                    if task.tags:
+                        tag_list = [t.strip() for t in task.tags.split(',') if t.strip()]
+                        if tag_name in tag_list:
+                            return True
+            elif category == 'entertainment':
+                for task in self.get_entertainment_tasks():
+                    if task.tags:
+                        tag_list = [t.strip() for t in task.tags.split(',') if t.strip()]
+                        if tag_name in tag_list:
+                            return True
+            elif category == 'shortcut':
+                for s in self.get_all_shortcuts():
+                    if s.get('tags'):
+                        tag_list = [t.strip() for t in s.get('tags').split(',') if t.strip()]
+                        if tag_name in tag_list:
+                            return True
             return False
 
-        return self.tag_manager.delete_tag(tag, [check_tag_in_tasks])
+        return self.tag_manager.delete_tag(tag, category, [check_tag_in_tasks])
 
-    def get_or_create_tag(self, tag: str) -> bool:
-        return self.tag_manager.get_or_create(tag)
+    def get_or_create_tag(self, tag: str, category: str) -> bool:
+        """获取或创建类别标签"""
+        return self.tag_manager.get_or_create(tag, category)
 
     # ==================== 每日重置（兼容旧调用） ====================
 

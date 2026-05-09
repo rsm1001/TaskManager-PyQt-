@@ -211,17 +211,28 @@ class TagFilterBar(QWidget):
         return self.get_top_tags()
     
     def get_top_tags(self) -> list:
-        """获取使用频率最高的标签"""
+        """获取使用频率最高的标签（从任务使用中统计 + 类别标签库补充）"""
         if not self.data_manager:
             return []
         
-        # 收集所有标签及其使用次数
         tag_count = {}
+        task_type_val = self.current_task_type.value if hasattr(self.current_task_type, 'value') else None
         
-        if self.current_task_type == TaskType.DAILY:
+        # 1. 从任务中统计标签使用频率
+        if task_type_val == 'daily':
             tasks = self.data_manager.get_daily_tasks()
-        elif self.current_task_type == TaskType.TODO:
+        elif task_type_val == 'todo':
             tasks = self.data_manager.get_todo_tasks()
+        elif task_type_val == 'shortcut':
+            shortcuts = self.data_manager.get_all_shortcuts()
+            for s in shortcuts:
+                if s.get('tags'):
+                    for tag in s['tags'].split(","):
+                        tag = tag.strip()
+                        if tag:
+                            tag_count[tag] = tag_count.get(tag, 0) + 1
+            sorted_tags = sorted(tag_count.items(), key=lambda x: x[1], reverse=True)
+            return [tag for tag, count in sorted_tags[:self.max_display]]
         else:
             tasks = self.data_manager.get_entertainment_tasks()
         
@@ -232,21 +243,42 @@ class TagFilterBar(QWidget):
                     if tag:
                         tag_count[tag] = tag_count.get(tag, 0) + 1
         
+        # 2. 从类别标签库补充（确保未使用但已保存的标签也在候选中）
+        if task_type_val:
+            stored_tags = self.data_manager.get_all_tags(task_type_val)
+            for tag in stored_tags:
+                if tag not in tag_count:
+                    tag_count[tag] = 0
+        
         # 按使用次数排序，取前max_display个
         sorted_tags = sorted(tag_count.items(), key=lambda x: x[1], reverse=True)
         return [tag for tag, count in sorted_tags[:self.max_display]]
     
     def get_all_tags(self) -> list:
-        """获取该类型任务的所有标签"""
+        """获取该类别任务的所有标签（从任务中提取 + 类别标签库补充）"""
         if not self.data_manager:
             return []
         
         tags = set()
+        task_type_val = self.current_task_type.value if hasattr(self.current_task_type, 'value') else None
         
-        if self.current_task_type == TaskType.DAILY:
+        # 1. 从任务中提取标签
+        if task_type_val == 'daily':
             tasks = self.data_manager.get_daily_tasks()
-        elif self.current_task_type == TaskType.TODO:
+        elif task_type_val == 'todo':
             tasks = self.data_manager.get_todo_tasks()
+        elif task_type_val == 'shortcut':
+            shortcuts = self.data_manager.get_all_shortcuts()
+            for s in shortcuts:
+                if s.get('tags'):
+                    for tag in s['tags'].split(","):
+                        tag = tag.strip()
+                        if tag:
+                            tags.add(tag)
+            # 从快捷入口类别标签库补充
+            stored = self.data_manager.get_all_tags('shortcut')
+            tags.update(stored)
+            return sorted(list(tags))
         else:
             tasks = self.data_manager.get_entertainment_tasks()
         
@@ -256,6 +288,11 @@ class TagFilterBar(QWidget):
                     tag = tag.strip()
                     if tag:
                         tags.add(tag)
+        
+        # 2. 从类别标签库补充
+        if task_type_val:
+            stored = self.data_manager.get_all_tags(task_type_val)
+            tags.update(stored)
         
         return sorted(list(tags))
     
@@ -339,16 +376,30 @@ class TagEditorDialog(QDialog):
         layout.addWidget(btn_box)
     
     def get_all_tags(self) -> list:
-        """获取所有可用标签"""
+        """获取所有可用标签（从任务中提取 + 类别标签库补充）"""
         if not self.data_manager:
             return []
         
         tags = set()
+        task_type_val = self.task_type.value if hasattr(self.task_type, 'value') else None
         
-        if self.task_type == TaskType.DAILY:
+        # 1. 从任务中提取标签
+        if task_type_val == 'daily':
             tasks = self.data_manager.get_daily_tasks()
-        elif self.task_type == TaskType.TODO:
+        elif task_type_val == 'todo':
             tasks = self.data_manager.get_todo_tasks()
+        elif task_type_val == 'shortcut':
+            shortcuts = self.data_manager.get_all_shortcuts()
+            for s in shortcuts:
+                if s.get('tags'):
+                    for tag in s['tags'].split(","):
+                        tag = tag.strip()
+                        if tag:
+                            tags.add(tag)
+            # 从快捷入口类别标签库补充
+            stored = self.data_manager.get_all_tags('shortcut')
+            tags.update(stored)
+            return sorted(list(tags))
         else:
             tasks = self.data_manager.get_entertainment_tasks()
         
@@ -358,6 +409,11 @@ class TagEditorDialog(QDialog):
                     tag = tag.strip()
                     if tag:
                         tags.add(tag)
+        
+        # 2. 从类别标签库补充
+        if task_type_val:
+            stored = self.data_manager.get_all_tags(task_type_val)
+            tags.update(stored)
         
         return sorted(list(tags))
     

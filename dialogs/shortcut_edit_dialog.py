@@ -7,6 +7,8 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLineEdit,
                               QLabel, QPushButton, QFileDialog, QMessageBox)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
+from widgets.tag_selector_widget import TagSelectorWidget
+from managers.data_manager import TaskType
 import os
 
 
@@ -91,11 +93,12 @@ class ShortcutEditDialog(QDialog):
     """快捷入口编辑对话框"""
 
     def __init__(self, parent=None, data_manager=None,
-                 initial_title: str = "", initial_path: str = ""):
+                 initial_title: str = "", initial_path: str = "", initial_tags: str = ""):
         super().__init__(parent)
         self.data_manager = data_manager
         self.initial_title = initial_title
         self.initial_path = initial_path
+        self.initial_tags = initial_tags
         self.current_path = initial_path
         self.init_ui()
 
@@ -165,6 +168,17 @@ class ShortcutEditDialog(QDialog):
                 """)
 
         layout.addWidget(self.drop_label)
+
+        # 标签选择组件（使用独立的 SHORTCUT 类型）
+        class ShortcutTaskType:
+            value = "shortcut"
+        self.tag_selector = TagSelectorWidget(
+            parent=self,
+            data_manager=self.data_manager,
+            initial_tags=self.initial_tags,
+            task_type=ShortcutTaskType()
+        )
+        layout.addWidget(self.tag_selector)
 
         # 打开按钮（预览用）
         self.open_btn = QPushButton("打开位置")
@@ -280,5 +294,6 @@ class ShortcutEditDialog(QDialog):
         """获取对话框数据"""
         return {
             "title": self.name_edit.text().strip(),
-            "shortcut_path": self.drop_label.file_path or self.path_edit.text().strip()
+            "shortcut_path": self.drop_label.file_path or self.path_edit.text().strip(),
+            "tags": self.tag_selector.get_selected_tags()
         }

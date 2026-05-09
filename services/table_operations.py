@@ -22,11 +22,12 @@ def _render_shortcut_row(table, row, shortcut_item):
     Args:
         table: 表格控件
         row: 行索引
-        shortcut_item: dict，包含 keys: task_id, task_type, title, shortcut_path, created_at
+        shortcut_item: dict，包含 keys: task_id, task_type, title, shortcut_path, tags, created_at
     """
     title = shortcut_item['title']
     shortcut_path = shortcut_item['shortcut_path']
     task_type = shortcut_item['task_type']
+    tags = shortcut_item.get('tags', '') or ''
 
     # 名称列：创建按钮
     btn = QPushButton(title)
@@ -61,14 +62,18 @@ def _render_shortcut_row(table, row, shortcut_item):
         type_display = '未知'
     table.setItem(row, 1, QTableWidgetItem(type_display))
 
+    # 标签列
+    tags_display = tags if tags else '-'
+    table.setItem(row, 2, QTableWidgetItem(tags_display))
+
     # 路径列
     path_text = shortcut_path if shortcut_path else '-'
     path_item = QTableWidgetItem(path_text)
     path_item.setToolTip(path_text)
-    table.setItem(row, 2, path_item)
+    table.setItem(row, 3, path_item)
 
     # 创建日期列
-    table.setItem(row, 3, QTableWidgetItem(shortcut_item.get('created_at', '-')))
+    table.setItem(row, 4, QTableWidgetItem(shortcut_item.get('created_at', '-')))
 
     # 将 id 存在按钮属性中，方便查找
     btn.setProperty("task_id", shortcut_item['id'])
@@ -180,7 +185,8 @@ def load_entertainment_tasks_to_table(window):
 
 def load_shortcuts_to_table(window):
     """加载所有快捷入口到快捷入口表格"""
-    shortcuts = window.data_manager.get_all_shortcuts()
+    tag_filter = getattr(window, 'current_shortcut_tag_filter', '')
+    shortcuts = window.data_manager.get_all_shortcuts(tag=tag_filter if tag_filter else None)
     window.shortcuts_table.setRowCount(len(shortcuts))
     for row, item in enumerate(shortcuts):
         _render_shortcut_row(window.shortcuts_table, row, item)

@@ -290,7 +290,7 @@ class TaskOperationHandler:
         if not data['shortcut_path']:
             QMessageBox.warning(self._w, '警告', '请拖拽文件或文件夹到对话框中')
             return
-        self._w.data_manager.create_shortcut('todo', data['title'], data['shortcut_path'])
+        self._w.data_manager.create_shortcut('todo', data['title'], data['shortcut_path'], data.get('tags', ''))
         self._w.load_shortcuts()
         show_task_added_confirmation('shortcut', self._w)
         self._w.status_bar.showMessage('快捷入口添加成功')
@@ -314,7 +314,8 @@ class TaskOperationHandler:
         dialog = ShortcutEditDialog(
             self._w, data_manager=self._w.data_manager,
             initial_title=shortcut_data['title'],
-            initial_path=shortcut_data['shortcut_path']
+            initial_path=shortcut_data['shortcut_path'],
+            initial_tags=shortcut_data.get('tags', '')
         )
         if dialog.exec() != ShortcutEditDialog.DialogCode.Accepted:
             return
@@ -325,7 +326,8 @@ class TaskOperationHandler:
         self._w.data_manager.update_shortcut(
             shortcut_id,
             title=data['title'],
-            shortcut_path=data['shortcut_path']
+            shortcut_path=data['shortcut_path'],
+            tags=data.get('tags', '')
         )
         self._w.load_shortcuts()
         show_task_updated_confirmation('shortcut', self._w)

@@ -27,44 +27,71 @@ class ShortcutManager:
                 title TEXT NOT NULL,
                 shortcut_path TEXT NOT NULL DEFAULT '',
                 category TEXT NOT NULL DEFAULT 'todo',
+                tags TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
         """)
+        # 兼容旧版本：如果 tags 列不存在，则添加
+        cursor = self._conn.execute("PRAGMA table_info(shortcut_entries)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'tags' not in columns:
+            self._conn.execute("ALTER TABLE shortcut_entries ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
         self._conn.commit()
 
-    def get_all(self) -> List[Dict[str, Any]]:
-        """获取所有快捷入口"""
-        cursor = self._conn.execute(
-            "SELECT id, title, shortcut_path, category, created_at FROM shortcut_entries ORDER BY created_at DESC"
-        )
+    def get_all(self, tag: str = None) -> List[Dict[str, Any]]:
+        """获取所有快捷入口，可按标签筛选"""
+        if tag:
+            cursor = self._conn.execute(
+                "SELECT id, title, shortcut_path, category, tags, created_at FROM shortcut_entries WHERE tags LIKE ? ORDER BY created_at DESC",
+                (f'%{tag}%',)
+            )
+        else:
+            cursor = self._conn.execute(
+                "SELECT id, title, shortcut_path, category, tags, created_at FROM shortcut_entries ORDER BY created_at DESC"
+            )
         shortcuts = []
         for row in cursor.fetchall():
-            sid, title, path, category, created = row
+            sid, title, path, category, tags, created = row
             shortcuts.append({
                 'id': sid,
                 'task_id': sid,
                 'task_type': category,
                 'title': title,
                 'shortcut_path': path or '',
+                'tags': tags or '',
                 'created_at': created or '-'
             })
         return shortcuts
 
-    def create(self, task_type: str, title: str, shortcut_path: str) -> bool:
-        """创建快捷入口"""
+    def create(self, task_type: str, title: str, shortcut_path: str, tags: str = '') -> bool:
+        """创建快捷入口
+
+        Args:
+            task_type: 任务类型
+            title: 标题
+            shortcut_path: 快捷路径
+            tags: 标签（逗号分隔）
+        """
         now = datetime.now().isoformat()
         sid = str(uuid.uuid4())
         self._conn.execute(
-            "INSERT INTO shortcut_entries (id, title, shortcut_path, category, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (sid, title, shortcut_path, task_type, now, now)
+            "INSERT INTO shortcut_entries (id, title, shortcut_path, category, tags, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (sid, title, shortcut_path, task_type, tags, now, now)
         )
         self._conn.commit()
         return True
 
-    def update(self, shortcut_id: str, title: str = None, shortcut_path: str = None) -> bool:
-        """更新快捷入口"""
+    def update(self, shortcut_id: str, title: str = None, shortcut_path: str = None, tags: str = None) -> bool:
+        """更新快捷入口
+
+        Args:
+            shortcut_id: 快捷入口ID
+            title: 标题（可选）
+            shortcut_path: 路径（可选）
+            tags: 标签（可选，逗号分隔）
+        """
         updates = []
         params = []
         if title is not None:
@@ -73,6 +100,9 @@ class ShortcutManager:
         if shortcut_path is not None:
             updates.append("shortcut_path = ?")
             params.append(shortcut_path)
+        if tags is not None:
+            updates.append("tags = ?")
+            params.append(tags)
         if not updates:
             return False
         updates.append("updated_at = ?")
@@ -88,16 +118,16 @@ class ShortcutManager:
     def get_by_id(self, shortcut_id: str) -> Optional[Dict[str, Any]]:
         """根据ID获取快捷入口"""
         cursor = self._conn.execute(
-            "SELECT id, title, shortcut_path, category, created_at FROM shortcut_entries WHERE id = ?",
+            "SELECT id, title, shortcut_path, category, tags, created_at FROM shortcut_entries WHERE id = ?",
             (shortcut_id,)
         )
         row = cursor.fetchone()
         if not row:
             return None
-        sid, title, path, category, created = row
+        sid, title, path, category, tags, created = row
         return {
             'id': sid, 'title': title, 'shortcut_path': path or '',
-            'category': category, 'created_at': created
+            'category': category, 'tags': tags or '', 'created_at': created
         }
 
     def delete(self, shortcut_id: str) -> Optional[Dict[str, Any]]:
