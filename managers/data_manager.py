@@ -8,6 +8,8 @@ from models.model import DailyTask, TodoTask, EntertainmentTask, Config, init_db
 from datetime import datetime, date
 import json
 import uuid
+import config.config
+import sqlite3
 from typing import List, Dict, Any, Optional
 from enum import Enum
 import config.config
@@ -32,7 +34,7 @@ class DataManager:
     def __init__(self, db_path: str = None):
         if db_path is None:
             db_path = config.config.DATABASE_PATH
-        self.engine, self.Session = init_db(db_path)
+        self.engine, self.Session = init_db(db_path, run_migration=True)
         self.session = self.Session()
 
         # 初始化子管理器
@@ -42,6 +44,10 @@ class DataManager:
 
         # 初始化垃圾桶数据库
         self._init_trash_db()
+
+        # 初始化快捷入口数据库
+        self._shortcut_conn = sqlite3.connect(config.config.DATABASE_PATH)
+        self._init_shortcut_db()
 
         # 检查并执行每日重置
         self.check_daily_reset()
@@ -54,6 +60,13 @@ class DataManager:
         """关闭数据库会话"""
         self.session.close()
         self.close_trash_db()
+        self.close_shortcut_db()
+
+    def close_shortcut_db(self):
+        """关闭快捷入口数据库连接"""
+        if hasattr(self, '_shortcut_conn') and self._shortcut_conn:
+            self._shortcut_conn.close()
+            self._shortcut_conn = None
 
     def commit(self):
         """提交更改"""
@@ -127,7 +140,8 @@ class DataManager:
                 week_day=data.get('week_day', ''),
                 completed=data.get('completed', False),
                 status=data.get('status', 'pending'),
-                tags=data.get('tags', '')
+                tags=data.get('tags', ''),
+                shortcut_path=data.get('shortcut_path', '')
             )
         elif task_type == 'todo':
             task = TodoTask(
@@ -137,8 +151,12 @@ class DataManager:
                 deadline=data.get('deadline', ''),
                 completed=data.get('completed', False),
                 status=data.get('status', 'pending'),
-                tags=data.get('tags', '')
+                tags=data.get('tags', ''),
+                shortcut_path=data.get('shortcut_path', '')
             )
+        elif task_type == 'shortcut':
+            # restore_shortcut 内部会删除 trash 记录，这里只做传递
+            return self.restore_shortcut(trash_id)
         elif task_type == 'entertainment':
             task = EntertainmentTask(
                 id=data.get('id', str(uuid.uuid4())),
@@ -147,7 +165,8 @@ class DataManager:
                 fun_category=data.get('fun_category', 'general'),
                 completed=data.get('completed', False),
                 status=data.get('status', 'pending'),
-                tags=data.get('tags', '')
+                tags=data.get('tags', ''),
+                shortcut_path=data.get('shortcut_path', '')
             )
         else:
             return False
@@ -195,6 +214,7 @@ class DataManager:
                 'description': oldest.description or '', 'week_day': oldest.week_day or '',
                 'completed': oldest.completed, 'status': oldest.status,
                 'tags': oldest.tags or '',
+                'shortcut_path': oldest.shortcut_path or '',
                 'created_at': oldest.created_at.isoformat() if oldest.created_at else '',
                 'updated_at': oldest.updated_at.isoformat() if oldest.updated_at else '',
             }
@@ -240,11 +260,11 @@ class DataManager:
 
     def create_daily_task(self, title: str, description: str = "", week_day: str = "",
                           completed: bool = False, status: str = "pending",
-                          tags: str = "") -> DailyTask:
+                          tags: str = "", shortcut_path: str = "") -> DailyTask:
         """创建每日任务"""
         task = DailyTask(
             title=title, description=description, week_day=week_day,
-            completed=completed, status=status, tags=tags
+            completed=completed, status=status, tags=tags, shortcut_path=shortcut_path
         )
         self.session.add(task)
         self.session.commit()
@@ -280,6 +300,7 @@ class DataManager:
             'description': task.description or '', 'week_day': task.week_day or '',
             'completed': task.completed, 'status': task.status,
             'tags': task.tags or '',
+            'shortcut_path': task.shortcut_path or '',
             'created_at': task.created_at.isoformat() if task.created_at else '',
             'updated_at': task.updated_at.isoformat() if task.updated_at else '',
         }
@@ -317,8 +338,8 @@ class DataManager:
 
     def create_todo_task(self, title: str, description: str = "", deadline: str = "",
                          completed: bool = False, status: str = "pending",
-                         tags: str = "") -> TodoTask:
-        task = self.todo_manager.create(title, description, deadline, completed, status, tags)
+                         tags: str = "", shortcut_path: str = "") -> TodoTask:
+        task = self.todo_manager.create(title, description, deadline, completed, status, tags, shortcut_path=shortcut_path)
         self._enforce_task_limit('todo', TodoTask)
         return task
 
@@ -348,10 +369,11 @@ class DataManager:
         return self.entertainment_manager.get_by_id(task_id)
 
     def create_entertainment_task(self, title: str, description: str = "",
-                                  fun_category: str = "general", completed: bool = False,
-                                  status: str = "pending", tags: str = "") -> EntertainmentTask:
+                                      fun_category: str = "general", completed: bool = False,
+                                      status: str = "pending", tags: str = "",
+                                      shortcut_path: str = "") -> EntertainmentTask:
         task = self.entertainment_manager.create(title, description, fun_category,
-                                                  completed, status, tags)
+                                                  completed, status, tags, shortcut_path=shortcut_path)
         self._enforce_task_limit('entertainment', EntertainmentTask)
         return task
 
@@ -370,6 +392,137 @@ class DataManager:
 
     def toggle_entertainment_task_completion(self, task_id: str) -> bool:
         return self.entertainment_manager.toggle_completion(task_id)
+
+    # ==================== 快捷入口相关方法 ====================
+
+    def _init_shortcut_db(self):
+        """确保 shortcut_entries 表存在"""
+        self._shortcut_conn.execute("""
+            CREATE TABLE IF NOT EXISTS shortcut_entries (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                shortcut_path TEXT NOT NULL DEFAULT '',
+                category TEXT NOT NULL DEFAULT 'todo',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        self._shortcut_conn.commit()
+
+    def get_all_shortcuts(self) -> list:
+        """获取所有快捷入口"""
+        cursor = self._shortcut_conn.execute(
+            "SELECT id, title, shortcut_path, category, created_at FROM shortcut_entries ORDER BY created_at DESC"
+        )
+        rows = cursor.fetchall()
+        shortcuts = []
+        for row in rows:
+            sid, title, path, category, created = row
+            shortcuts.append({
+                'id': sid,
+                'task_id': sid,
+                'task_type': category,
+                'title': title,
+                'shortcut_path': path or '',
+                'created_at': created or '-'
+            })
+        return shortcuts
+
+    def create_shortcut(self, task_type: str, title: str, shortcut_path: str) -> bool:
+        """创建快捷入口"""
+        now = datetime.now().isoformat()
+        sid = str(uuid.uuid4())
+        self._shortcut_conn.execute(
+            "INSERT INTO shortcut_entries (id, title, shortcut_path, category, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (sid, title, shortcut_path, task_type, now, now)
+        )
+        self._shortcut_conn.commit()
+        return True
+
+    def update_shortcut(self, shortcut_id: str, title: str = None, shortcut_path: str = None) -> bool:
+        """更新快捷入口"""
+        updates = []
+        params = []
+        if title is not None:
+            updates.append("title = ?")
+            params.append(title)
+        if shortcut_path is not None:
+            updates.append("shortcut_path = ?")
+            params.append(shortcut_path)
+        if not updates:
+            return False
+        updates.append("updated_at = ?")
+        params.append(datetime.now().isoformat())
+        params.append(shortcut_id)
+        self._shortcut_conn.execute(
+            f"UPDATE shortcut_entries SET {', '.join(updates)} WHERE id = ?",
+            params
+        )
+        self._shortcut_conn.commit()
+        return True
+
+    def delete_shortcut(self, shortcut_id: str) -> bool:
+        """删除快捷入口（移入垃圾桶）"""
+        cursor = self._shortcut_conn.execute(
+            "SELECT id, title, shortcut_path, category, created_at FROM shortcut_entries WHERE id = ?",
+            (shortcut_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return False
+
+        now = datetime.now().isoformat()
+        trash_id = str(uuid.uuid4())
+        data = {
+            'id': row[0],
+            'title': row[1],
+            'shortcut_path': row[2] or '',
+            'category': row[3],
+            'created_at': row[4],
+        }
+        # 移入垃圾桶
+        self.trash_conn.execute(
+            'INSERT INTO trashed_tasks (id, task_type, task_id, data_json, deleted_at) '
+            'VALUES (?, ?, ?, ?, ?)',
+            (trash_id, 'shortcut', shortcut_id, json.dumps(data), now)
+        )
+        self.trash_conn.commit()
+        # 从快捷入口表删除
+        self._shortcut_conn.execute("DELETE FROM shortcut_entries WHERE id = ?", (shortcut_id,))
+        self._shortcut_conn.commit()
+        return True
+
+    def restore_shortcut(self, trash_id: str) -> bool:
+        """恢复快捷入口（从垃圾桶恢复到 shortcut_entries）"""
+        cursor = self.trash_conn.execute(
+            'SELECT task_type, data_json FROM trashed_tasks WHERE id = ?',
+            (trash_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return False
+
+        task_type, data_json = row
+        data = json.loads(data_json)
+
+        now = datetime.now().isoformat()
+        self._shortcut_conn.execute(
+            "INSERT INTO shortcut_entries (id, title, shortcut_path, category, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                data.get('id', str(uuid.uuid4())),
+                data.get('title', ''),
+                data.get('shortcut_path', ''),
+                data.get('category', 'todo'),
+                data.get('created_at', now),
+                now
+            )
+        )
+        self._shortcut_conn.commit()
+        self.trash_conn.execute('DELETE FROM trashed_tasks WHERE id = ?', (trash_id,))
+        self.trash_conn.commit()
+        return True
 
     # ==================== 紧急度（委托） ====================
 

@@ -31,6 +31,7 @@ class DailyTask(BaseModel):
     category = Column(String(50), default="daily")
     status = Column(String(20), default="pending")  # pending, completed, abandoned
     tags = Column(String(500), default="")  # 逗号分隔的标签，如"工作,紧急,项目A"
+    shortcut_path = Column(String(1000), default="")  # 快捷入口路径，非空表示快捷入口
 
 
 class TodoTask(BaseModel):
@@ -45,6 +46,7 @@ class TodoTask(BaseModel):
     category = Column(String(50), default="todo")
     status = Column(String(20), default="pending")  # pending, completed, abandoned
     tags = Column(String(500), default="")  # 逗号分隔的标签，如"工作,紧急,项目A"
+    shortcut_path = Column(String(1000), default="")  # 快捷入口路径，非空表示快捷入口
 
 
 class EntertainmentTask(BaseModel):
@@ -58,6 +60,7 @@ class EntertainmentTask(BaseModel):
     category = Column(String(50), default="entertainment")
     status = Column(String(20), default="pending")  # pending, completed, abandoned
     tags = Column(String(500), default="")  # 逗号分隔的标签，如"游戏,周末,多人"
+    shortcut_path = Column(String(1000), default="")  # 快捷入口路径，非空表示快捷入口
 
 
 class Config(BaseModel):
@@ -97,6 +100,30 @@ def migrate_db(engine):
             conn.execute(text("ALTER TABLE entertainment_tasks ADD COLUMN tags VARCHAR(500) DEFAULT ''"))
             conn.commit()
         print("已添加 entertainment_tasks.tags 字段")
+    
+    # 检查并添加 daily_tasks.shortcut_path 字段
+    daily_columns = [col['name'] for col in inspector.get_columns('daily_tasks')]
+    if 'shortcut_path' not in daily_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE daily_tasks ADD COLUMN shortcut_path VARCHAR(1000) DEFAULT ''"))
+            conn.commit()
+        print("已添加 daily_tasks.shortcut_path 字段")
+    
+    # 检查并添加 todo_tasks.shortcut_path 字段
+    todo_columns = [col['name'] for col in inspector.get_columns('todo_tasks')]
+    if 'shortcut_path' not in todo_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE todo_tasks ADD COLUMN shortcut_path VARCHAR(1000) DEFAULT ''"))
+            conn.commit()
+        print("已添加 todo_tasks.shortcut_path 字段")
+    
+    # 检查并添加 entertainment_tasks.shortcut_path 字段
+    entertainment_columns = [col['name'] for col in inspector.get_columns('entertainment_tasks')]
+    if 'shortcut_path' not in entertainment_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE entertainment_tasks ADD COLUMN shortcut_path VARCHAR(1000) DEFAULT ''"))
+            conn.commit()
+        print("已添加 entertainment_tasks.shortcut_path 字段")
 
 
 # 数据库连接和会话管理

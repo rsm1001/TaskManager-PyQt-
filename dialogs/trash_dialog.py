@@ -19,6 +19,7 @@ class TrashDialog(QDialog):
         'daily': '每日任务',
         'todo': '待办事项',
         'entertainment': '娱乐任务',
+        'shortcut': '快捷入口',
     }
 
     def __init__(self, parent, data_manager):
@@ -40,10 +41,7 @@ class TrashDialog(QDialog):
         # 类型筛选
         top_layout.addWidget(QLabel('类型:'))
         self.type_combo = QComboBox()
-        self.type_combo.addItem('全部')
-        self.type_combo.addItem('每日任务')
-        self.type_combo.addItem('待办事项')
-        self.type_combo.addItem('娱乐任务')
+        self.type_combo.addItems(['全部', '每日任务', '待办事项', '娱乐任务', '快捷入口'])
         self.type_combo.currentTextChanged.connect(self._load_trashed)
         top_layout.addWidget(self.type_combo)
 
@@ -95,25 +93,52 @@ class TrashDialog(QDialog):
     def _get_filter_type(self):
         """获取当前筛选类型"""
         text = self.type_combo.currentText()
-        if text == '每日任务':
+        if text == '全部':
+            return None
+        elif text == '每日任务':
             return 'daily'
         elif text == '待办事项':
             return 'todo'
         elif text == '娱乐任务':
             return 'entertainment'
+        elif text == '快捷入口':
+            return 'shortcut'
         return None
 
     def _load_trashed(self):
         """加载垃圾桶中的任务"""
         filter_type = self._get_filter_type()
-        rows = self.data_manager.get_trashed_tasks(task_type=filter_type)
+        rows = self.data_manager.get_trashed_tasks(task_type=None)
 
         self.trash_table.setRowCount(len(rows))
+        # 记录每行的 shortcut_path（用于搜索时判断快捷入口类型）
+        self._row_shortcut_paths = {}
+
         for row, (trash_id, task_type, task_id, data_json, deleted_at) in enumerate(rows):
             data = json.loads(data_json)
 
-            # 类型
-            type_item = QTableWidgetItem(self.TYPE_LABELS.get(task_type, task_type))
+            # 类型：快捷入口优先判断（shortcut_path 非空则显示"快捷入口"）
+            shortcut_path = data.get('shortcut_path', '') or ''
+            self._row_shortcut_paths[row] = shortcut_path
+            if shortcut_path:
+                type_text = '快捷入口'
+                type_key = 'shortcut'
+            else:
+                type_text = self.TYPE_LABELS.get(task_type, task_type)
+                type_key = task_type
+
+            # 先统一设为可见，类型筛选逻辑在末尾统一设置隐藏
+            self.trash_table.setRowHidden(row, False)
+
+            # 类型筛选
+            if filter_type == 'shortcut':
+                # 只隐藏非 shortcut 行（type_key != 'shortcut' 的都是其他任务类型）
+                if type_key != 'shortcut':
+                    self.trash_table.setRowHidden(row, True)
+            elif filter_type and type_key != filter_type:
+                self.trash_table.setRowHidden(row, True)
+
+            type_item = QTableWidgetItem(type_text)
             type_item.setData(Qt.ItemDataRole.UserRole, trash_id)
             self.trash_table.setItem(row, 0, type_item)
 
@@ -139,19 +164,38 @@ class TrashDialog(QDialog):
             op_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.trash_table.setItem(row, 4, op_item)
 
-        # 双击恢复
+        # 双击恢复（先断开旧连接防止重复绑定）
+        try:
+            self.trash_table.cellDoubleClicked.disconnect(self._on_double_click)
+        except TypeError:
+            pass
         self.trash_table.cellDoubleClicked.connect(self._on_double_click)
 
     def _on_search_changed(self, text):
         """搜索框内容变化，实时过滤表格"""
         keyword = text.strip().lower()
+        filter_type = self._get_filter_type()
+
         for row in range(self.trash_table.rowCount()):
-            if not keyword:
-                self.trash_table.setRowHidden(row, False)
+            type_text = self.trash_table.item(row, 0).text() if self.trash_table.item(row, 0) else ''
+            shortcut_path = getattr(self, '_row_shortcut_paths', {}).get(row, '')
+
+            # 先以类型筛选结果为基础
+            if filter_type == 'shortcut':
+                # 非 shortcut 行全部隐藏（不需要 shortcut_path 判断）
+                if type_text != '快捷入口':
+                    self.trash_table.setRowHidden(row, True)
+                    continue
+            elif filter_type and type_text != self.TYPE_LABELS.get(filter_type, ''):
+                self.trash_table.setRowHidden(row, True)
                 continue
-            # 搜索标题(1)和描述(2)列
+
+            # 类型命中后，再按关键词过滤
+            if not keyword:
+                continue
+
             match = False
-            for col in [1, 2]:
+            for col in [1, 2]:  # 标题、描述列
                 item = self.trash_table.item(row, col)
                 if item and keyword in item.text().lower():
                     match = True

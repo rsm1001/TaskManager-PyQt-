@@ -3,67 +3,121 @@ Task Table Operations Module
 处理任务表格的各种操作，包括加载、状态切换、排序等功能
 """
 
-from PyQt6.QtWidgets import QTableWidgetItem
+from PyQt6.QtWidgets import QTableWidgetItem, QPushButton
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtCore import QUrl
 import config.config as config
+import os
 
 
 def _get_status_filter(status_text):
-    """将界面状态文本转换为过滤器值
-    
-    Args:
-        status_text: 界面显示的状态文本
-        
-    Returns:
-        对应的状态过滤值
-    """
+    """将界面状态文本转换为过滤器值"""
     return config.STATUS_FILTER_MAP.get(status_text, 'all')
 
 
-def _set_task_row_data(table, row, task, columns):
-    """设置任务表格行的数据
-    
+def _render_shortcut_row(table, row, shortcut_item):
+    """渲染快捷入口表格的一行
+
     Args:
         table: 表格控件
         row: 行索引
-        task: 任务对象
-        columns: 列数据列表，每个元素为 (列索引, 值)
+        shortcut_item: dict，包含 keys: task_id, task_type, title, shortcut_path, created_at
     """
-    # 状态列（始终在第一列）
+    title = shortcut_item['title']
+    shortcut_path = shortcut_item['shortcut_path']
+    task_type = shortcut_item['task_type']
+
+    # 名称列：创建按钮
+    btn = QPushButton(title)
+    btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    btn.setStyleSheet("""
+        QPushButton {
+            background-color: #e3f2fd;
+            border: 1px solid #2196F3;
+            border-radius: 4px;
+            padding: 4px 12px;
+            color: #1976D2;
+            font-size: 13px;
+            text-align: left;
+        }
+        QPushButton:hover {
+            background-color: #bbdefb;
+        }
+        QPushButton:pressed {
+            background-color: #90caf9;
+        }
+    """)
+    # 点击按钮直接打开
+    btn.clicked.connect(lambda _=False, p=shortcut_path: _open_shortcut_path(p))
+    table.setCellWidget(row, 0, btn)
+
+    # 类型列：显示文件或文件夹
+    if os.path.isfile(shortcut_path):
+        type_display = '文件'
+    elif os.path.isdir(shortcut_path):
+        type_display = '文件夹'
+    else:
+        type_display = '未知'
+    table.setItem(row, 1, QTableWidgetItem(type_display))
+
+    # 路径列
+    path_text = shortcut_path if shortcut_path else '-'
+    path_item = QTableWidgetItem(path_text)
+    path_item.setToolTip(path_text)
+    table.setItem(row, 2, path_item)
+
+    # 创建日期列
+    table.setItem(row, 3, QTableWidgetItem(shortcut_item.get('created_at', '-')))
+
+    # 将 id 存在按钮属性中，方便查找
+    btn.setProperty("task_id", shortcut_item['id'])
+    btn.setProperty("task_type", task_type)
+
+
+def _open_shortcut_path(path):
+    """打开快捷入口路径（文件直接打开，文件夹打开目录）"""
+    if not path:
+        return
+    if os.path.isfile(path):
+        # 文件：直接打开
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+    elif os.path.isdir(path):
+        # 文件夹：打开目录
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+    else:
+        # 路径不存在，也尝试打开
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+
+
+def _set_task_row_data(table, row, task, columns):
+    """设置普通任务表格行的数据"""
     status_text = config.STATUS_DISPLAY_MAP.get(task.status, '○')
     status_item = QTableWidgetItem(status_text)
     status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
     table.setItem(row, 0, status_item)
-    
-    # 设置其他列
     for col_idx, value in columns:
         table.setItem(row, col_idx, QTableWidgetItem(value))
-    
-    # 存储任务ID用于后续操作
     status_item.setData(Qt.ItemDataRole.UserRole, task.id)
 
 
 def load_daily_tasks_to_table(window):
     """加载每日任务到表格"""
-    # 获取筛选条件
     weekday = window.daily_weekday_combo.currentText()
     if weekday == '全部':
         weekday_filter = 'all'
     elif weekday == '每天':
-        weekday_filter = 'daily'  # 对应数据库中week_day为空的情况
+        weekday_filter = 'daily'
     else:
         weekday_filter = weekday
-    
+
     status_filter = _get_status_filter(window.daily_status_combo.currentText())
-    
-    # 获取标签筛选
     tag_filter = getattr(window, 'current_tag_filter', '')
 
     tasks = window.data_manager.get_daily_tasks(weekday=weekday_filter, status=status_filter, tag=tag_filter)
 
     window.daily_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
-        # 准备列数据：(列索引, 值)
         columns = [
             (1, task.title),
             (2, task.week_day if task.week_day else '每天'),
@@ -78,21 +132,18 @@ def load_daily_tasks_to_table(window):
 
 def load_todo_tasks_to_table(window):
     """加载待办事项到表格"""
-    # 获取筛选条件
     status_text = window.todo_status_combo.currentText()
     if status_text == '已过期':
-        status_filter = 'all'  # 已过期需要特殊处理
+        status_filter = 'all'
     else:
         status_filter = _get_status_filter(status_text)
-    
-    # 获取标签筛选
+
     tag_filter = getattr(window, 'current_tag_filter', '')
 
     tasks = window.data_manager.get_todo_tasks(status=status_filter, tag=tag_filter)
 
     window.todo_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
-        # 准备列数据
         columns = [
             (1, task.title),
             (2, task.deadline if task.deadline else '无'),
@@ -108,17 +159,13 @@ def load_todo_tasks_to_table(window):
 
 def load_entertainment_tasks_to_table(window):
     """加载娱乐任务到表格"""
-    # 获取筛选条件
     status_filter = _get_status_filter(window.entertainment_status_combo.currentText())
-    
-    # 获取标签筛选
     tag_filter = getattr(window, 'current_tag_filter', '')
 
     tasks = window.data_manager.get_entertainment_tasks(status=status_filter, tag=tag_filter)
 
     window.entertainment_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
-        # 准备列数据
         columns = [
             (1, task.title),
             (2, task.fun_category),
@@ -131,99 +178,90 @@ def load_entertainment_tasks_to_table(window):
     window.update_status_bar()
 
 
+def load_shortcuts_to_table(window):
+    """加载所有快捷入口到快捷入口表格"""
+    shortcuts = window.data_manager.get_all_shortcuts()
+    window.shortcuts_table.setRowCount(len(shortcuts))
+    for row, item in enumerate(shortcuts):
+        _render_shortcut_row(window.shortcuts_table, row, item)
+
+
 def toggle_daily_task_status(window, row, column):
     """切换每日任务状态"""
-    if column == 0:  # 状态列
+    if column == 0:
         item = window.daily_table.item(row, 0)
+        if item is None:
+            return
         task_id = item.data(Qt.ItemDataRole.UserRole)
         if task_id:
-            # 切换状态
             window.data_manager.toggle_daily_task_completion(task_id)
-            
-            # 重新加载任务以确保数据一致性
             load_daily_tasks_to_table(window)
-            
-            # 清除选中状态
             window.daily_table.clearSelection()
 
 
 def toggle_todo_task_status(window, row, column):
     """切换待办事项状态"""
-    if column == 0:  # 状态列
+    if column == 0:
         item = window.todo_table.item(row, 0)
+        if item is None:
+            return
         task_id = item.data(Qt.ItemDataRole.UserRole)
         if task_id:
-            # 切换状态
             window.data_manager.toggle_todo_task_completion(task_id)
-            
-            # 重新加载任务以确保数据一致性
             load_todo_tasks_to_table(window)
-            
-            # 清除选中状态
             window.todo_table.clearSelection()
 
 
 def toggle_entertainment_task_status(window, row, column):
     """切换娱乐任务状态"""
-    if column == 0:  # 状态列
+    if column == 0:
         item = window.entertainment_table.item(row, 0)
+        if item is None:
+            return
         task_id = item.data(Qt.ItemDataRole.UserRole)
         if task_id:
-            # 切换状态
             window.data_manager.toggle_entertainment_task_completion(task_id)
-            
-            # 重新加载任务以确保数据一致性
             load_entertainment_tasks_to_table(window)
-            
-            # 清除选中状态
             window.entertainment_table.clearSelection()
 
 
 def sort_todo_table_by_column(window, column):
     """根据列进行排序（支持正序和倒序）"""
-    # 如果点击的是同一列，则切换排序顺序（升序->降序->原始顺序）
     if window.todo_sort_column == column:
         if window.todo_sort_order == Qt.SortOrder.AscendingOrder:
             window.todo_sort_order = Qt.SortOrder.DescendingOrder
         elif window.todo_sort_order == Qt.SortOrder.DescendingOrder:
-            # 第三次点击恢复原始顺序（不排序）
             window.todo_sort_column = -1
             window.todo_sort_order = Qt.SortOrder.AscendingOrder
-            load_todo_tasks_to_table(window)  # 重新加载原始数据
+            load_todo_tasks_to_table(window)
             return
     else:
-        # 如果点击的是不同列，开始新列的升序排序
         window.todo_sort_column = column
         window.todo_sort_order = Qt.SortOrder.AscendingOrder
 
-    # 获取当前筛选状态
     status_text = window.todo_status_combo.currentText()
     if status_text == '已过期':
-        status_filter = 'all'  # 已过期需要特殊处理
+        status_filter = 'all'
     else:
         status_filter = _get_status_filter(status_text)
 
     tasks = window.data_manager.get_todo_tasks(status=status_filter)
-    
-    # 根据列进行排序
-    if column == 0:  # 状态列
+
+    if column == 0:
         tasks.sort(key=lambda x: x.status, reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
-    elif column == 1:  # 标题列
+    elif column == 1:
         tasks.sort(key=lambda x: x.title.lower(), reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
-    elif column == 2:  # 截止日期列
-        # 处理可能的空截止日期
+    elif column == 2:
         tasks.sort(key=lambda x: (x.deadline or ''), reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
-    elif column == 3:  # 紧急程度列
+    elif column == 3:
         tasks.sort(key=lambda x: x.urgency_score, reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
-    elif column == 4:  # 描述列
+    elif column == 4:
         tasks.sort(key=lambda x: (x.description or '').lower(), reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
-    elif column == 5:  # 创建日期列
+    elif column == 5:
         tasks.sort(key=lambda x: x.created_at, reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
 
-    # 更新表格显示
     window.todo_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
-        # 准备列数据
         columns = [
             (1, task.title),
             (2, task.deadline if task.deadline else '无'),

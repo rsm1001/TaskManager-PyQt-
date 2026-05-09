@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QMenuBar, QMenu, QStatusBar, QAbstractItemView)
 from dialogs.json_examples_dialog import JsonExamplesDialog
 from dialogs.trash_dialog import TrashDialog
+from dialogs.shortcut_edit_dialog import ShortcutEditDialog
 from services.random_task_service import (
     pick_random_daily_task,
     pick_random_todo_task,
@@ -28,7 +29,7 @@ from managers.data_manager import DataManager, TaskType
 from models.model import DailyTask, TodoTask, EntertainmentTask
 from ui.task_edit_dialog import TaskEditDialog
 import config.config
-from components.ui_components import create_daily_tab_ui, create_todo_tab_ui, create_entertainment_tab_ui
+from components.ui_components import create_daily_tab_ui, create_todo_tab_ui, create_entertainment_tab_ui, create_shortcuts_tab_ui
 from utils.ui_messages import (show_statistics_dialog, show_about_dialog, show_random_daily_task_dialog,
                         show_random_todo_task_dialog, show_random_entertainment_task_dialog,
                         show_task_added_confirmation, show_task_updated_confirmation,
@@ -40,7 +41,7 @@ from components.ui_elements import create_menu_bar, create_toolbar
 from services.table_operations import (
     load_daily_tasks_to_table, load_todo_tasks_to_table, load_entertainment_tasks_to_table,
     toggle_daily_task_status, toggle_todo_task_status, toggle_entertainment_task_status,
-    sort_todo_table_by_column
+    sort_todo_table_by_column, load_shortcuts_to_table
 )
 from managers.data_manager import TaskType
 
@@ -73,10 +74,11 @@ class TaskManagerMainWindow(QMainWindow):
         self.tab_widget = QTabWidget()
         main_layout.addWidget(self.tab_widget)
 
-        # 创建三个标签页
+        # 创建三个标签页 + 快捷入口标签页
         self.create_daily_tab()
         self.create_todo_tab()
         self.create_entertainment_tab()
+        self.create_shortcuts_tab()
 
         # 创建菜单栏
         self.create_menu_bar()
@@ -112,11 +114,17 @@ class TaskManagerMainWindow(QMainWindow):
         entertainment_widget = create_entertainment_tab_ui(self)
         self.tab_widget.addTab(entertainment_widget, '娱乐任务')
 
+    def create_shortcuts_tab(self):
+        """创建快捷入口标签页"""
+        shortcuts_widget = create_shortcuts_tab_ui(self)
+        self.tab_widget.addTab(shortcuts_widget, '快捷入口')
+
     def load_data(self):
         """加载所有数据"""
         self.load_daily_tasks()
         self.load_todo_tasks()
         self.load_entertainment_tasks()
+        self.load_shortcuts()
         self.update_status_bar()
 
     def load_daily_tasks(self):
@@ -348,6 +356,121 @@ class TaskManagerMainWindow(QMainWindow):
             self.load_entertainment_tasks()
             show_task_deleted_confirmation('entertainment', self)
             self.status_bar.showMessage('娱乐任务删除成功')
+
+    # ==================== 快捷入口相关方法 ====================
+
+    def load_shortcuts(self):
+        """加载快捷入口"""
+        load_shortcuts_to_table(self)
+
+    def add_shortcut(self):
+        """添加快捷入口"""
+        dialog = ShortcutEditDialog(self, data_manager=self.data_manager)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            data = dialog.get_data()
+            if not data['title']:
+                QMessageBox.warning(self, '警告', '请输入快捷入口名称')
+                return
+            if not data['shortcut_path']:
+                QMessageBox.warning(self, '警告', '请拖拽文件或文件夹到对话框中')
+                return
+            # 默认添加到待办分类
+            self.data_manager.create_shortcut('todo', data['title'], data['shortcut_path'])
+            self.load_shortcuts()
+            show_task_added_confirmation('shortcut', self)
+            self.status_bar.showMessage('快捷入口添加成功')
+
+    def edit_shortcut(self):
+        """编辑选中的快捷入口"""
+        row = self.shortcuts_table.currentRow()
+        if row < 0:
+            warn_no_task_selected()
+            return
+        btn = self.shortcuts_table.cellWidget(row, 0)
+        if btn is None:
+            return
+        shortcut_id = btn.property('task_id')
+        if not shortcut_id:
+            return
+
+        # 获取当前数据
+        shortcuts = self.data_manager.get_all_shortcuts()
+        shortcut_data = None
+        for s in shortcuts:
+            if s['id'] == shortcut_id:
+                shortcut_data = s
+                break
+        if not shortcut_data:
+            return
+
+        dialog = ShortcutEditDialog(
+            self,
+            data_manager=self.data_manager,
+            initial_title=shortcut_data['title'],
+            initial_path=shortcut_data['shortcut_path']
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            data = dialog.get_data()
+            if not data['title']:
+                QMessageBox.warning(self, '警告', '请输入快捷入口名称')
+                return
+            self.data_manager.update_shortcut(
+                shortcut_id,
+                title=data['title'],
+                shortcut_path=data['shortcut_path']
+            )
+            self.load_shortcuts()
+            show_task_updated_confirmation('shortcut', self)
+            self.status_bar.showMessage('快捷入口更新成功')
+
+    def delete_shortcut(self):
+        """删除选中的快捷入口（不经过垃圾桶）"""
+        row = self.shortcuts_table.currentRow()
+        if row < 0:
+            warn_no_task_selected()
+            return
+        btn = self.shortcuts_table.cellWidget(row, 0)
+        if btn is None:
+            return
+        shortcut_id = btn.property('task_id')
+        if not shortcut_id:
+            return
+        reply = confirm_task_deletion()
+        if reply == QMessageBox.StandardButton.Yes:
+            self.data_manager.delete_shortcut(shortcut_id)
+            self.load_shortcuts()
+            show_task_deleted_confirmation('shortcut', self)
+            self.status_bar.showMessage('快捷入口删除成功')
+
+    def open_shortcut(self):
+        """打开选中的快捷入口（直接打开文件或文件夹）"""
+        row = self.shortcuts_table.currentRow()
+        if row < 0:
+            warn_no_task_selected()
+            return
+        btn = self.shortcuts_table.cellWidget(row, 0)
+        if btn is None:
+            return
+        shortcut_path = btn.toolTip() if btn.toolTip() else ''
+        if not shortcut_path:
+            item = self.shortcuts_table.item(row, 2)
+            if item:
+                shortcut_path = item.text()
+        if shortcut_path and shortcut_path != '-':
+            from PyQt6.QtGui import QDesktopServices
+            from PyQt6.QtCore import QUrl
+            import os
+            if os.path.isfile(shortcut_path):
+                QDesktopServices.openUrl(QUrl.fromLocalFile(shortcut_path))
+            elif os.path.isdir(shortcut_path):
+                QDesktopServices.openUrl(QUrl.fromLocalFile(shortcut_path))
+
+    def on_shortcuts_cell_clicked(self, row, col):
+        """快捷入口表格单击处理（列0时直接打开）"""
+        if col == 0:
+            btn = self.shortcuts_table.cellWidget(row, 0)
+            if btn:
+                btn.click()  # 触发按钮点击 = 直接打开
 
     def random_daily_task(self):
         """随机抽取每日任务(根据当前筛选条件)"""
