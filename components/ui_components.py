@@ -15,6 +15,19 @@ from managers.data_manager import TaskType
 import os
 
 
+def on_tag_filter_clicked(parent_window, tag: str, task_type: str):
+    """标签筛选点击处理"""
+    attr_name = 'current_tag_filter'
+    setattr(parent_window, attr_name, tag)
+
+    if task_type == 'daily':
+        parent_window.load_daily_tasks()
+    elif task_type == 'todo':
+        parent_window.load_todo_tasks()
+    elif task_type == 'entertainment':
+        parent_window.load_entertainment_tasks()
+
+
 def create_daily_tab_ui(parent_window):
     """创建每日任务标签页"""
     daily_widget = QWidget()
