@@ -1,0 +1,116 @@
+"""
+快捷入口管理器 - 封装快捷入口数据库的所有操作
+隔离外部系统（快捷入口DB），遵循仓储模式
+"""
+
+from datetime import datetime
+import uuid
+import sqlite3
+import config.config
+from typing import List, Dict, Any, Optional
+
+
+class ShortcutManager:
+    """快捷入口管理器，负责 shortcut_entries 表的所有操作"""
+
+    def __init__(self, db_path: str = None):
+        if db_path is None:
+            db_path = config.config.DATABASE_PATH
+        self._conn = sqlite3.connect(db_path)
+        self._init_db()
+
+    def _init_db(self):
+        """初始化快捷入口表结构"""
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS shortcut_entries (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                shortcut_path TEXT NOT NULL DEFAULT '',
+                category TEXT NOT NULL DEFAULT 'todo',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        self._conn.commit()
+
+    def get_all(self) -> List[Dict[str, Any]]:
+        """获取所有快捷入口"""
+        cursor = self._conn.execute(
+            "SELECT id, title, shortcut_path, category, created_at FROM shortcut_entries ORDER BY created_at DESC"
+        )
+        shortcuts = []
+        for row in cursor.fetchall():
+            sid, title, path, category, created = row
+            shortcuts.append({
+                'id': sid,
+                'task_id': sid,
+                'task_type': category,
+                'title': title,
+                'shortcut_path': path or '',
+                'created_at': created or '-'
+            })
+        return shortcuts
+
+    def create(self, task_type: str, title: str, shortcut_path: str) -> bool:
+        """创建快捷入口"""
+        now = datetime.now().isoformat()
+        sid = str(uuid.uuid4())
+        self._conn.execute(
+            "INSERT INTO shortcut_entries (id, title, shortcut_path, category, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (sid, title, shortcut_path, task_type, now, now)
+        )
+        self._conn.commit()
+        return True
+
+    def update(self, shortcut_id: str, title: str = None, shortcut_path: str = None) -> bool:
+        """更新快捷入口"""
+        updates = []
+        params = []
+        if title is not None:
+            updates.append("title = ?")
+            params.append(title)
+        if shortcut_path is not None:
+            updates.append("shortcut_path = ?")
+            params.append(shortcut_path)
+        if not updates:
+            return False
+        updates.append("updated_at = ?")
+        params.append(datetime.now().isoformat())
+        params.append(shortcut_id)
+        self._conn.execute(
+            f"UPDATE shortcut_entries SET {', '.join(updates)} WHERE id = ?",
+            params
+        )
+        self._conn.commit()
+        return True
+
+    def get_by_id(self, shortcut_id: str) -> Optional[Dict[str, Any]]:
+        """根据ID获取快捷入口"""
+        cursor = self._conn.execute(
+            "SELECT id, title, shortcut_path, category, created_at FROM shortcut_entries WHERE id = ?",
+            (shortcut_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        sid, title, path, category, created = row
+        return {
+            'id': sid, 'title': title, 'shortcut_path': path or '',
+            'category': category, 'created_at': created
+        }
+
+    def delete(self, shortcut_id: str) -> Optional[Dict[str, Any]]:
+        """删除快捷入口（返回删除的数据供垃圾箱使用）"""
+        shortcut = self.get_by_id(shortcut_id)
+        if not shortcut:
+            return None
+        self._conn.execute("DELETE FROM shortcut_entries WHERE id = ?", (shortcut_id,))
+        self._conn.commit()
+        return shortcut
+
+    def close(self):
+        """关闭数据库连接"""
+        if hasattr(self, '_conn') and self._conn:
+            self._conn.close()
+            self._conn = None
