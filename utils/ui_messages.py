@@ -179,6 +179,16 @@ def confirm_task_deletion():
     )
 
 
+def confirm_batch_deletion(count: int):
+    """确认批量删除对话框"""
+    return QMessageBox.question(
+        None,
+        '确认',
+        f'确定要删除这 {count} 个任务吗？',
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+    )
+
+
 def confirm_data_import():
     """确认数据导入对话框"""
     return QMessageBox.question(

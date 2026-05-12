@@ -14,6 +14,7 @@ from utils.ui_messages import (
     show_task_deleted_confirmation,
     warn_no_task_selected,
     confirm_task_deletion,
+    confirm_batch_deletion,
     show_random_daily_task_dialog,
     show_random_todo_task_dialog,
     show_random_entertainment_task_dialog,
@@ -86,19 +87,26 @@ class TaskOperationHandler:
         self._w.status_bar.showMessage('每日任务更新成功')
 
     def delete_daily_task(self):
-        """删除选中的每日任务"""
-        row = self._w.daily_table.currentRow()
-        if row < 0:
+        """删除选中的每日任务（支持批量）"""
+        selected_rows = self._w.daily_table.selectionModel().selectedRows()
+        if not selected_rows:
             warn_no_task_selected()
             return
-        if confirm_task_deletion() != QMessageBox.StandardButton.Yes:
+        count = len(selected_rows)
+        if confirm_batch_deletion(count) != QMessageBox.StandardButton.Yes:
             return
-        item = self._w.daily_table.item(row, 0)
-        task_id = item.data(Qt.ItemDataRole.UserRole)
-        self._w.data_manager.delete_daily_task(task_id)
+        deleted = 0
+        for row_obj in selected_rows:
+            row = row_obj.row()
+            item = self._w.daily_table.item(row, 0)
+            if item is None:
+                continue
+            task_id = item.data(Qt.ItemDataRole.UserRole)
+            if task_id and self._w.data_manager.delete_daily_task(task_id):
+                deleted += 1
         self._w.load_daily_tasks()
         show_task_deleted_confirmation('daily', self._w)
-        self._w.status_bar.showMessage('每日任务删除成功')
+        self._w.status_bar.showMessage(f'每日任务删除成功 ({deleted}/{count})')
 
     def reset_today_daily_tasks(self):
         """手动重置今日已完成的每日任务"""
@@ -183,19 +191,26 @@ class TaskOperationHandler:
         self._w.status_bar.showMessage('待办事项更新成功')
 
     def delete_todo_task(self):
-        """删除选中的待办事项"""
-        row = self._w.todo_table.currentRow()
-        if row < 0:
+        """删除选中的待办事项（支持批量）"""
+        selected_rows = self._w.todo_table.selectionModel().selectedRows()
+        if not selected_rows:
             warn_no_task_selected()
             return
-        if confirm_task_deletion() != QMessageBox.StandardButton.Yes:
+        count = len(selected_rows)
+        if confirm_batch_deletion(count) != QMessageBox.StandardButton.Yes:
             return
-        item = self._w.todo_table.item(row, 0)
-        task_id = item.data(Qt.ItemDataRole.UserRole)
-        self._w.data_manager.delete_todo_task(task_id)
+        deleted = 0
+        for row_obj in selected_rows:
+            row = row_obj.row()
+            item = self._w.todo_table.item(row, 0)
+            if item is None:
+                continue
+            task_id = item.data(Qt.ItemDataRole.UserRole)
+            if task_id and self._w.data_manager.delete_todo_task(task_id):
+                deleted += 1
         self._w.load_todo_tasks()
         show_task_deleted_confirmation('todo', self._w)
-        self._w.status_bar.showMessage('待办事项删除成功')
+        self._w.status_bar.showMessage(f'待办事项删除成功 ({deleted}/{count})')
 
     def random_todo_task(self):
         """随机抽取待办事项（按权重）"""
@@ -254,19 +269,26 @@ class TaskOperationHandler:
         self._w.status_bar.showMessage('娱乐任务更新成功')
 
     def delete_entertainment_task(self):
-        """删除选中的娱乐任务"""
-        row = self._w.entertainment_table.currentRow()
-        if row < 0:
+        """删除选中的娱乐任务（支持批量）"""
+        selected_rows = self._w.entertainment_table.selectionModel().selectedRows()
+        if not selected_rows:
             warn_no_task_selected()
             return
-        if confirm_task_deletion() != QMessageBox.StandardButton.Yes:
+        count = len(selected_rows)
+        if confirm_batch_deletion(count) != QMessageBox.StandardButton.Yes:
             return
-        item = self._w.entertainment_table.item(row, 0)
-        task_id = item.data(Qt.ItemDataRole.UserRole)
-        self._w.data_manager.delete_entertainment_task(task_id)
+        deleted = 0
+        for row_obj in selected_rows:
+            row = row_obj.row()
+            item = self._w.entertainment_table.item(row, 0)
+            if item is None:
+                continue
+            task_id = item.data(Qt.ItemDataRole.UserRole)
+            if task_id and self._w.data_manager.delete_entertainment_task(task_id):
+                deleted += 1
         self._w.load_entertainment_tasks()
         show_task_deleted_confirmation('entertainment', self._w)
-        self._w.status_bar.showMessage('娱乐任务删除成功')
+        self._w.status_bar.showMessage(f'娱乐任务删除成功 ({deleted}/{count})')
 
     def random_entertainment_task(self):
         """随机抽取娱乐任务"""
@@ -334,23 +356,26 @@ class TaskOperationHandler:
         self._w.status_bar.showMessage('快捷入口更新成功')
 
     def delete_shortcut(self):
-        """删除选中的快捷入口（不经过垃圾桶）"""
-        row = self._w.shortcuts_table.currentRow()
-        if row < 0:
+        """删除选中的快捷入口（支持批量，不经过垃圾桶）"""
+        selected_rows = self._w.shortcuts_table.selectionModel().selectedRows()
+        if not selected_rows:
             warn_no_task_selected()
             return
-        btn = self._w.shortcuts_table.cellWidget(row, 0)
-        if btn is None:
+        count = len(selected_rows)
+        if confirm_batch_deletion(count) != QMessageBox.StandardButton.Yes:
             return
-        shortcut_id = btn.property('task_id')
-        if not shortcut_id:
-            return
-        if confirm_task_deletion() != QMessageBox.StandardButton.Yes:
-            return
-        self._w.data_manager.delete_shortcut(shortcut_id)
+        deleted = 0
+        for row_obj in selected_rows:
+            row = row_obj.row()
+            btn = self._w.shortcuts_table.cellWidget(row, 0)
+            if btn is None:
+                continue
+            shortcut_id = btn.property('task_id')
+            if shortcut_id and self._w.data_manager.delete_shortcut(shortcut_id):
+                deleted += 1
         self._w.load_shortcuts()
         show_task_deleted_confirmation('shortcut', self._w)
-        self._w.status_bar.showMessage('快捷入口删除成功')
+        self._w.status_bar.showMessage(f'快捷入口删除成功 ({deleted}/{count})')
 
     def on_shortcuts_cell_clicked(self, row, col):
         """快捷入口表格单击处理（列0时触发按钮点击）"""
