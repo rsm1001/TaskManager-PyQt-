@@ -414,6 +414,13 @@ class DataManager:
             if unused:
                 remaining = stored_tags - unused
                 self.tag_manager._save_tags(category, sorted(remaining))
+                # 同时清理 visible_tags_{category} 中也已不存在的标签，保持标签栏显示同步
+                visible_key = f'visible_tags_{category}'
+                visible_val = self.config_manager.get(visible_key, '')
+                if visible_val:
+                    visible_tags = [t.strip() for t in visible_val.split(',') if t.strip()]
+                    cleaned_visible = [t for t in visible_tags if t in remaining]
+                    self.config_manager.set(visible_key, ','.join(cleaned_visible))
                 result[category] = len(unused)
             else:
                 result[category] = 0
