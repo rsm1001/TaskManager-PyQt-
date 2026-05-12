@@ -5,7 +5,7 @@
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QScrollArea, QFrame, QDialog, QCheckBox,
-                             QGridLayout, QDialogButtonBox, QMessageBox)
+                             QGridLayout, QDialogButtonBox, QMessageBox, QLineEdit)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from managers.data_manager import DataManager, TaskType
@@ -317,6 +317,7 @@ class TagEditorDialog(QDialog):
         self.task_type = task_type
         self.max_display = max_display
         self.checkboxes = {}
+        self.no_match_label = None  # 搜索无结果提示标签
         self.init_ui()
     
     def init_ui(self):
@@ -331,6 +332,15 @@ class TagEditorDialog(QDialog):
         info_label = QLabel(f"选择要显示在标签栏的标签（最多 {self.max_display} 个）：")
         info_label.setStyleSheet("color: #666; margin-bottom: 10px;")
         layout.addWidget(info_label)
+        
+        # 搜索框
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel('搜索:'))
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText('输入标签名称筛选...')
+        self.search_edit.textChanged.connect(self.filter_tags_by_search)
+        search_layout.addWidget(self.search_edit)
+        layout.addLayout(search_layout)
         
         # 标签选择区域
         scroll = QScrollArea()
@@ -358,6 +368,12 @@ class TagEditorDialog(QDialog):
             if col >= 3:  # 每行3个
                 col = 0
                 row += 1
+        
+        # 无匹配提示标签（初始隐藏）
+        self.no_match_label = QLabel('无匹配标签')
+        self.no_match_label.setStyleSheet("color: gray;")
+        self.no_match_label.setVisible(False)
+        grid.addWidget(self.no_match_label, 0, 0, 1, 3)
         
         scroll.setWidget(container)
         layout.addWidget(scroll)
@@ -417,6 +433,24 @@ class TagEditorDialog(QDialog):
         
         return sorted(list(tags))
     
+    def filter_tags_by_search(self, search_text: str):
+        """根据搜索文本过滤标签复选框的显示"""
+        search_text = search_text.lower().strip()
+        has_visible = False
+        for tag, checkbox in self.checkboxes.items():
+            if search_text in tag.lower():
+                checkbox.setVisible(True)
+                has_visible = True
+            else:
+                checkbox.setVisible(False)
+        # 搜索无结果时显示提示
+        if not has_visible:
+            if self.no_match_label:
+                self.no_match_label.setVisible(True)
+        else:
+            if self.no_match_label:
+                self.no_match_label.setVisible(False)
+
     def on_checkbox_changed(self):
         """复选框状态变化处理"""
         selected_count = sum(1 for cb in self.checkboxes.values() if cb.isChecked())
