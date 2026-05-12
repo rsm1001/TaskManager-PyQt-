@@ -86,6 +86,15 @@ class TaskOperationHandler:
         show_task_updated_confirmation('daily', self._w)
         self._w.status_bar.showMessage('每日任务更新成功')
 
+    def _auto_cleanup_if_enabled(self):
+        """检查是否启用了自动清理，若是则执行并刷新标签栏"""
+        if self._w.is_auto_cleanup_enabled():
+            self._w.data_manager.cleanup_unused_tags()
+            self._w.daily_tag_filter.refresh_tags()
+            self._w.todo_tag_filter.refresh_tags()
+            self._w.entertainment_tag_filter.refresh_tags()
+            self._w.shortcut_tag_filter.refresh_tags()
+
     def delete_daily_task(self):
         """删除选中的每日任务（支持批量）"""
         selected_rows = self._w.daily_table.selectionModel().selectedRows()
@@ -105,6 +114,7 @@ class TaskOperationHandler:
             if task_id and self._w.data_manager.delete_daily_task(task_id):
                 deleted += 1
         self._w.load_daily_tasks()
+        self._auto_cleanup_if_enabled()
         show_task_deleted_confirmation('daily', self._w)
         self._w.status_bar.showMessage(f'每日任务删除成功 ({deleted}/{count})')
 
@@ -209,6 +219,7 @@ class TaskOperationHandler:
             if task_id and self._w.data_manager.delete_todo_task(task_id):
                 deleted += 1
         self._w.load_todo_tasks()
+        self._auto_cleanup_if_enabled()
         show_task_deleted_confirmation('todo', self._w)
         self._w.status_bar.showMessage(f'待办事项删除成功 ({deleted}/{count})')
 
@@ -287,6 +298,7 @@ class TaskOperationHandler:
             if task_id and self._w.data_manager.delete_entertainment_task(task_id):
                 deleted += 1
         self._w.load_entertainment_tasks()
+        self._auto_cleanup_if_enabled()
         show_task_deleted_confirmation('entertainment', self._w)
         self._w.status_bar.showMessage(f'娱乐任务删除成功 ({deleted}/{count})')
 

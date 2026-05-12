@@ -322,6 +322,28 @@ class TaskManagerMainWindow(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.load_data()
 
+    def is_auto_cleanup_enabled(self) -> bool:
+        """检查是否启用了自动检测删除未使用标签"""
+        return self.data_manager.get_config('auto_cleanup_unused_tags', '0') == '1'
+
+    def cleanup_unused_tags_manual(self):
+        """手动清理所有类别中未被任务使用的标签"""
+        result = self.data_manager.cleanup_unused_tags()
+        total_cleaned = sum(result.values())
+        self.daily_tag_filter.refresh_tags()
+        self.todo_tag_filter.refresh_tags()
+        self.entertainment_tag_filter.refresh_tags()
+        self.shortcut_tag_filter.refresh_tags()
+        QMessageBox.information(
+            self, '清理完成',
+            f'共清理了 {total_cleaned} 个未使用标签\n'
+            f'每日任务: {result.get("daily", 0)} 个\n'
+            f'待办事项: {result.get("todo", 0)} 个\n'
+            f'娱乐任务: {result.get("entertainment", 0)} 个\n'
+            f'快捷入口: {result.get("shortcut", 0)} 个'
+        )
+        self.status_bar.showMessage(f'标签清理完成，共删除 {total_cleaned} 个未使用标签')
+
 
 def main():
     """主函数"""

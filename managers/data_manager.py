@@ -361,6 +361,65 @@ class DataManager:
         """获取或创建类别标签"""
         return self.tag_manager.get_or_create(tag, category)
 
+    def cleanup_unused_tags(self) -> Dict[str, int]:
+        """
+        检测并删除所有类别中未被任务使用的标签库标签
+
+        Returns:
+            Dict[str, int]: 每个类别的清理结果，格式 {category: 删除数量}
+        """
+        categories = ['daily', 'todo', 'entertainment', 'shortcut']
+        result = {}
+
+        for category in categories:
+            # 从 configs 表读取该类别的标签库
+            stored_tags = set(self.tag_manager.get_all_tags(category))
+            if not stored_tags:
+                result[category] = 0
+                continue
+
+            # 收集该类别所有任务中实际在用的标签
+            in_use_tags = set()
+            if category == 'daily':
+                for task in self.get_daily_tasks():
+                    if task.tags:
+                        for t in task.tags.split(','):
+                            t = t.strip()
+                            if t:
+                                in_use_tags.add(t)
+            elif category == 'todo':
+                for task in self.get_todo_tasks():
+                    if task.tags:
+                        for t in task.tags.split(','):
+                            t = t.strip()
+                            if t:
+                                in_use_tags.add(t)
+            elif category == 'entertainment':
+                for task in self.get_entertainment_tasks():
+                    if task.tags:
+                        for t in task.tags.split(','):
+                            t = t.strip()
+                            if t:
+                                in_use_tags.add(t)
+            elif category == 'shortcut':
+                for s in self.get_all_shortcuts():
+                    if s.get('tags'):
+                        for t in s.get('tags').split(','):
+                            t = t.strip()
+                            if t:
+                                in_use_tags.add(t)
+
+            # 标签库中不在 in_use_tags 中的标签为未使用
+            unused = stored_tags - in_use_tags
+            if unused:
+                remaining = stored_tags - unused
+                self.tag_manager._save_tags(category, sorted(remaining))
+                result[category] = len(unused)
+            else:
+                result[category] = 0
+
+        return result
+
     # ==================== 每日重置（兼容旧调用） ====================
 
     def check_daily_reset(self):
