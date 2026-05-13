@@ -55,6 +55,7 @@ class TaskOperationHandler:
             tags=data.get('tags', '')
         )
         self._w.load_daily_tasks()
+        self._validate_and_refresh_filter('daily')
         show_task_added_confirmation('daily', self._w)
         self._w.status_bar.showMessage('每日任务添加成功')
 
@@ -83,6 +84,7 @@ class TaskOperationHandler:
             tags=data.get('tags', '')
         )
         self._w.load_daily_tasks()
+        self._validate_and_refresh_filter('daily')
         show_task_updated_confirmation('daily', self._w)
         self._w.status_bar.showMessage('每日任务更新成功')
 
@@ -94,6 +96,52 @@ class TaskOperationHandler:
             self._w.todo_tag_filter.refresh_tags()
             self._w.entertainment_tag_filter.refresh_tags()
             self._w.shortcut_tag_filter.refresh_tags()
+
+    def _validate_and_refresh_filter(self, task_type: str):
+        """
+        验证并刷新标签筛选状态。
+        当任务发生状态切换、更新、删除后调用，确保当前激活的标签筛选仍然有效。
+        如果当前标签在刷新后的可见标签列表中不存在，说明该标签已失效，清空筛选条件并重新加载。
+
+        Args:
+            task_type: 任务类型，取值 'daily'、'todo'、'entertainment'、'shortcuts'
+        """
+        # 获取当前激活的标签和对应的 FilterBar
+        if task_type == 'shortcuts':
+            current_tag = getattr(self._w, 'current_shortcut_tag_filter', '')
+            filter_bar = self._w.shortcut_tag_filter
+        else:
+            current_tag = self._w.current_tag_filter
+            filter_bar = getattr(self._w, f'{task_type}_tag_filter')
+
+        # 先刷新 FilterBar 使其获取最新标签列表
+        filter_bar.refresh_tags()
+        visible_tags = filter_bar.get_visible_tags()
+
+        # 如果当前标签不在可见列表中，说明该标签已失效
+        if current_tag and current_tag not in visible_tags:
+            # 清空标签筛选条件
+            if task_type == 'shortcuts':
+                self._w.current_shortcut_tag_filter = ''
+            else:
+                self._w.current_tag_filter = ''
+            # 重新加载（不带标签过滤），刷新 FilterBar 按钮状态
+            self._reload_tasks(task_type)
+            filter_bar.update_button_states()
+
+    def _reload_tasks(self, task_type: str):
+        """
+        根据任务类型重新加载对应的表格数据。
+        仅内部使用，不触发验证逻辑。
+        """
+        if task_type == 'daily':
+            self._w.load_daily_tasks()
+        elif task_type == 'todo':
+            self._w.load_todo_tasks()
+        elif task_type == 'entertainment':
+            self._w.load_entertainment_tasks()
+        elif task_type == 'shortcuts':
+            self._w.load_shortcuts()
 
     def delete_daily_task(self):
         """删除选中的每日任务（支持批量）"""
@@ -115,6 +163,7 @@ class TaskOperationHandler:
                 deleted += 1
         self._w.load_daily_tasks()
         self._auto_cleanup_if_enabled()
+        self._validate_and_refresh_filter('daily')
         show_task_deleted_confirmation('daily', self._w)
         self._w.status_bar.showMessage(f'每日任务删除成功 ({deleted}/{count})')
 
@@ -128,6 +177,7 @@ class TaskOperationHandler:
             return
         self._w.data_manager.reset_daily_tasks()
         self._w.load_daily_tasks()
+        self._validate_and_refresh_filter('daily')
         self._w.update_status_bar()
         self._w.status_bar.showMessage('今日任务已重置')
 
@@ -169,6 +219,7 @@ class TaskOperationHandler:
             tags=data.get('tags', '')
         )
         self._w.load_todo_tasks()
+        self._validate_and_refresh_filter('todo')
         show_task_added_confirmation('todo', self._w)
         self._w.status_bar.showMessage('待办事项添加成功')
 
@@ -197,6 +248,7 @@ class TaskOperationHandler:
             tags=data.get('tags', '')
         )
         self._w.load_todo_tasks()
+        self._validate_and_refresh_filter('todo')
         show_task_updated_confirmation('todo', self._w)
         self._w.status_bar.showMessage('待办事项更新成功')
 
@@ -220,6 +272,7 @@ class TaskOperationHandler:
                 deleted += 1
         self._w.load_todo_tasks()
         self._auto_cleanup_if_enabled()
+        self._validate_and_refresh_filter('todo')
         show_task_deleted_confirmation('todo', self._w)
         self._w.status_bar.showMessage(f'待办事项删除成功 ({deleted}/{count})')
 
@@ -248,6 +301,7 @@ class TaskOperationHandler:
             tags=data.get('tags', '')
         )
         self._w.load_entertainment_tasks()
+        self._validate_and_refresh_filter('entertainment')
         show_task_added_confirmation('entertainment', self._w)
         self._w.status_bar.showMessage('娱乐任务添加成功')
 
@@ -276,6 +330,7 @@ class TaskOperationHandler:
             tags=data.get('tags', '')
         )
         self._w.load_entertainment_tasks()
+        self._validate_and_refresh_filter('entertainment')
         show_task_updated_confirmation('entertainment', self._w)
         self._w.status_bar.showMessage('娱乐任务更新成功')
 
@@ -299,6 +354,7 @@ class TaskOperationHandler:
                 deleted += 1
         self._w.load_entertainment_tasks()
         self._auto_cleanup_if_enabled()
+        self._validate_and_refresh_filter('entertainment')
         show_task_deleted_confirmation('entertainment', self._w)
         self._w.status_bar.showMessage(f'娱乐任务删除成功 ({deleted}/{count})')
 
@@ -326,6 +382,7 @@ class TaskOperationHandler:
             return
         self._w.data_manager.create_shortcut('todo', data['title'], data['shortcut_path'], data.get('tags', ''))
         self._w.load_shortcuts()
+        self._validate_and_refresh_filter('shortcuts')
         show_task_added_confirmation('shortcut', self._w)
         self._w.status_bar.showMessage('快捷入口添加成功')
 
@@ -364,6 +421,7 @@ class TaskOperationHandler:
             tags=data.get('tags', '')
         )
         self._w.load_shortcuts()
+        self._validate_and_refresh_filter('shortcuts')
         show_task_updated_confirmation('shortcut', self._w)
         self._w.status_bar.showMessage('快捷入口更新成功')
 
@@ -386,6 +444,7 @@ class TaskOperationHandler:
             if shortcut_id and self._w.data_manager.delete_shortcut(shortcut_id):
                 deleted += 1
         self._w.load_shortcuts()
+        self._validate_and_refresh_filter('shortcuts')
         show_task_deleted_confirmation('shortcut', self._w)
         self._w.status_bar.showMessage(f'快捷入口删除成功 ({deleted}/{count})')
 
