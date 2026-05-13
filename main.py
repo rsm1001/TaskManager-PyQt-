@@ -49,6 +49,9 @@ class TaskManagerMainWindow(QMainWindow):
         # 初始化任务操作处理器
         self._task_handler = TaskOperationHandler(self)
         self.current_tag_filter = ""  # 当前标签筛选
+        # 状态切换防双击/防抖
+        self._status_switching_row = -1   # 当前正在处理状态切换的行（-1表示无）
+        self._status_switch_timestamps = {}  # task_id -> 上次切换时间戳(ms)
         self.init_ui()
         self.load_data()
 

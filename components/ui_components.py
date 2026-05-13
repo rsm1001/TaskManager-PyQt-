@@ -28,6 +28,14 @@ def on_tag_filter_clicked(parent_window, tag: str, task_type: str):
         parent_window.load_entertainment_tasks()
 
 
+def _wrap_edit_handler(handler):
+    """包装编辑事件处理器，拦截对状态栏(列0)的双击"""
+    def wrapper(row, col):
+        if col != 0:
+            handler()
+    return wrapper
+
+
 def create_daily_tab_ui(parent_window):
     """创建每日任务标签页"""
     daily_widget = QWidget()
@@ -95,7 +103,8 @@ def create_daily_tab_ui(parent_window):
     parent_window.daily_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.daily_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     parent_window.daily_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-    parent_window.daily_table.cellDoubleClicked.connect(parent_window.edit_daily_task)
+    parent_window.daily_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+    parent_window.daily_table.cellDoubleClicked.connect(_wrap_edit_handler(parent_window.edit_daily_task))
     parent_window.daily_table.cellClicked.connect(parent_window.toggle_daily_task_status)
 
     daily_layout.addWidget(parent_window.daily_table)
@@ -150,7 +159,8 @@ def create_todo_tab_ui(parent_window):
     parent_window.todo_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.todo_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     parent_window.todo_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-    parent_window.todo_table.cellDoubleClicked.connect(parent_window.edit_todo_task)
+    parent_window.todo_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+    parent_window.todo_table.cellDoubleClicked.connect(_wrap_edit_handler(parent_window.edit_todo_task))
     parent_window.todo_table.horizontalHeader().sectionClicked.connect(parent_window.sort_todo_table_by_column)
     parent_window.todo_sort_column = -1
     parent_window.todo_sort_order = Qt.SortOrder.AscendingOrder
@@ -209,7 +219,8 @@ def create_entertainment_tab_ui(parent_window):
     parent_window.entertainment_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.entertainment_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     parent_window.entertainment_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-    parent_window.entertainment_table.cellDoubleClicked.connect(parent_window.edit_entertainment_task)
+    parent_window.entertainment_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+    parent_window.entertainment_table.cellDoubleClicked.connect(_wrap_edit_handler(parent_window.edit_entertainment_task))
     parent_window.entertainment_table.cellClicked.connect(parent_window.toggle_entertainment_task_status)
 
     entertainment_layout.addWidget(parent_window.entertainment_table)
@@ -261,6 +272,7 @@ def create_shortcuts_tab_ui(parent_window):
     parent_window.shortcuts_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.shortcuts_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     parent_window.shortcuts_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    parent_window.shortcuts_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     parent_window.shortcuts_table.cellDoubleClicked.connect(parent_window.edit_shortcut)
     parent_window.shortcuts_table.cellClicked.connect(parent_window.on_shortcuts_cell_clicked)
 

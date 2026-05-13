@@ -98,14 +98,29 @@ def _open_shortcut_path(path):
         QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
 
-def _set_task_row_data(table, row, task, columns):
-    """设置普通任务表格行的数据"""
+def _set_task_row_data(table, row, task, columns, editable_cols=None):
+    """设置普通任务表格行的数据
+    
+    Args:
+        table: 表格控件
+        row: 行索引
+        task: 任务对象
+        columns: list of (col_idx, value) 元组
+        editable_cols: 允许编辑的列索引集合，None表示全部不可编辑（除status列外）
+    """
     status_text = config.STATUS_DISPLAY_MAP.get(task.status, '○')
     status_item = QTableWidgetItem(status_text)
     status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+    status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 状态栏不可编辑
     table.setItem(row, 0, status_item)
     for col_idx, value in columns:
-        table.setItem(row, col_idx, QTableWidgetItem(value))
+        item = QTableWidgetItem(value)
+        # editable_cols 为 None 时，默认所有列不可编辑（由 setEditTriggers 统一控制）
+        if editable_cols is not None and col_idx in editable_cols:
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+        else:
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        table.setItem(row, col_idx, item)
     status_item.setData(Qt.ItemDataRole.UserRole, task.id)
 
 
@@ -185,7 +200,7 @@ def load_entertainment_tasks_to_table(window):
             (4, task.description or '-'),
             (5, task.created_at.strftime('%Y-%m-%d'))
         ]
-        _set_task_row_data(window.entertainment_table, row, task, columns)
+        _set_task_row_data(window.entertainment_table, row, task, columns, editable_cols={1, 2, 3, 4})
 
     window.update_status_bar()
     # 验证并刷新标签筛选
@@ -212,7 +227,17 @@ def toggle_daily_task_status(window, row, column):
             return
         task_id = item.data(Qt.ItemDataRole.UserRole)
         if task_id:
+            import time
+            # 防抖：2秒内同一任务只触发一次
+            last_time = window._status_switch_timestamps.get(task_id, 0)
+            if time.time() * 1000 - last_time < 2000:
+                return
+            window._status_switch_timestamps[task_id] = time.time() * 1000
+            # 标记当前行，防止双击事件触发编辑
+            window._status_switching_row = row
             window.data_manager.toggle_daily_task_completion(task_id)
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: setattr(window, '_status_switching_row', -1))
             load_daily_tasks_to_table(window)
             window.daily_table.clearSelection()
 
@@ -225,7 +250,17 @@ def toggle_todo_task_status(window, row, column):
             return
         task_id = item.data(Qt.ItemDataRole.UserRole)
         if task_id:
+            import time
+            # 防抖：2秒内同一任务只触发一次
+            last_time = window._status_switch_timestamps.get(task_id, 0)
+            if time.time() * 1000 - last_time < 2000:
+                return
+            window._status_switch_timestamps[task_id] = time.time() * 1000
+            # 标记当前行，防止双击事件触发编辑
+            window._status_switching_row = row
             window.data_manager.toggle_todo_task_completion(task_id)
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: setattr(window, '_status_switching_row', -1))
             load_todo_tasks_to_table(window)
             window.todo_table.clearSelection()
 
@@ -238,7 +273,17 @@ def toggle_entertainment_task_status(window, row, column):
             return
         task_id = item.data(Qt.ItemDataRole.UserRole)
         if task_id:
+            import time
+            # 防抖：2秒内同一任务只触发一次
+            last_time = window._status_switch_timestamps.get(task_id, 0)
+            if time.time() * 1000 - last_time < 2000:
+                return
+            window._status_switch_timestamps[task_id] = time.time() * 1000
+            # 标记当前行，防止双击事件触发编辑
+            window._status_switching_row = row
             window.data_manager.toggle_entertainment_task_completion(task_id)
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: setattr(window, '_status_switching_row', -1))
             load_entertainment_tasks_to_table(window)
             window.entertainment_table.clearSelection()
 

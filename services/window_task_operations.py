@@ -65,6 +65,9 @@ class TaskOperationHandler:
         if row < 0:
             warn_no_task_selected()
             return
+        # 防双击：若此行正在切换状态，跳过编辑
+        if self._w._status_switching_row == row:
+            return
         item = self._w.daily_table.item(row, 0)
         task_id = item.data(Qt.ItemDataRole.UserRole)
         task = self._w.data_manager.get_daily_task_by_id(task_id)
@@ -229,6 +232,9 @@ class TaskOperationHandler:
         if row < 0:
             warn_no_task_selected()
             return
+        # 防双击：若此行正在切换状态，跳过编辑
+        if self._w._status_switching_row == row:
+            return
         item = self._w.todo_table.item(row, 0)
         task_id = item.data(Qt.ItemDataRole.UserRole)
         task = self._w.data_manager.get_todo_task_by_id(task_id)
@@ -310,6 +316,9 @@ class TaskOperationHandler:
         row = self._w.entertainment_table.currentRow()
         if row < 0:
             warn_no_task_selected()
+            return
+        # 防双击：若此行正在切换状态，跳过编辑
+        if self._w._status_switching_row == row:
             return
         item = self._w.entertainment_table.item(row, 0)
         task_id = item.data(Qt.ItemDataRole.UserRole)
