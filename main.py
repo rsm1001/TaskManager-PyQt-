@@ -273,15 +273,15 @@ class TaskManagerMainWindow(QMainWindow):
         )
         if not filepath:
             return
-        if confirm_data_import() != QMessageBox.StandardButton.Yes:
+        if confirm_data_import(self) != QMessageBox.StandardButton.Yes:
             return
         success = self.data_manager.import_from_json(filepath)
         if success:
             self.load_data()
-            show_import_success()
+            show_import_success(self)
             self.status_bar.showMessage('数据导入成功')
         else:
-            show_import_failure()
+            show_import_failure(self)
             self.status_bar.showMessage('数据导入失败')
 
     # ==================== 其他 ====================
@@ -298,7 +298,7 @@ class TaskManagerMainWindow(QMainWindow):
 
     def show_about(self):
         """显示关于信息"""
-        show_about_dialog()
+        show_about_dialog(self)
 
     def update_status_bar(self):
         """更新状态栏"""

@@ -151,8 +151,6 @@ def load_daily_tasks_to_table(window):
         _set_task_row_data(window.daily_table, row, task, columns)
 
     window.update_status_bar()
-    # 验证并刷新标签筛选（处理标签失效导致空列表的问题）
-    window._task_handler._validate_and_refresh_filter('daily')
 
 
 def load_todo_tasks_to_table(window):
@@ -180,8 +178,6 @@ def load_todo_tasks_to_table(window):
         _set_task_row_data(window.todo_table, row, task, columns)
 
     window.update_status_bar()
-    # 验证并刷新标签筛选
-    window._task_handler._validate_and_refresh_filter('todo')
 
 
 def load_entertainment_tasks_to_table(window):
@@ -203,8 +199,6 @@ def load_entertainment_tasks_to_table(window):
         _set_task_row_data(window.entertainment_table, row, task, columns, editable_cols={1, 2, 3, 4})
 
     window.update_status_bar()
-    # 验证并刷新标签筛选
-    window._task_handler._validate_and_refresh_filter('entertainment')
 
 
 def load_shortcuts_to_table(window):
@@ -214,9 +208,6 @@ def load_shortcuts_to_table(window):
     window.shortcuts_table.setRowCount(len(shortcuts))
     for row, item in enumerate(shortcuts):
         _render_shortcut_row(window.shortcuts_table, row, item)
-
-    # 验证并刷新标签筛选
-    window._task_handler._validate_and_refresh_filter('shortcuts')
 
 
 def toggle_daily_task_status(window, row, column):

@@ -150,10 +150,10 @@ class TaskOperationHandler:
         """删除选中的每日任务（支持批量）"""
         selected_rows = self._w.daily_table.selectionModel().selectedRows()
         if not selected_rows:
-            warn_no_task_selected()
+            warn_no_task_selected(self._w)
             return
         count = len(selected_rows)
-        if confirm_batch_deletion(count) != QMessageBox.StandardButton.Yes:
+        if confirm_batch_deletion(count, self._w) != QMessageBox.StandardButton.Yes:
             return
         deleted = 0
         for row_obj in selected_rows:
@@ -182,6 +182,7 @@ class TaskOperationHandler:
         self._w.load_daily_tasks()
         self._validate_and_refresh_filter('daily')
         self._w.update_status_bar()
+        show_task_updated_confirmation('daily', self._w)
         self._w.status_bar.showMessage('今日任务已重置')
 
     def random_daily_task(self):
@@ -199,11 +200,11 @@ class TaskOperationHandler:
             tasks = self._w.data_manager.get_daily_tasks(weekday=weekday_filter, status=status_filter)
             msg = '没有符合条件的每日任务' if not tasks else None
             if msg:
-                inform_no_suitable_tasks(msg)
+                inform_no_suitable_tasks(msg, self._w)
             else:
-                inform_no_pending_tasks('daily')
+                inform_no_pending_tasks('daily', self._w)
             return
-        show_random_daily_task_dialog(task)
+        show_random_daily_task_dialog(task, self._w)
 
     # ==================== 待办事项 ====================
 
@@ -230,7 +231,7 @@ class TaskOperationHandler:
         """编辑选中的待办事项"""
         row = self._w.todo_table.currentRow()
         if row < 0:
-            warn_no_task_selected()
+            warn_no_task_selected(self._w)
             return
         # 防双击：若此行正在切换状态，跳过编辑
         if self._w._status_switching_row == row:
@@ -262,10 +263,10 @@ class TaskOperationHandler:
         """删除选中的待办事项（支持批量）"""
         selected_rows = self._w.todo_table.selectionModel().selectedRows()
         if not selected_rows:
-            warn_no_task_selected()
+            warn_no_task_selected(self._w)
             return
         count = len(selected_rows)
-        if confirm_batch_deletion(count) != QMessageBox.StandardButton.Yes:
+        if confirm_batch_deletion(count, self._w) != QMessageBox.StandardButton.Yes:
             return
         deleted = 0
         for row_obj in selected_rows:
@@ -286,9 +287,9 @@ class TaskOperationHandler:
         """随机抽取待办事项（按权重）"""
         task = pick_random_todo_task(self._w.data_manager)
         if task is None:
-            inform_no_pending_tasks('todo')
+            inform_no_pending_tasks('todo', self._w)
             return
-        show_random_todo_task_dialog(task)
+        show_random_todo_task_dialog(task, self._w)
 
     # ==================== 娱乐任务 ====================
 
@@ -315,7 +316,7 @@ class TaskOperationHandler:
         """编辑选中的娱乐任务"""
         row = self._w.entertainment_table.currentRow()
         if row < 0:
-            warn_no_task_selected()
+            warn_no_task_selected(self._w)
             return
         # 防双击：若此行正在切换状态，跳过编辑
         if self._w._status_switching_row == row:
@@ -347,10 +348,10 @@ class TaskOperationHandler:
         """删除选中的娱乐任务（支持批量）"""
         selected_rows = self._w.entertainment_table.selectionModel().selectedRows()
         if not selected_rows:
-            warn_no_task_selected()
+            warn_no_task_selected(self._w)
             return
         count = len(selected_rows)
-        if confirm_batch_deletion(count) != QMessageBox.StandardButton.Yes:
+        if confirm_batch_deletion(count, self._w) != QMessageBox.StandardButton.Yes:
             return
         deleted = 0
         for row_obj in selected_rows:
@@ -371,9 +372,9 @@ class TaskOperationHandler:
         """随机抽取娱乐任务"""
         task = pick_random_entertainment_task(self._w.data_manager)
         if task is None:
-            inform_no_pending_tasks('entertainment')
+            inform_no_pending_tasks('entertainment', self._w)
             return
-        show_random_entertainment_task_dialog(task)
+        show_random_entertainment_task_dialog(task, self._w)
 
     # ==================== 快捷入口 ====================
 

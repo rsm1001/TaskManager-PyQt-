@@ -3,7 +3,7 @@ Task Manager Messages and Utilities Module
 将原来的主界面中的消息文本、对话框逻辑和工具函数分离出来以实现解耦
 """
 
-from PyQt6.QtWidgets import QMessageBox, QLabel, QGraphicsOpacityEffect
+from PyQt6.QtWidgets import QMessageBox, QLabel
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QColor
 import config.config as config
@@ -11,68 +11,92 @@ import config.config as config
 
 class ToastMessage(QLabel):
     """自动消失的提示消息（Toast样式）"""
-    
+
+    _instance = None  # 类变量：追踪唯一活跃实例
+
     def __init__(self, text, parent=None, duration=None):
-        """
-        Args:
-            text: 显示文本
-            parent: 父窗口
-            duration: 显示时长（毫秒），默认从配置读取
-        """
         super().__init__(text, parent)
         self.duration = duration if duration is not None else config.TOAST_DURATION_MS
-        self.setup_ui()
-        
-    def setup_ui(self):
-        """设置UI样式"""
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint
+        )
         self.setStyleSheet(config.TOAST_STYLE)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.adjustSize()
-        
-        # 设置透明度效果用于淡出动画
-        self.opacity_effect = QGraphicsOpacityEffect(self)
-        self.opacity_effect.setOpacity(1.0)
-        self.setGraphicsEffect(self.opacity_effect)
-        
+        self.setMargin(10)
+        self.setMinimumSize(200, 40)
+        self._fade_timer = None
+
     def show_at_center(self):
         """在父窗口中央显示"""
+        # 同步清理可能残留的旧实例
+        if ToastMessage._instance is not None and ToastMessage._instance != self:
+            try:
+                old = ToastMessage._instance
+                # 停止旧实例的淡出计时器
+                if old._fade_timer:
+                    old._fade_timer.stop()
+                    old._fade_timer = None
+                # 隐藏并销毁旧窗口（同步方式）
+                old.hide()
+                old.deleteLater()
+            except Exception:
+                pass
+            ToastMessage._instance = None
+
+        ToastMessage._instance = self
+        self.adjustSize()
+        if self.width() < 200:
+            self.resize(200, self.height())
+        if self.height() < 40:
+            self.resize(self.width(), 40)
+
         if self.parent():
-            parent_rect = self.parent().geometry()
-            x = parent_rect.x() + (parent_rect.width() - self.width()) // 2
-            y = parent_rect.y() + parent_rect.height() // 2 - 50
+            top_level = self.parent().window()
+            geo = top_level.geometry()
+            x = geo.x() + (geo.width() - self.width()) // 2
+            y = geo.y() + (geo.height() - self.height()) // 2
             self.move(x, y)
+
         self.show()
-        self.raise_()
-        
-        # 启动定时器，延迟后淡出
-        QTimer.singleShot(self.duration, self.start_fade_out)
-        
-    def start_fade_out(self):
-        """开始淡出动画"""
-        self.fade_timer = QTimer(self)
-        self.fade_timer.timeout.connect(self.fade_step)
-        self.fade_timer.start(50)
+        QTimer.singleShot(self.duration, self._do_fade_out)
+
+    def _do_fade_out(self):
+        if ToastMessage._instance != self:
+            return
+        self._fade_timer = QTimer(self)
+        self._fade_timer.timeout.connect(self._fade_step)
+        self._fade_timer.start(50)
         self.current_opacity = 1.0
-        
-    def fade_step(self):
-        """淡出步骤"""
+
+    def _fade_step(self):
+        if ToastMessage._instance != self:
+            self._fade_timer.stop()
+            return
         self.current_opacity -= config.TOAST_FADE_STEP
         if self.current_opacity <= 0:
-            self.fade_timer.stop()
+            self._fade_timer.stop()
+            ToastMessage._instance = None
             self.close()
             self.deleteLater()
         else:
-            self.opacity_effect.setOpacity(self.current_opacity)
+            self.setWindowOpacity(self.current_opacity)
 
 
 def show_toast(parent, text, duration=None):
     """显示自动消失的提示消息
-    
+
     Args:
         parent: 父窗口
         text: 显示文本
         duration: 显示时长（毫秒），默认从配置读取
     """
+    # 防御性检查：parent 为 None 或 text 为空时不创建无效窗口
+    if not parent or not text:
+        return
+    # 防止重复创建：如果已有 toast 在显示，忽略本次请求
+    if ToastMessage._instance is not None:
+        return
     toast = ToastMessage(text, parent, duration)
     toast.show_at_center()
 
@@ -81,7 +105,7 @@ def show_toast(parent, text, duration=None):
 MESSAGES = config.MESSAGES
 
 
-def show_statistics_dialog(stats):
+def show_statistics_dialog(stats, parent=None):
     """显示统计信息对话框"""
     msg = f"""统计信息：
     
@@ -92,12 +116,12 @@ def show_statistics_dialog(stats):
 总计：{stats['daily']['total'] + stats['todo']['total'] + stats['entertainment']['total']} 个任务
 已完成：{stats['daily']['completed'] + stats['todo']['completed'] + stats['entertainment']['completed']} 个"""
 
-    QMessageBox.information(None, '统计信息', msg)
+    QMessageBox.information(parent, '统计信息', msg)
 
 
-def show_about_dialog():
+def show_about_dialog(parent=None):
     """显示关于信息对话框"""
-    QMessageBox.about(None, '关于', '''任务管理系统 v1.0
+    QMessageBox.about(parent, '关于', '''任务管理系统 v1.0
 
 功能：
 - 每日必做任务管理（支持按星期分类）
@@ -113,21 +137,21 @@ def show_about_dialog():
 日期：2026年''')
 
 
-def show_random_daily_task_dialog(task):
+def show_random_daily_task_dialog(task, parent=None):
     """显示随机抽取的每日任务对话框"""
     weekday_display = task.week_day if task.week_day else '每天'
-    QMessageBox.information(None, '随机抽取', f'建议处理任务：\n\n标题：{task.title}\n星期：{weekday_display}')
+    QMessageBox.information(parent, '随机抽取', f'建议处理任务：\n\n标题：{task.title}\n星期：{weekday_display}')
 
 
-def show_random_todo_task_dialog(task):
+def show_random_todo_task_dialog(task, parent=None):
     """显示随机抽取的待办任务对话框"""
-    QMessageBox.information(None, '随机抽取', 
+    QMessageBox.information(parent, '随机抽取', 
                            f'建议处理任务：\n\n标题：{task.title}\n截止日期：{task.deadline or "无"}\n紧急度：{task.urgency_score}')
 
 
-def show_random_entertainment_task_dialog(task):
+def show_random_entertainment_task_dialog(task, parent=None):
     """显示随机抽取的娱乐任务对话框"""
-    QMessageBox.information(None, '随机抽取', f'建议娱乐：\n\n{task.title}')
+    QMessageBox.information(parent, '随机抽取', f'建议娱乐：\n\n{task.title}')
 
 
 def show_task_added_confirmation(task_type, parent=None):
@@ -169,70 +193,70 @@ def show_task_deleted_confirmation(task_type, parent=None):
     return message
 
 
-def confirm_task_deletion():
+def confirm_task_deletion(parent=None):
     """确认任务删除对话框"""
     return QMessageBox.question(
-        None, 
+        parent, 
         '确认', 
         '确定要删除这个任务吗？', 
         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
     )
 
 
-def confirm_batch_deletion(count: int):
+def confirm_batch_deletion(count: int, parent=None):
     """确认批量删除对话框"""
     return QMessageBox.question(
-        None,
+        parent,
         '确认',
         f'确定要删除这 {count} 个任务吗？',
         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
     )
 
 
-def confirm_data_import():
+def confirm_data_import(parent=None):
     """确认数据导入对话框"""
     return QMessageBox.question(
-        None, 
+        parent, 
         '确认', 
         '导入数据将会覆盖现有数据，确定继续？', 
         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
     )
 
 
-def show_import_success():
+def show_import_success(parent=None):
     """显示导入成功消息"""
-    return QMessageBox.information(None, '成功', '数据导入成功')
+    return QMessageBox.information(parent, '成功', '数据导入成功')
 
 
-def show_import_failure():
+def show_import_failure(parent=None):
     """显示导入失败消息"""
-    return QMessageBox.critical(None, '错误', '数据导入失败，请检查JSON文件格式是否正确')
+    return QMessageBox.critical(parent, '错误', '数据导入失败，请检查JSON文件格式是否正确')
 
 
-def show_export_success():
+def show_export_success(parent=None):
     """显示导出成功消息"""
-    return QMessageBox.information(None, '成功', '数据导出成功')
+    return QMessageBox.information(parent, '成功', '数据导出成功')
 
 
-def show_export_failure():
+def show_export_failure(parent=None):
     """显示导出失败消息"""
-    return QMessageBox.critical(None, '错误', '数据导出失败')
+    return QMessageBox.critical(parent, '错误', '数据导出失败')
 
 
-def warn_no_task_selected():
+def warn_no_task_selected(parent=None):
     """警告：未选择任务"""
-    return QMessageBox.warning(None, '警告', '请先选择一个任务')
+    return QMessageBox.warning(parent, '警告', '请先选择一个任务')
 
 
-def inform_no_suitable_tasks(message):
+def inform_no_suitable_tasks(message, parent=None):
     """提示：没有合适的任务"""
-    return QMessageBox.information(None, '提示', message)
+    return QMessageBox.information(parent, '提示', message)
 
 
-def inform_no_pending_tasks(task_type='task'):
+def inform_no_pending_tasks(task_type='task', parent=None):
     """提示：没有未完成的任务"""
     message = config.MESSAGES['no_pending'].get(task_type, config.MESSAGES['no_pending']['task'])
-    return QMessageBox.information(None, '提示', message)
+    return QMessageBox.information(parent, '提示', message)
 
 
 def update_task_row_style(table, row, is_completed):
