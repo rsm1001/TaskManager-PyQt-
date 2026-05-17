@@ -17,9 +17,12 @@ class ToastMessage(QLabel):
     def __init__(self, text, parent=None, duration=None):
         super().__init__(text, parent)
         self.duration = duration if duration is not None else config.TOAST_DURATION_MS
+        # 必须同时设置 Window 标志，否则 FramelessWindowHint 无法使 widget
+        # 成为真正的顶层窗口，导致 move() 使用父窗口相对坐标而非桌面绝对坐标
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint
+            Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.Window
         )
         self.setStyleSheet(config.TOAST_STYLE)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -51,14 +54,17 @@ class ToastMessage(QLabel):
         if self.height() < 40:
             self.resize(self.width(), 40)
 
-        if self.parent():
-            top_level = self.parent().window()
-            geo = top_level.geometry()
-            x = geo.x() + (geo.width() - self.width()) // 2
-            y = geo.y() + (geo.height() - self.height()) // 2
-            self.move(x, y)
-
+        # 先 show() 将窗口注册为独立顶层窗口，
+        # 再用父窗口中心点（通过 mapToGlobal 转为绝对屏幕坐标）居中定位，
+        # 避免 move→show 顺序下不同平台对 parent 关联窗口坐标系行为的差异
         self.show()
+
+        if self.parent():
+            parent_win = self.parent().window()
+            parent_center = parent_win.frameGeometry().center()
+            x = parent_center.x() - self.width() // 2
+            y = parent_center.y() - self.height() // 2
+            self.move(x, y)
         QTimer.singleShot(self.duration, self._do_fade_out)
 
     def _do_fade_out(self):
