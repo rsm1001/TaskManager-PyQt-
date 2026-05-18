@@ -251,6 +251,10 @@ class DataManager:
         self.trash_manager.delete_trash_record(trash_id)
         self.vacuum_service.on_tasks_deleted(1)
 
+    def purge_trashed_tasks(self, trash_ids: List[str]):
+        self.trash_manager.delete_trash_records(trash_ids)
+        self.vacuum_service.on_tasks_deleted(len(trash_ids))
+
     def purge_all_trashed(self, task_type: str = None):
         before = self.trash_manager.get_trashed_tasks(task_type)
         count = len(before)

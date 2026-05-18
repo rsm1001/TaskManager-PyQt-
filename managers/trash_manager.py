@@ -75,6 +75,17 @@ class TrashManager:
         self._conn.execute('DELETE FROM trashed_tasks WHERE id = ?', (trash_id,))
         self._conn.commit()
 
+    def delete_trash_records(self, trash_ids: List[str]):
+        """批量删除垃圾桶记录"""
+        if not trash_ids:
+            return
+        placeholders = ','.join('?' * len(trash_ids))
+        self._conn.execute(
+            f'DELETE FROM trashed_tasks WHERE id IN ({placeholders})',
+            trash_ids
+        )
+        self._conn.commit()
+
     def purge_all(self, task_type: str = None):
         """清空垃圾桶"""
         if task_type:

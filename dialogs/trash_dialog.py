@@ -64,7 +64,7 @@ class TrashDialog(QDialog):
         self.trash_table.setHorizontalHeaderLabels(['类型', '标题', '描述', '删除时间', '操作'])
         self.trash_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.trash_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.trash_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.trash_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         layout.addWidget(self.trash_table)
 
         # 底部按钮
@@ -77,6 +77,10 @@ class TrashDialog(QDialog):
         delete_btn = QPushButton('彻底删除')
         delete_btn.clicked.connect(self._purge_selected)
         btn_layout.addWidget(delete_btn)
+
+        batch_delete_btn = QPushButton('批量删除')
+        batch_delete_btn.clicked.connect(self._purge_selected_batch)
+        btn_layout.addWidget(batch_delete_btn)
 
         btn_layout.addStretch()
 
@@ -248,6 +252,32 @@ class TrashDialog(QDialog):
                 trash_id = item.data(Qt.ItemDataRole.UserRole)
                 self.data_manager.purge_trashed_task(trash_id)
                 self._load_trashed()
+
+    def _purge_selected_batch(self):
+        """批量彻底删除选中的任务"""
+        selected_rows = self.trash_table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.information(self, '提示', '请先选中要删除的任务')
+            return
+
+        trash_ids = []
+        for index in selected_rows:
+            item = self.trash_table.item(index.row(), 0)
+            if item:
+                trash_ids.append(item.data(Qt.ItemDataRole.UserRole))
+
+        if not trash_ids:
+            return
+
+        count = len(trash_ids)
+        reply = QMessageBox.question(
+            self, '确认',
+            f'彻底删除 {count} 项任务后无法恢复，确定要删除吗？',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.data_manager.purge_trashed_tasks(trash_ids)
+            self._load_trashed()
 
     def _purge_all(self):
         """清空垃圾桶"""
