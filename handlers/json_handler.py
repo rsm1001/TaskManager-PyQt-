@@ -4,8 +4,11 @@ Task Manager - JSON导入导出模块
 """
 import json
 import uuid
+import logging
 from datetime import datetime, date
 from models.model import DailyTask, TodoTask, EntertainmentTask, Config
+
+logger = logging.getLogger(__name__)
 
 
 class JsonExportImportHandler:
@@ -78,7 +81,7 @@ class JsonExportImportHandler:
             
             return True
         except Exception as e:
-            print(f"导出JSON失败: {str(e)}")
+            logger.error(f"导出JSON失败: {str(e)}", exc_info=True)
             return False
 
     def import_from_json(self, filepath: str = "tasks_export.json") -> bool:
@@ -169,12 +172,12 @@ class JsonExportImportHandler:
             self.session.commit()
             return True
         except FileNotFoundError:
-            print(f"文件未找到: {filepath}")
+            logger.warning(f"文件未找到: {filepath}")
             return False
         except json.JSONDecodeError as e:
-            print(f"JSON格式错误: {str(e)}")
+            logger.error(f"JSON格式错误: {str(e)}", exc_info=True)
             return False
         except Exception as e:
-            print(f"导入JSON失败: {str(e)}")
+            logger.error(f"导入JSON失败: {str(e)}", exc_info=True)
             self.session.rollback()
             return False

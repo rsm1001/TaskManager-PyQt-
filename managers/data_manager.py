@@ -4,6 +4,7 @@ Task Manager - 数据访问和管理类
 通过组合子管理器实现模块化架构
 """
 
+import logging
 from models.model import DailyTask, TodoTask, EntertainmentTask, Config, init_db
 from datetime import datetime, date
 import json
@@ -12,6 +13,8 @@ import config.config
 import sqlite3
 from typing import List, Dict, Any, Optional
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 from managers.todo_task_manager import TodoTaskManager
 from managers.entertainment_task_manager import EntertainmentTaskManager
@@ -466,8 +469,8 @@ class DataManager:
 
 if __name__ == "__main__":
     dm = DataManager()
-    print("数据管理器初始化成功")
-    print(f"每日任务数量: {len(dm.get_daily_tasks())}")
-    print(f"待办事项数量: {len(dm.get_todo_tasks())}")
-    print(f"娱乐任务数量: {len(dm.get_entertainment_tasks())}")
+    logger.info("数据管理器初始化成功")
+    logger.info(f"每日任务数量: {len(dm.get_daily_tasks())}")
+    logger.info(f"待办事项数量: {len(dm.get_todo_tasks())}")
+    logger.info(f"娱乐任务数量: {len(dm.get_entertainment_tasks())}")
     dm.close_session()

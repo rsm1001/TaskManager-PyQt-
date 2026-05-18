@@ -52,6 +52,11 @@ DEFAULT_BASE_COEFFICIENT = 1.5
 DEFAULT_EXPORT_PATH = "./exports"
 DEFAULT_IMPORT_PATH = "./imports"
 
+# 日志配置
+LOG_DIR = "./logs"
+LOG_FILE = "taskmanager.json.log"
+LOG_LEVEL = "INFO"
+
 # 星期名称配置（用于界面显示和逻辑处理）
 WEEKDAY_NAMES = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
 WEEKDAY_FILTER_OPTIONS = ['全部', '每天'] + WEEKDAY_NAMES
@@ -117,3 +122,4 @@ def ensure_directories():
     """确保所需目录存在（延迟创建，避免导入时副作用）"""
     os.makedirs(DEFAULT_EXPORT_PATH, exist_ok=True)
     os.makedirs(DEFAULT_IMPORT_PATH, exist_ok=True)
+    os.makedirs(LOG_DIR, exist_ok=True)

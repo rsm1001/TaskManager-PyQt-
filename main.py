@@ -35,7 +35,13 @@ from services.window_task_operations import TaskOperationHandler
 from utils.ui_messages import show_statistics_dialog, show_about_dialog
 from utils.ui_messages import show_export_success, show_export_failure
 from utils.ui_messages import show_import_success, show_import_failure, confirm_data_import
+from utils.logging_config import setup_logging, get_logger
+
 import config.config
+
+# 初始化日志系统（尽早初始化）
+setup_logging(log_level=config.config.LOG_LEVEL)
+logger = get_logger(__name__)
 
 
 class TaskManagerMainWindow(QMainWindow):

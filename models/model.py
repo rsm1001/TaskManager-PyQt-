@@ -3,11 +3,14 @@ Task Manager - 数据库模型
 使用 SQLAlchemy ORM 定义数据模型
 """
 
+import logging
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import uuid
+
+logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
@@ -83,47 +86,47 @@ def migrate_db(engine):
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE daily_tasks ADD COLUMN tags VARCHAR(500) DEFAULT ''"))
             conn.commit()
-        print("已添加 daily_tasks.tags 字段")
-    
+        logger.info("已添加 daily_tasks.tags 字段")
+
     # 检查并添加 todo_tasks.tags 字段
     todo_columns = [col['name'] for col in inspector.get_columns('todo_tasks')]
     if 'tags' not in todo_columns:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE todo_tasks ADD COLUMN tags VARCHAR(500) DEFAULT ''"))
             conn.commit()
-        print("已添加 todo_tasks.tags 字段")
-    
+        logger.info("已添加 todo_tasks.tags 字段")
+
     # 检查并添加 entertainment_tasks.tags 字段
     entertainment_columns = [col['name'] for col in inspector.get_columns('entertainment_tasks')]
     if 'tags' not in entertainment_columns:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE entertainment_tasks ADD COLUMN tags VARCHAR(500) DEFAULT ''"))
             conn.commit()
-        print("已添加 entertainment_tasks.tags 字段")
-    
+        logger.info("已添加 entertainment_tasks.tags 字段")
+
     # 检查并添加 daily_tasks.shortcut_path 字段
     daily_columns = [col['name'] for col in inspector.get_columns('daily_tasks')]
     if 'shortcut_path' not in daily_columns:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE daily_tasks ADD COLUMN shortcut_path VARCHAR(1000) DEFAULT ''"))
             conn.commit()
-        print("已添加 daily_tasks.shortcut_path 字段")
-    
+        logger.info("已添加 daily_tasks.shortcut_path 字段")
+
     # 检查并添加 todo_tasks.shortcut_path 字段
     todo_columns = [col['name'] for col in inspector.get_columns('todo_tasks')]
     if 'shortcut_path' not in todo_columns:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE todo_tasks ADD COLUMN shortcut_path VARCHAR(1000) DEFAULT ''"))
             conn.commit()
-        print("已添加 todo_tasks.shortcut_path 字段")
-    
+        logger.info("已添加 todo_tasks.shortcut_path 字段")
+
     # 检查并添加 entertainment_tasks.shortcut_path 字段
     entertainment_columns = [col['name'] for col in inspector.get_columns('entertainment_tasks')]
     if 'shortcut_path' not in entertainment_columns:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE entertainment_tasks ADD COLUMN shortcut_path VARCHAR(1000) DEFAULT ''"))
             conn.commit()
-        print("已添加 entertainment_tasks.shortcut_path 字段")
+        logger.info("已添加 entertainment_tasks.shortcut_path 字段")
 
 
 # 数据库连接和会话管理
@@ -146,4 +149,4 @@ def init_db(db_path: str = "taskmanager.db", run_migration: bool = False):
 # 如果直接运行此文件，创建数据库
 if __name__ == "__main__":
     engine, Session = init_db()
-    print("数据库初始化完成")
+    logger.info("数据库初始化完成")
