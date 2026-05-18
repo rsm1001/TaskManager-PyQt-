@@ -152,7 +152,7 @@ def show_random_daily_task_dialog(task, parent=None):
 def show_random_todo_task_dialog(task, parent=None):
     """显示随机抽取的待办任务对话框"""
     QMessageBox.information(parent, '随机抽取', 
-                           f'建议处理任务：\n\n标题：{task.title}\n截止日期：{task.deadline or "无"}\n紧急度：{task.urgency_score}')
+                           f'建议处理任务：\n\n标题：{task.title}\n截止日期：{task.deadline or "无"}\n紧急度：{task.urgency_score:.2f}')
 
 
 def show_random_entertainment_task_dialog(task, parent=None):

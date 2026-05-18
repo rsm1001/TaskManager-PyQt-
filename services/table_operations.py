@@ -170,7 +170,7 @@ def load_todo_tasks_to_table(window):
         columns = [
             (1, task.title),
             (2, task.deadline if task.deadline else '无'),
-            (3, str(task.urgency_score)),
+            (3, f"{task.urgency_score:.2f}"),
             (4, task.tags if task.tags else '-'),
             (5, task.description or '-'),
             (6, task.created_at.strftime('%Y-%m-%d'))
@@ -319,7 +319,7 @@ def sort_todo_table_by_column(window, column):
         columns = [
             (1, task.title),
             (2, task.deadline if task.deadline else '无'),
-            (3, str(task.urgency_score)),
+            (3, f"{task.urgency_score:.2f}"),
             (4, task.tags if task.tags else '-'),
             (5, task.description or '-'),
             (6, task.created_at.strftime('%Y-%m-%d'))

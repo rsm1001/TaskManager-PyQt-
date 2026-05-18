@@ -82,7 +82,7 @@ def load_todo_tasks_to_table(data_manager, table, todo_status_combo, update_stat
         table.setItem(row, 2, QTableWidgetItem(deadline))
         
         # 紧急程度
-        table.setItem(row, 3, QTableWidgetItem(str(task.urgency_score)))
+        table.setItem(row, 3, QTableWidgetItem(f"{task.urgency_score:.2f}"))
         
         # 描述
         table.setItem(row, 4, QTableWidgetItem(task.description or '-'))
@@ -259,7 +259,7 @@ def sort_todo_table_by_column(table, data_manager, todo_status_combo, todo_sort_
         table.setItem(row, 2, QTableWidgetItem(deadline))
         
         # 紧急程度
-        table.setItem(row, 3, QTableWidgetItem(str(task.urgency_score)))
+        table.setItem(row, 3, QTableWidgetItem(f"{task.urgency_score:.2f}"))
         
         # 描述
         table.setItem(row, 4, QTableWidgetItem(task.description or '-'))

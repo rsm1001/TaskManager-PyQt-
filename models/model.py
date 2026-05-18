@@ -4,7 +4,7 @@ Task Manager - 数据库模型
 """
 
 import logging
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -45,7 +45,7 @@ class TodoTask(BaseModel):
     description = Column(Text)
     completed = Column(Boolean, default=False)
     deadline = Column(String(20))  # YYYY-MM-DD格式
-    urgency_score = Column(Integer, default=0)
+    urgency_score = Column(Float, default=0.0)
     category = Column(String(50), default="todo")
     status = Column(String(20), default="pending")  # pending, completed, abandoned
     tags = Column(String(500), default="")  # 逗号分隔的标签，如"工作,紧急,项目A"
@@ -119,6 +119,17 @@ def migrate_db(engine):
             conn.execute(text("ALTER TABLE todo_tasks ADD COLUMN shortcut_path VARCHAR(1000) DEFAULT ''"))
             conn.commit()
         logger.info("已添加 todo_tasks.shortcut_path 字段")
+
+    # 迁移 urgency_score 从 Integer 到 Float（SQLite 不支持 MODIFY，需重建列）
+    todo_columns = {col['name']: col for col in inspector.get_columns('todo_tasks')}
+    if 'urgency_score' in todo_columns and 'INTEGER' in str(todo_columns['urgency_score']['type']).upper():
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE todo_tasks ADD COLUMN urgency_score_new REAL DEFAULT 0.0"))
+            conn.execute(text("UPDATE todo_tasks SET urgency_score_new = CAST(urgency_score AS REAL)"))
+            conn.execute(text("ALTER TABLE todo_tasks DROP COLUMN urgency_score"))
+            conn.execute(text("ALTER TABLE todo_tasks RENAME COLUMN urgency_score_new TO urgency_score"))
+            conn.commit()
+        logger.info("已迁移 urgency_score 从 INTEGER 到 REAL")
 
     # 检查并添加 entertainment_tasks.shortcut_path 字段
     entertainment_columns = [col['name'] for col in inspector.get_columns('entertainment_tasks')]
