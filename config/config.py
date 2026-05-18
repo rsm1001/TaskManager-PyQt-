@@ -17,6 +17,10 @@ TRASH_DATABASE_PATH = "task_trash.db"  # 垃圾桶独立数据库
 # 任务数量上限（每种类型独立计数）
 TASK_CACHE_LIMIT = 100
 
+# 数据库 VACUUM 配置
+VACUUM_DELETE_THRESHOLD = 100  # 触发 VACUUM 的 DELETE 次数阈值
+VACUUM_AUTO_ENABLED = True     # 是否启用自动 VACUUM
+
 # 界面配置
 WINDOW_WIDTH = 1200
 WINDOW_HEIGHT = 800

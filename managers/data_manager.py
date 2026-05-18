@@ -24,6 +24,7 @@ from managers.shortcut_manager import ShortcutManager
 from managers.daily_task_manager import DailyTaskManager
 from managers.tag_manager import TagManager
 from services.daily_reset_service import DailyResetService
+from services.vacuum_service import VacuumService
 
 
 class TaskType(Enum):
@@ -51,6 +52,7 @@ class DataManager:
         self.daily_task_manager = DailyTaskManager(self.session)
         self.tag_manager = TagManager(self.config_manager)
         self.daily_reset_service = DailyResetService(self.session, self.config_manager)
+        self.vacuum_service = VacuumService(self.engine, config.config.TRASH_DATABASE_PATH)
 
         # 检查并执行每日重置
         self.daily_reset_service.check_and_reset()
@@ -247,9 +249,14 @@ class DataManager:
 
     def purge_trashed_task(self, trash_id: str):
         self.trash_manager.delete_trash_record(trash_id)
+        self.vacuum_service.on_tasks_deleted(1)
 
     def purge_all_trashed(self, task_type: str = None):
+        before = self.trash_manager.get_trashed_tasks(task_type)
+        count = len(before)
         self.trash_manager.purge_all(task_type)
+        if count > 0:
+            self.vacuum_service.on_tasks_deleted(count)
 
     # ==================== 快捷入口相关方法 ====================
 
@@ -465,6 +472,7 @@ class DataManager:
         self.trash_manager.move_to_trash(task_type, oldest.id, task_data)
         self.session.delete(oldest)
         self.session.commit()
+        self.vacuum_service.on_tasks_deleted(1)
 
 
 if __name__ == "__main__":
