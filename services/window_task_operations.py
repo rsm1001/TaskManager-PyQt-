@@ -5,6 +5,7 @@
 
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import Qt
+import os
 from managers.data_manager import TaskType
 from ui.task_edit_dialog import TaskEditDialog
 from dialogs.shortcut_edit_dialog import ShortcutEditDialog
@@ -390,6 +391,9 @@ class TaskOperationHandler:
         if not data['shortcut_path']:
             QMessageBox.warning(self._w, '警告', '请拖拽文件或文件夹到对话框中')
             return
+        if not os.path.exists(data['shortcut_path']):
+            QMessageBox.warning(self._w, '警告', '文件或文件夹不存在，请检查路径是否正确')
+            return
         self._w.data_manager.create_shortcut('todo', data['title'], data['shortcut_path'], data.get('tags', ''))
         self._w.load_shortcuts()
         self._validate_and_refresh_filter('shortcuts')
@@ -423,6 +427,9 @@ class TaskOperationHandler:
         data = dialog.get_data()
         if not data['title']:
             QMessageBox.warning(self._w, '警告', '请输入快捷入口名称')
+            return
+        if not os.path.exists(data['shortcut_path']):
+            QMessageBox.warning(self._w, '警告', '文件或文件夹不存在，请检查路径是否正确')
             return
         self._w.data_manager.update_shortcut(
             shortcut_id,
