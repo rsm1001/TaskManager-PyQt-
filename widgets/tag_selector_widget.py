@@ -239,25 +239,34 @@ class TagSelectorWidget(QWidget):
         if ok and tag_name.strip():
             tag = tag_name.strip()
             category = self._get_category()
-            
+
             # 保存到类别独立标签库
             if self.data_manager and category:
                 self.data_manager.add_tag(tag, category)
-            
+
             # 更新本地标签集
             if tag not in self.all_tags:
                 self.all_tags.add(tag)
-            
+
             # 选中新添加的标签
             self.selected_tags.add(tag)
-            
+
+            # 自动添加到可见标签配置（若启动标签数小于10个）
+            if self.data_manager and category:
+                config_key = f"visible_tags_{category}"
+                current_visible = self.data_manager.get_config(config_key, "")
+                visible_tags = [t.strip() for t in current_visible.split(",") if t.strip()]
+                if len(visible_tags) < 10 and tag not in visible_tags:
+                    visible_tags.append(tag)
+                    self.data_manager.set_config(config_key, ",".join(visible_tags))
+
             # 重新创建复选框
             self._create_checkboxes()
-            
+
             # 清空搜索框以显示新标签
             if hasattr(self, 'search_edit'):
                 self.search_edit.clear()
-            
+
             self.tagsChanged.emit(self.get_selected_tags())
 
     def delete_selected_tag(self):
