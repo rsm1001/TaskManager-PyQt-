@@ -70,6 +70,14 @@ def create_daily_tab_ui(parent_window):
     parent_window.random_daily_btn.clicked.connect(parent_window.random_daily_task)
     daily_control_layout.addWidget(parent_window.random_daily_btn)
 
+    parent_window.batch_status_daily_btn = QPushButton('批量改状态')
+    parent_window.batch_status_daily_btn.clicked.connect(parent_window.batch_edit_daily_status)
+    daily_control_layout.addWidget(parent_window.batch_status_daily_btn)
+
+    parent_window.batch_tags_daily_btn = QPushButton('批量编辑标签')
+    parent_window.batch_tags_daily_btn.clicked.connect(parent_window.batch_edit_daily_tags)
+    daily_control_layout.addWidget(parent_window.batch_tags_daily_btn)
+
     # 筛选下拉框
     daily_control_layout.addStretch()
 
@@ -141,6 +149,14 @@ def create_todo_tab_ui(parent_window):
     parent_window.random_todo_btn.clicked.connect(parent_window.random_todo_task)
     todo_control_layout.addWidget(parent_window.random_todo_btn)
 
+    parent_window.batch_status_todo_btn = QPushButton('批量改状态')
+    parent_window.batch_status_todo_btn.clicked.connect(parent_window.batch_edit_todo_status)
+    todo_control_layout.addWidget(parent_window.batch_status_todo_btn)
+
+    parent_window.batch_tags_todo_btn = QPushButton('批量编辑标签')
+    parent_window.batch_tags_todo_btn.clicked.connect(parent_window.batch_edit_todo_tags)
+    todo_control_layout.addWidget(parent_window.batch_tags_todo_btn)
+
     # 状态筛选下拉框
     todo_control_layout.addStretch()
     todo_control_layout.addWidget(QLabel('状态:'))
@@ -200,6 +216,14 @@ def create_entertainment_tab_ui(parent_window):
     parent_window.random_entertainment_btn = QPushButton('随机抽取')
     parent_window.random_entertainment_btn.clicked.connect(parent_window.random_entertainment_task)
     entertainment_control_layout.addWidget(parent_window.random_entertainment_btn)
+
+    parent_window.batch_status_entertainment_btn = QPushButton('批量改状态')
+    parent_window.batch_status_entertainment_btn.clicked.connect(parent_window.batch_edit_entertainment_status)
+    entertainment_control_layout.addWidget(parent_window.batch_status_entertainment_btn)
+
+    parent_window.batch_tags_entertainment_btn = QPushButton('批量编辑标签')
+    parent_window.batch_tags_entertainment_btn.clicked.connect(parent_window.batch_edit_entertainment_tags)
+    entertainment_control_layout.addWidget(parent_window.batch_tags_entertainment_btn)
 
     # 状态筛选下拉框
     entertainment_control_layout.addStretch()

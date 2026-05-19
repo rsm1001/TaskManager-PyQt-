@@ -471,3 +471,186 @@ class TaskOperationHandler:
             btn = self._w.shortcuts_table.cellWidget(row, 0)
             if btn:
                 btn.click()
+
+    # ==================== 批量改状态 ====================
+
+    def _batch_change_status(self, table, task_type: str, task_ids: list, new_status: str):
+        """通用批量修改状态逻辑
+
+        Args:
+            table: 表格控件（用于刷新）
+            task_type: 任务类型字符串
+            task_ids: 要修改的任务ID列表
+            new_status: 目标状态 pending/completed/abandoned
+        """
+        updated = 0
+        for task_id in task_ids:
+            if task_type == 'daily':
+                self._w.data_manager.update_daily_task(task_id, status=new_status)
+                updated += 1
+            elif task_type == 'todo':
+                self._w.data_manager.update_todo_task(task_id, status=new_status)
+                updated += 1
+            elif task_type == 'entertainment':
+                self._w.data_manager.update_entertainment_task(task_id, status=new_status)
+                updated += 1
+        self._reload_tasks(task_type)
+        self._validate_and_refresh_filter(task_type)
+        show_task_updated_confirmation(task_type, self._w)
+        self._w.status_bar.showMessage(f'{task_type} 状态批量更新成功 ({updated}/{len(task_ids)})')
+
+    def _show_batch_status_dialog(self, task_type: str, task_ids: list, table):
+        """显示批量选择状态的对话框并执行"""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton
+        dialog = QDialog(self._w)
+        dialog.setWindowTitle(f'批量修改{task_type}状态')
+        dialog.setModal(True)
+        layout = QVBoxLayout(dialog)
+
+        layout.addWidget(QLabel(f'将 {len(task_ids)} 个任务修改为:'))
+
+        status_combo = QComboBox()
+        status_combo.addItems(['进行中', '已完成', '暂弃'])
+        layout.addWidget(status_combo)
+
+        btn_layout = QHBoxLayout()
+        ok_btn = QPushButton('确定')
+        ok_btn.clicked.connect(lambda: self._do_batch_status_change(dialog, table, task_type, task_ids, status_combo))
+        btn_layout.addWidget(ok_btn)
+        cancel_btn = QPushButton('取消')
+        cancel_btn.clicked.connect(dialog.reject)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+        dialog.setLayout(layout)
+        dialog.exec()
+
+    def _do_batch_status_change(self, dialog, table, task_type, task_ids, status_combo):
+        """执行批量状态修改"""
+        status_map = {'进行中': 'pending', '已完成': 'completed', '暂弃': 'abandoned'}
+        new_status = status_map.get(status_combo.currentText(), 'pending')
+        dialog.accept()
+        self._batch_change_status(table, task_type, task_ids, new_status)
+
+    def _get_selected_task_ids(self, table) -> list:
+        """获取表格选中行的任务ID列表"""
+        selected_rows = table.selectionModel().selectedRows()
+        if not selected_rows:
+            return []
+        task_ids = []
+        for row_obj in selected_rows:
+            row = row_obj.row()
+            item = table.item(row, 0)
+            if item is None:
+                continue
+            task_id = item.data(Qt.ItemDataRole.UserRole)
+            if task_id:
+                task_ids.append(task_id)
+        return task_ids
+
+    def batch_edit_daily_status(self):
+        """批量修改每日任务状态"""
+        task_ids = self._get_selected_task_ids(self._w.daily_table)
+        if not task_ids:
+            warn_no_task_selected(self._w)
+            return
+        self._show_batch_status_dialog('daily', task_ids, self._w.daily_table)
+
+    def batch_edit_todo_status(self):
+        """批量修改待办事项状态"""
+        task_ids = self._get_selected_task_ids(self._w.todo_table)
+        if not task_ids:
+            warn_no_task_selected(self._w)
+            return
+        self._show_batch_status_dialog('todo', task_ids, self._w.todo_table)
+
+    def batch_edit_entertainment_status(self):
+        """批量修改娱乐任务状态"""
+        task_ids = self._get_selected_task_ids(self._w.entertainment_table)
+        if not task_ids:
+            warn_no_task_selected(self._w)
+            return
+        self._show_batch_status_dialog('entertainment', task_ids, self._w.entertainment_table)
+
+    # ==================== 批量编辑标签 ====================
+
+    def batch_edit_tags(self, task_type: str):
+        """批量编辑标签（通用入口）"""
+        table = getattr(self._w, f'{task_type}_table', None)
+        if table is None:
+            return
+        task_ids = self._get_selected_task_ids(table)
+        if not task_ids:
+            warn_no_task_selected(self._w)
+            return
+        # 收集选中任务的现有标签
+        current_tags = set()
+        for task_id in task_ids:
+            if task_type == 'daily':
+                task = self._w.data_manager.get_daily_task_by_id(task_id)
+            elif task_type == 'todo':
+                task = self._w.data_manager.get_todo_task_by_id(task_id)
+            elif task_type == 'entertainment':
+                task = self._w.data_manager.get_entertainment_task_by_id(task_id)
+            else:
+                return
+            if task and task.tags:
+                for tag in task.tags.split(','):
+                    tag = tag.strip()
+                    if tag:
+                        current_tags.add(tag)
+        self._show_batch_tag_dialog(task_type, task_ids, current_tags)
+
+    def _show_batch_tag_dialog(self, task_type: str, task_ids: list, current_tags: set):
+        """显示批量编辑标签对话框"""
+        from dialogs.batch_tag_edit_dialog import BatchTagEditDialog
+        dialog = BatchTagEditDialog(
+            self._w,
+            self._w.data_manager,
+            task_type,
+            current_tags
+        )
+        if dialog.exec() != dialog.DialogCode.Accepted:
+            return
+        add_tags, remove_tags = dialog.get_result()
+        self._do_batch_edit_tags(task_type, task_ids, add_tags, remove_tags)
+
+    def _do_batch_edit_tags(self, task_type: str, task_ids: list, add_tags: set, remove_tags: set):
+        """执行批量标签编辑"""
+        updated = 0
+        for task_id in task_ids:
+            if task_type == 'daily':
+                task = self._w.data_manager.get_daily_task_by_id(task_id)
+                if not task:
+                    continue
+                tag_set = set(t.strip() for t in (task.tags or '').split(',') if t.strip())
+                tag_set.update(add_tags)
+                tag_set.difference_update(remove_tags)
+                new_tags = ','.join(sorted(tag_set))
+                self._w.data_manager.update_daily_task(task_id, tags=new_tags)
+                updated += 1
+            elif task_type == 'todo':
+                task = self._w.data_manager.get_todo_task_by_id(task_id)
+                if not task:
+                    continue
+                tag_set = set(t.strip() for t in (task.tags or '').split(',') if t.strip())
+                tag_set.update(add_tags)
+                tag_set.difference_update(remove_tags)
+                new_tags = ','.join(sorted(tag_set))
+                self._w.data_manager.update_todo_task(task_id, tags=new_tags)
+                updated += 1
+            elif task_type == 'entertainment':
+                task = self._w.data_manager.get_entertainment_task_by_id(task_id)
+                if not task:
+                    continue
+                tag_set = set(t.strip() for t in (task.tags or '').split(',') if t.strip())
+                tag_set.update(add_tags)
+                tag_set.difference_update(remove_tags)
+                new_tags = ','.join(sorted(tag_set))
+                self._w.data_manager.update_entertainment_task(task_id, tags=new_tags)
+                updated += 1
+        self._reload_tasks(task_type)
+        self._auto_cleanup_if_enabled()
+        self._validate_and_refresh_filter(task_type)
+        show_task_updated_confirmation(task_type, self._w)
+        self._w.status_bar.showMessage(f'{task_type} 标签批量更新成功 ({updated}/{len(task_ids)})')

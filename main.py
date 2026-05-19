@@ -214,6 +214,32 @@ class TaskManagerMainWindow(QMainWindow):
         """随机抽取娱乐任务"""
         self._task_handler.random_entertainment_task()
 
+    # ==================== 批量操作（委托） ====================
+
+    def batch_edit_daily_status(self):
+        """批量修改每日任务状态"""
+        self._task_handler.batch_edit_daily_status()
+
+    def batch_edit_todo_status(self):
+        """批量修改待办事项状态"""
+        self._task_handler.batch_edit_todo_status()
+
+    def batch_edit_entertainment_status(self):
+        """批量修改娱乐任务状态"""
+        self._task_handler.batch_edit_entertainment_status()
+
+    def batch_edit_daily_tags(self):
+        """批量编辑每日任务标签"""
+        self._task_handler.batch_edit_tags('daily')
+
+    def batch_edit_todo_tags(self):
+        """批量编辑待办事项标签"""
+        self._task_handler.batch_edit_tags('todo')
+
+    def batch_edit_entertainment_tags(self):
+        """批量编辑娱乐任务标签"""
+        self._task_handler.batch_edit_tags('entertainment')
+
     # ==================== 快捷入口操作（委托） ====================
 
     def add_shortcut(self):
