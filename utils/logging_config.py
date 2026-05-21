@@ -4,7 +4,9 @@ Task Manager - 日志配置模块
 """
 import logging
 import json
+import re
 import sys
+import time
 from datetime import datetime, timezone
 
 
@@ -44,22 +46,66 @@ class JsonFormatter(logging.Formatter):
 
 
 class ColoredFormatter(logging.Formatter):
-    """带颜色的控制台格式化器（仅用于开发调试）"""
+    """带颜色的控制台格式化器（仅用于开发调试）
 
+    输出格式示例:
+    2026-05-21 14:54:53.330 INFO    logging_config.py:85  日志系统初始化完成，日志文件: C:\\Users\\...  key=value ...
+    """
     COLORS = {
-        "DEBUG": "\033[36m",     # 青色
-        "INFO": "\033[32m",      # 绿色
+        "DEBUG": "\033[36m",      # 青色
+        "INFO": "\033[32m",       # 绿色
         "WARNING": "\033[33m",   # 黄色
-        "ERROR": "\033[31m",     # 红色
+        "ERROR": "\033[31m",      # 红色
         "CRITICAL": "\033[35m",  # 紫色
     }
     RESET = "\033[0m"
+    GRAY = "\033[90m"
+    BLUE = "\033[34m"
+
+    # 键值对正则: key=value, key="value", key='value'
+    _KV_PATTERN = re.compile(
+        r'(\w+)=(["\'])([^"\'\\]*(?:\\.[^"\'\\]*)*)\2'  # key="value" 或 key='value'
+        r'|'
+        r'(\w+)=(\S+?)(?=\s|$)'  # key=value
+    )
+
+    def formatTime(self, record: logging.LogRecord, datefmt=None) -> str:
+        """兼容 Python 3.8 的时间格式化，使用毫秒精度"""
+        ct = int(record.created)
+        msec = int(record.msecs) if isinstance(record.msecs, float) else record.msecs
+        if datefmt:
+            return time.strftime(datefmt, time.localtime(ct)) + '.' + f"{msec:03d}"
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ct)) + '.' + f"{msec:03d}"
+
+    def _colorize_kv(self, msg: str) -> str:
+        """为消息中的键值对着色：键用蓝色，值保持默认色"""
+        def replacer(match):
+            # 处理 key="value" 或 key='value' 情况
+            if match.group(1) is not None:
+                key, quote, value = match.group(1), match.group(2), match.group(3)
+                return f"{self.BLUE}{key}{self.RESET}={quote}{value}{quote}"
+            # 处理 key=value 情况
+            elif match.group(4) is not None:
+                key, value = match.group(4), match.group(5)
+                return f"{self.BLUE}{key}{self.RESET}={value}"
+            return match.group(0)
+        return self._KV_PATTERN.sub(replacer, msg)
 
     def format(self, record: logging.LogRecord) -> str:
-        color = self.COLORS.get(record.levelname, "")
-        reset = self.RESET if color else ""
-        record.levelname = f"{color}{record.levelname}{reset}"
-        return f"[{record.asctime}] [{record.levelname}] [{record.module}] {record.getMessage()}"
+        # 时间戳（灰色）
+        timestamp = f"{self.GRAY}{self.formatTime(record)}{self.RESET}"
+
+        # 级别（固定8字符宽度 + 对应颜色）
+        level_color = self.COLORS.get(record.levelname, "")
+        level_str = f"{level_color}{record.levelname[:8]:8}{self.RESET}"
+
+        # 位置（青色）
+        location = f"{self.COLORS['DEBUG']}{record.module}:{record.lineno}{self.RESET}"
+
+        # 消息（白色，含键值对着色）
+        message = self._colorize_kv(record.getMessage())
+
+        return f"{timestamp} {level_str} {location}  {message}"
 
 
 def setup_logging(
