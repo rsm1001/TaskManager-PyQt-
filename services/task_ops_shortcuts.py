@@ -38,10 +38,10 @@ class ShortcutOperations:
         if not data['shortcut_path']:
             QMessageBox.warning(self._w, '警告', '请拖拽文件或文件夹到对话框中')
             return
-        if not os.path.exists(data['shortcut_path']):
+        if data['action_type'] == 'open' and not os.path.exists(data['shortcut_path']):
             QMessageBox.warning(self._w, '警告', '文件或文件夹不存在，请检查路径是否正确')
             return
-        self._w.data_manager.create_shortcut('todo', data['title'], data['shortcut_path'], data.get('tags', ''))
+        self._w.data_manager.create_shortcut('todo', data['title'], data['shortcut_path'], data.get('tags', ''), data.get('action_type', 'open'))
         self._w.load_shortcuts()
         self._validate_and_refresh_filter('shortcuts')
         show_task_added_confirmation('shortcut', self._w)
@@ -67,7 +67,8 @@ class ShortcutOperations:
             self._w, data_manager=self._w.data_manager,
             initial_title=shortcut_data['title'],
             initial_path=shortcut_data['shortcut_path'],
-            initial_tags=shortcut_data.get('tags', '')
+            initial_tags=shortcut_data.get('tags', ''),
+            initial_action_type=shortcut_data.get('action_type', 'open')
         )
         if dialog.exec() != ShortcutEditDialog.DialogCode.Accepted:
             return
@@ -75,14 +76,15 @@ class ShortcutOperations:
         if not data['title']:
             QMessageBox.warning(self._w, '警告', '请输入快捷入口名称')
             return
-        if not os.path.exists(data['shortcut_path']):
+        if data['action_type'] == 'open' and not os.path.exists(data['shortcut_path']):
             QMessageBox.warning(self._w, '警告', '文件或文件夹不存在，请检查路径是否正确')
             return
         self._w.data_manager.update_shortcut(
             shortcut_id,
             title=data['title'],
             shortcut_path=data['shortcut_path'],
-            tags=data.get('tags', '')
+            tags=data.get('tags', ''),
+            action_type=data.get('action_type', 'open')
         )
         self._w.load_shortcuts()
         self._validate_and_refresh_filter('shortcuts')

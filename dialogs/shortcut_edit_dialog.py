@@ -4,7 +4,7 @@
 """
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLineEdit,
-                              QLabel, QPushButton, QFileDialog, QMessageBox)
+                              QLabel, QPushButton, QFileDialog, QMessageBox, QComboBox)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from widgets.tag_selector_widget import TagSelectorWidget
@@ -18,7 +18,8 @@ class DragDropLabel(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
-        self.setText("将文件或文件夹拖拽到此处\n\n或者")
+        self.hint_text = "将文件或文件夹拖拽到此处\n\n或者"
+        self.setText(self.hint_text)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet("""
             QLabel {
@@ -31,6 +32,12 @@ class DragDropLabel(QLabel):
             }
         """)
         self.file_path = ""
+
+    def setHintText(self, text):
+        """设置拖拽提示文字"""
+        self.hint_text = text
+        if not self.file_path:
+            self.setText(text)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         """拖拽进入时检查是否包含本地文件"""
@@ -87,19 +94,24 @@ class DragDropLabel(QLabel):
                 background-color: #fafafa;
             }
         """)
+        if not self.file_path:
+            self.setText(self.hint_text)
 
 
 class ShortcutEditDialog(QDialog):
     """快捷入口编辑对话框"""
 
     def __init__(self, parent=None, data_manager=None,
-                 initial_title: str = "", initial_path: str = "", initial_tags: str = ""):
+                 initial_title: str = "", initial_path: str = "", initial_tags: str = "",
+                 initial_action_type: str = "open"):
         super().__init__(parent)
         self.data_manager = data_manager
         self.initial_title = initial_title
         self.initial_path = initial_path
         self.initial_tags = initial_tags
+        self.initial_action_type = initial_action_type
         self.current_path = initial_path
+        self.current_action_type = initial_action_type
         self.init_ui()
 
     def init_ui(self):
@@ -109,6 +121,17 @@ class ShortcutEditDialog(QDialog):
         self.resize(600, 380)
 
         layout = QVBoxLayout()
+
+        # 操作类型选择
+        action_type_layout = QHBoxLayout()
+        action_type_layout.addWidget(QLabel("操作类型:"))
+        self.action_type_combo = QComboBox()
+        self.action_type_combo.addItems(["打开文件/文件夹", "执行脚本"])
+        self.action_type_combo.setCurrentIndex(0 if self.initial_action_type == "open" else 1)
+        self.action_type_combo.currentIndexChanged.connect(self.on_action_type_changed)
+        action_type_layout.addWidget(self.action_type_combo)
+        action_type_layout.addStretch()
+        layout.addLayout(action_type_layout)
 
         # 名称输入区
         name_layout = QHBoxLayout()
@@ -125,7 +148,7 @@ class ShortcutEditDialog(QDialog):
         path_layout.addWidget(QLabel("路径:"))
         self.path_edit = QLineEdit()
         self.path_edit.setText(self.initial_path)
-        self.path_edit.setPlaceholderText("输入文件或文件夹的完整路径")
+        self.path_edit.setPlaceholderText("输入文件或文件夹的完整路径" if self.current_action_type == "open" else "输入脚本文件的完整路径")
         self.path_edit.setMinimumWidth(300)
         path_layout.addWidget(self.path_edit)
 
@@ -137,6 +160,7 @@ class ShortcutEditDialog(QDialog):
 
         # 拖拽区域
         self.drop_label = DragDropLabel()
+        self.drop_label.setHintText("将文件或文件夹拖拽到此处\n\n或者" if self.current_action_type == "open" else "将脚本文件拖拽到此处\n\n或者")
         if self.initial_path:
             if os.path.isfile(self.initial_path):
                 name = os.path.basename(self.initial_path)
@@ -204,6 +228,14 @@ class ShortcutEditDialog(QDialog):
         # 路径变化时同步 drop_label
         self.path_edit.textChanged.connect(self.on_path_changed)
 
+    def on_action_type_changed(self, index):
+        """操作类型变化时更新界面"""
+        self.current_action_type = "open" if index == 0 else "script"
+        self.path_edit.setPlaceholderText("输入文件或文件夹的完整路径" if self.current_action_type == "open" else "输入脚本文件的完整路径")
+        self.drop_label.setHintText("将文件或文件夹拖拽到此处\n\n或者" if self.current_action_type == "open" else "将脚本文件拖拽到此处\n\n或者")
+        if not self.drop_label.file_path:
+            self.drop_label.setText(self.drop_label.hint_text)
+
     def on_path_changed(self, text):
         """路径手动修改时更新 drop_label 和打开按钮"""
         self.current_path = text
@@ -265,16 +297,25 @@ class ShortcutEditDialog(QDialog):
 
     def browse_path(self):
         """浏览按钮：弹出文件/文件夹选择框"""
-        # 先尝试文件夹，再尝试文件
-        path = QFileDialog.getExistingDirectory(
-            self, "选择文件夹", ""
-        )
-        if not path:
+        if self.current_action_type == "script":
+            # 脚本类型：只选择文件
             path, _ = QFileDialog.getOpenFileName(
-                self, "选择文件", "", "所有文件 (*.*)"
+                self, "选择脚本文件", "",
+                "脚本文件 (*.bat *.cmd *.ps1 *.py *.exe *.lnk);;所有文件 (*.*)"
             )
-        if path:
-            self.path_edit.setText(path)
+            if path:
+                self.path_edit.setText(path)
+        else:
+            # 打开类型：先尝试文件夹，再尝试文件
+            path = QFileDialog.getExistingDirectory(
+                self, "选择文件夹", ""
+            )
+            if not path:
+                path, _ = QFileDialog.getOpenFileName(
+                    self, "选择文件", "", "所有文件 (*.*)"
+                )
+            if path:
+                self.path_edit.setText(path)
 
     def open_location(self):
         """打开文件/文件夹位置"""
@@ -295,5 +336,6 @@ class ShortcutEditDialog(QDialog):
         return {
             "title": self.name_edit.text().strip(),
             "shortcut_path": self.drop_label.file_path or self.path_edit.text().strip(),
-            "tags": self.tag_selector.get_selected_tags()
+            "tags": self.tag_selector.get_selected_tags(),
+            "action_type": self.current_action_type
         }

@@ -26,6 +26,7 @@ class ShortcutManager:
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
                 shortcut_path TEXT NOT NULL DEFAULT '',
+                action_type TEXT NOT NULL DEFAULT 'open',
                 category TEXT NOT NULL DEFAULT 'todo',
                 tags TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
@@ -37,34 +38,38 @@ class ShortcutManager:
         columns = [row[1] for row in cursor.fetchall()]
         if 'tags' not in columns:
             self._conn.execute("ALTER TABLE shortcut_entries ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
+        # 兼容旧版本：如果 action_type 列不存在，则添加
+        if 'action_type' not in columns:
+            self._conn.execute("ALTER TABLE shortcut_entries ADD COLUMN action_type TEXT NOT NULL DEFAULT 'open'")
         self._conn.commit()
 
     def get_all(self, tag: str = None) -> List[Dict[str, Any]]:
         """获取所有快捷入口，可按标签筛选"""
         if tag:
             cursor = self._conn.execute(
-                "SELECT id, title, shortcut_path, category, tags, created_at FROM shortcut_entries WHERE tags LIKE ? ORDER BY created_at DESC",
+                "SELECT id, title, shortcut_path, action_type, category, tags, created_at FROM shortcut_entries WHERE tags LIKE ? ORDER BY created_at DESC",
                 (f'%{tag}%',)
             )
         else:
             cursor = self._conn.execute(
-                "SELECT id, title, shortcut_path, category, tags, created_at FROM shortcut_entries ORDER BY created_at DESC"
+                "SELECT id, title, shortcut_path, action_type, category, tags, created_at FROM shortcut_entries ORDER BY created_at DESC"
             )
         shortcuts = []
         for row in cursor.fetchall():
-            sid, title, path, category, tags, created = row
+            sid, title, path, action_type, category, tags, created = row
             shortcuts.append({
                 'id': sid,
                 'task_id': sid,
                 'task_type': category,
                 'title': title,
                 'shortcut_path': path or '',
+                'action_type': action_type or 'open',
                 'tags': tags or '',
                 'created_at': created or '-'
             })
         return shortcuts
 
-    def create(self, task_type: str, title: str, shortcut_path: str, tags: str = '') -> bool:
+    def create(self, task_type: str, title: str, shortcut_path: str, tags: str = '', action_type: str = 'open') -> bool:
         """创建快捷入口
 
         Args:
@@ -72,18 +77,19 @@ class ShortcutManager:
             title: 标题
             shortcut_path: 快捷路径
             tags: 标签（逗号分隔）
+            action_type: 操作类型 ('open' 或 'script')
         """
         now = datetime.now().isoformat()
         sid = str(uuid.uuid4())
         self._conn.execute(
-            "INSERT INTO shortcut_entries (id, title, shortcut_path, category, tags, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (sid, title, shortcut_path, task_type, tags, now, now)
+            "INSERT INTO shortcut_entries (id, title, shortcut_path, action_type, category, tags, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (sid, title, shortcut_path, action_type, task_type, tags, now, now)
         )
         self._conn.commit()
         return True
 
-    def update(self, shortcut_id: str, title: str = None, shortcut_path: str = None, tags: str = None) -> bool:
+    def update(self, shortcut_id: str, title: str = None, shortcut_path: str = None, tags: str = None, action_type: str = None) -> bool:
         """更新快捷入口
 
         Args:
@@ -91,6 +97,7 @@ class ShortcutManager:
             title: 标题（可选）
             shortcut_path: 路径（可选）
             tags: 标签（可选，逗号分隔）
+            action_type: 操作类型（可选，'open' 或 'script'）
         """
         updates = []
         params = []
@@ -103,6 +110,9 @@ class ShortcutManager:
         if tags is not None:
             updates.append("tags = ?")
             params.append(tags)
+        if action_type is not None:
+            updates.append("action_type = ?")
+            params.append(action_type)
         if not updates:
             return False
         updates.append("updated_at = ?")
@@ -118,15 +128,16 @@ class ShortcutManager:
     def get_by_id(self, shortcut_id: str) -> Optional[Dict[str, Any]]:
         """根据ID获取快捷入口"""
         cursor = self._conn.execute(
-            "SELECT id, title, shortcut_path, category, tags, created_at FROM shortcut_entries WHERE id = ?",
+            "SELECT id, title, shortcut_path, action_type, category, tags, created_at FROM shortcut_entries WHERE id = ?",
             (shortcut_id,)
         )
         row = cursor.fetchone()
         if not row:
             return None
-        sid, title, path, category, tags, created = row
+        sid, title, path, action_type, category, tags, created = row
         return {
             'id': sid, 'title': title, 'shortcut_path': path or '',
+            'action_type': action_type or 'open',
             'category': category, 'tags': tags or '', 'created_at': created
         }
 

@@ -267,11 +267,11 @@ class DataManager:
     def get_all_shortcuts(self, tag: str = None) -> list:
         return self.shortcut_manager.get_all(tag=tag)
 
-    def create_shortcut(self, task_type: str, title: str, shortcut_path: str, tags: str = '') -> bool:
-        return self.shortcut_manager.create(task_type, title, shortcut_path, tags)
+    def create_shortcut(self, task_type: str, title: str, shortcut_path: str, tags: str = '', action_type: str = 'open') -> bool:
+        return self.shortcut_manager.create(task_type, title, shortcut_path, tags, action_type)
 
-    def update_shortcut(self, shortcut_id: str, title: str = None, shortcut_path: str = None, tags: str = None) -> bool:
-        return self.shortcut_manager.update(shortcut_id, title, shortcut_path, tags)
+    def update_shortcut(self, shortcut_id: str, title: str = None, shortcut_path: str = None, tags: str = None, action_type: str = None) -> bool:
+        return self.shortcut_manager.update(shortcut_id, title, shortcut_path, tags, action_type)
 
     def delete_shortcut(self, shortcut_id: str) -> bool:
         shortcut_data = self.shortcut_manager.delete(shortcut_id)

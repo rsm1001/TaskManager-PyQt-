@@ -255,11 +255,7 @@ class TaskManagerMainWindow(QMainWindow):
         self._task_handler.delete_shortcut()
 
     def open_shortcut(self):
-        """打开选中的快捷入口（直接打开文件或文件夹）"""
-        from PyQt6.QtGui import QDesktopServices
-        from PyQt6.QtCore import QUrl
-        import os
-
+        """打开选中的快捷入口"""
         row = self.shortcuts_table.currentRow()
         if row < 0:
             from utils.ui_messages import warn_no_task_selected
@@ -268,18 +264,23 @@ class TaskManagerMainWindow(QMainWindow):
         btn = self.shortcuts_table.cellWidget(row, 0)
         if btn is None:
             return
-        shortcut_path = btn.toolTip() if btn.toolTip() else ''
-        if not shortcut_path:
-            item = self.shortcuts_table.item(row, 2)
-            if item:
-                shortcut_path = item.text()
-        if shortcut_path and shortcut_path != '-':
-            if os.path.isfile(shortcut_path) or os.path.isdir(shortcut_path):
-                QDesktopServices.openUrl(QUrl.fromLocalFile(shortcut_path))
+        shortcut_id = btn.property('task_id')
+        if not shortcut_id:
+            return
+        # 获取快捷入口数据以确定操作类型
+        shortcuts = self.data_manager.get_all_shortcuts()
+        shortcut_data = next((s for s in shortcuts if s['id'] == shortcut_id), None)
+        if not shortcut_data:
+            return
+        from services.table_operations import _open_shortcut_path
+        _open_shortcut_path(shortcut_data['shortcut_path'], shortcut_data.get('action_type', 'open'))
 
     def on_shortcuts_cell_clicked(self, row, col):
-        """快捷入口表格单击处理（列0时直接打开）"""
-        self._task_handler.on_shortcuts_cell_clicked(row, col)
+        """快捷入口表格单击处理（列0时触发按钮点击）"""
+        if col == 0:
+            btn = self.shortcuts_table.cellWidget(row, 0)
+            if btn:
+                btn.click()
 
     # ==================== 数据导入导出 ====================
 

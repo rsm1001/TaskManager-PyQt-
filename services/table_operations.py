@@ -21,11 +21,12 @@ def _render_shortcut_row(table, row, shortcut_item):
     Args:
         table: 表格控件
         row: 行索引
-        shortcut_item: dict，包含 keys: task_id, task_type, title, shortcut_path, tags, created_at
+        shortcut_item: dict，包含 keys: task_id, task_type, title, shortcut_path, action_type, tags, created_at
     """
     title = shortcut_item['title']
     shortcut_path = shortcut_item['shortcut_path']
     task_type = shortcut_item['task_type']
+    action_type = shortcut_item.get('action_type', 'open')
     tags = shortcut_item.get('tags', '') or ''
 
     # 名称列：创建按钮
@@ -48,11 +49,13 @@ def _render_shortcut_row(table, row, shortcut_item):
             background-color: #90caf9;
         }
     """)
-    # 点击按钮直接打开
-    btn.clicked.connect(lambda _=False, p=shortcut_path: _open_shortcut_path(p))
+    # 点击按钮执行对应操作
+    def on_click(checked, p=shortcut_path, at=action_type):
+        _open_shortcut_path(p, at)
+    btn.clicked.connect(on_click)
     table.setCellWidget(row, 0, btn)
 
-    # 类型列：显示文件或文件夹
+    # 类型列：显示文件/文件夹
     if os.path.isfile(shortcut_path):
         type_display = '文件'
     elif os.path.isdir(shortcut_path):
@@ -74,16 +77,74 @@ def _render_shortcut_row(table, row, shortcut_item):
     # 创建日期列
     table.setItem(row, 4, QTableWidgetItem(shortcut_item.get('created_at', '-')))
 
+    # Claude按钮列：在文件所在目录启动Claude
+    claude_btn = QPushButton('>_')
+    claude_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    claude_btn.setToolTip(f'在 "{shortcut_path}" 所在目录启动Claude')
+    claude_btn.setStyleSheet("""
+        QPushButton {
+            background-color: #f3e5f5;
+            border: 1px solid #9c27b0;
+            border-radius: 4px;
+            padding: 4px 8px;
+            color: #7b1fa2;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        QPushButton:hover {
+            background-color: #e1bee7;
+        }
+        QPushButton:pressed {
+            background-color: #ce93d8;
+        }
+    """)
+    def on_claude_clicked(checked, p=shortcut_path):
+        _open_in_terminal(p)
+    claude_btn.clicked.connect(on_claude_clicked)
+    table.setCellWidget(row, 5, claude_btn)
+
     # 将 id 存在按钮属性中，方便查找
     btn.setProperty("task_id", shortcut_item['id'])
     btn.setProperty("task_type", task_type)
 
 
-def _open_shortcut_path(path):
-    """打开快捷入口路径（文件直接打开，文件夹打开目录）"""
+def _get_claude_path():
+    """动态查找claude可执行文件路径"""
+    import shutil
+    path = shutil.which('claude')
+    if path:
+        return path
+    # 尝试常见的用户安装路径
+    user_bin = os.path.join(os.path.expanduser('~'), '.local', 'bin', 'claude.exe')
+    if os.path.exists(user_bin):
+        return user_bin
+    return 'claude'  # fallback
+
+
+def _open_in_terminal(path):
+    """在文件/文件夹所在目录启动cmd执行claude"""
+    import os
     if not path:
         return
-    if os.path.isfile(path) and path.lower().endswith(('.bat', '.cmd')):
+    target_dir = os.path.dirname(os.path.abspath(path)) if os.path.isfile(path) else os.path.abspath(path)
+    claude_path = _get_claude_path()
+    os.system(f'start cmd /k "cd /d {target_dir} && {claude_path}"')
+
+
+def _open_shortcut_path(path, action_type='open'):
+    """打开快捷入口路径（文件直接打开，文件夹打开目录，执行脚本）
+
+    Args:
+        path: 快捷路径
+        action_type: 操作类型 ('open' 或 'script')
+    """
+    if not path:
+        return
+    if action_type == 'script':
+        # 执行脚本：在文件所在目录启动cmd执行claude
+        script_dir = os.path.dirname(os.path.abspath(path)) if path else ''
+        QProcess.startDetached('cmd.exe', ['/c', 'start', 'cmd', '/k', f'cd /d "{script_dir}" && claude'], script_dir)
+    elif os.path.isfile(path) and path.lower().endswith(('.bat', '.cmd')):
         # bat/cmd 文件：用 QProcess 执行，设置正确的工作目录
         working_dir = os.path.dirname(os.path.abspath(path))
         QProcess.startDetached('cmd.exe', ['/c', 'start', '', path], working_dir)
