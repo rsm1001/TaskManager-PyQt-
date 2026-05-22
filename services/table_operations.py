@@ -9,6 +9,18 @@ from PyQt6.QtGui import QDesktopServices
 import config.config as config
 import os
 
+# 优先级显示映射
+PRIORITY_DISPLAY_MAP = {
+    'high': '重要',
+    'normal': '普通',
+    'low': '低'
+}
+
+
+def _get_priority_display(priority):
+    """获取优先级的显示文本"""
+    return PRIORITY_DISPLAY_MAP.get(priority, '普通')
+
 
 def _get_status_filter(status_text):
     """将界面状态文本转换为过滤器值"""
@@ -208,7 +220,8 @@ def load_daily_tasks_to_table(window):
             (3, task.week_day if task.week_day else '每天'),
             (4, task.tags if task.tags else '-'),
             (5, task.description or '-'),
-            (6, task.created_at.strftime('%Y-%m-%d'))
+            (6, task.created_at.strftime('%Y-%m-%d')),
+            (7, _get_priority_display(getattr(task, 'priority', 'normal')))
         ]
         _set_task_row_data(window.daily_table, row, task, columns)
 
@@ -236,7 +249,8 @@ def load_todo_tasks_to_table(window):
             (4, f"{task.urgency_score:.2f}"),
             (5, task.tags if task.tags else '-'),
             (6, task.description or '-'),
-            (7, task.created_at.strftime('%Y-%m-%d'))
+            (7, task.created_at.strftime('%Y-%m-%d')),
+            (8, _get_priority_display(getattr(task, 'priority', 'normal')))
         ]
         _set_task_row_data(window.todo_table, row, task, columns)
 
@@ -258,7 +272,8 @@ def load_entertainment_tasks_to_table(window):
             (3, task.category if task.category else '-'),
             (4, task.tags if task.tags else '-'),
             (5, task.description or '-'),
-            (6, task.created_at.strftime('%Y-%m-%d'))
+            (6, task.created_at.strftime('%Y-%m-%d')),
+            (7, _get_priority_display(getattr(task, 'priority', 'normal')))
         ]
         _set_task_row_data(window.entertainment_table, row, task, columns, editable_cols={1, 2, 3, 4})
 
@@ -381,6 +396,8 @@ def sort_todo_table_by_column(window, column):
         tasks.sort(key=lambda x: (x.description or '').lower(), reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
     elif column == 7:
         tasks.sort(key=lambda x: x.created_at, reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
+    elif column == 8:
+        tasks.sort(key=lambda x: getattr(x, 'priority', 'normal'), reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
 
     window.todo_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
@@ -391,6 +408,7 @@ def sort_todo_table_by_column(window, column):
             (4, f"{task.urgency_score:.2f}"),
             (5, task.tags if task.tags else '-'),
             (6, task.description or '-'),
-            (7, task.created_at.strftime('%Y-%m-%d'))
+            (7, task.created_at.strftime('%Y-%m-%d')),
+            (8, _get_priority_display(getattr(task, 'priority', 'normal')))
         ]
         _set_task_row_data(window.todo_table, row, task, columns)

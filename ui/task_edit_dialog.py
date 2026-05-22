@@ -77,6 +77,15 @@ class TaskEditDialog(QDialog):
             new_cat_btn.clicked.connect(lambda: self._create_new_category('daily'))
             category_layout.addWidget(new_cat_btn)
             layout.addLayout(category_layout)
+
+            # 优先级选择
+            priority_layout = QHBoxLayout()
+            priority_layout.addWidget(QLabel('优先级:'))
+            self.priority_combo = QComboBox()
+            self.priority_combo.addItems(['重要', '普通', '低'])
+            priority_layout.addWidget(self.priority_combo)
+            priority_layout.addStretch()
+            layout.addLayout(priority_layout)
         elif self.task_type == TaskType.TODO:
             deadline_layout = QHBoxLayout()
             deadline_layout.addWidget(QLabel('截止日期:'))
@@ -129,6 +138,15 @@ class TaskEditDialog(QDialog):
             new_cat_btn.clicked.connect(lambda: self._create_new_category('todo'))
             category_layout.addWidget(new_cat_btn)
             layout.addLayout(category_layout)
+
+            # 优先级选择
+            priority_layout = QHBoxLayout()
+            priority_layout.addWidget(QLabel('优先级:'))
+            self.priority_combo = QComboBox()
+            self.priority_combo.addItems(['重要', '普通', '低'])
+            priority_layout.addWidget(self.priority_combo)
+            priority_layout.addStretch()
+            layout.addLayout(priority_layout)
         elif self.task_type == TaskType.ENTERTAINMENT:
             category_layout = QHBoxLayout()
             category_layout.addWidget(QLabel('类别:'))
@@ -150,6 +168,15 @@ class TaskEditDialog(QDialog):
             new_cat_btn.clicked.connect(lambda: self._create_new_category('entertainment'))
             folder_layout.addWidget(new_cat_btn)
             layout.addLayout(folder_layout)
+
+            # 优先级选择
+            priority_layout = QHBoxLayout()
+            priority_layout.addWidget(QLabel('优先级:'))
+            self.priority_combo = QComboBox()
+            self.priority_combo.addItems(['重要', '普通', '低'])
+            priority_layout.addWidget(self.priority_combo)
+            priority_layout.addStretch()
+            layout.addLayout(priority_layout)
 
         # 完成状态
         status_layout = QHBoxLayout()
@@ -269,6 +296,14 @@ class TaskEditDialog(QDialog):
                     if index >= 0:
                         self.folder_combo.setCurrentIndex(index)
 
+            # 加载优先级
+            if hasattr(self, 'priority_combo'):
+                priority_map = {'high': '重要', 'normal': '普通', 'low': '低'}
+                priority_text = priority_map.get(getattr(self.task, 'priority', 'normal'), '普通')
+                index = self.priority_combo.findText(priority_text)
+                if index >= 0:
+                    self.priority_combo.setCurrentIndex(index)
+
     def get_data(self):
         """获取表单数据"""
         # 状态映射
@@ -300,5 +335,10 @@ class TaskEditDialog(QDialog):
         elif self.task_type == TaskType.ENTERTAINMENT:
             data['fun_category'] = self.category_combo.currentText()
             data['category'] = self.folder_combo.currentText().strip() if hasattr(self, 'folder_combo') else ''
+
+        # 优先级
+        if hasattr(self, 'priority_combo'):
+            priority_map = {'重要': 'high', '普通': 'normal', '低': 'low'}
+            data['priority'] = priority_map.get(self.priority_combo.currentText(), 'normal')
 
         return data

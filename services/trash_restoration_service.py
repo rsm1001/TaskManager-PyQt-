@@ -84,7 +84,8 @@ class TrashRestorationService:
             completed=data.get('completed', False),
             status=data.get('status', 'pending'),
             tags=data.get('tags', ''),
-            shortcut_path=data.get('shortcut_path', '')
+            shortcut_path=data.get('shortcut_path', ''),
+            priority=data.get('priority', 'normal')
         )
         self.session.add(task)
         self.session.commit()
@@ -101,7 +102,8 @@ class TrashRestorationService:
             completed=data.get('completed', False),
             status=data.get('status', 'pending'),
             tags=data.get('tags', ''),
-            shortcut_path=data.get('shortcut_path', '')
+            shortcut_path=data.get('shortcut_path', ''),
+            priority=data.get('priority', 'normal')
         )
         self.session.add(task)
         self.session.commit()
@@ -118,7 +120,8 @@ class TrashRestorationService:
             completed=data.get('completed', False),
             status=data.get('status', 'pending'),
             tags=data.get('tags', ''),
-            shortcut_path=data.get('shortcut_path', '')
+            shortcut_path=data.get('shortcut_path', ''),
+            priority=data.get('priority', 'normal')
         )
         self.session.add(task)
         self.session.commit()

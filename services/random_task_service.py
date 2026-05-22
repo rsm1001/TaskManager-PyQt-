@@ -5,6 +5,13 @@
 
 import random
 
+# 优先级权重映射
+PRIORITY_WEIGHTS = {
+    'high': 3.0,
+    'normal': 1.0,
+    'low': 0.3
+}
+
 
 def pick_random_daily_task(data_manager, weekday_filter, status_filter):
     """随机抽取每日任务（根据筛选条件）
@@ -23,13 +30,27 @@ def pick_random_daily_task(data_manager, weekday_filter, status_filter):
     if not pending_tasks:
         return None
 
-    return random.choice(pending_tasks)
+    # 按优先级权重随机选择
+    weights = [PRIORITY_WEIGHTS.get(getattr(t, 'priority', 'normal'), 1.0) for t in pending_tasks]
+    total_weight = sum(weights)
+
+    if total_weight <= 0:
+        return random.choice(pending_tasks)
+
+    rand_val = random.uniform(0, total_weight)
+    cum_weight = 0
+    for i, w in enumerate(weights):
+        cum_weight += w
+        if rand_val <= cum_weight:
+            return pending_tasks[i]
+
+    return pending_tasks[-1]
 
 
 def pick_random_todo_task(data_manager):
     """按权重随机抽取待办事项
 
-    根据紧急度分数作为权重进行选择，紧急度越高的任务被选中概率越大。
+    根据紧急度分数和优先级权重进行选择，紧急度高且优先级高的任务被选中概率越大。
 
     参数:
         data_manager: 数据管理器实例
@@ -43,8 +64,13 @@ def pick_random_todo_task(data_manager):
     if not pending_tasks:
         return None
 
-    # 按紧急度权重随机选择
-    weights = [max(1, t.urgency_score) for t in pending_tasks]
+    # 按紧急度*优先级权重随机选择
+    weights = []
+    for t in pending_tasks:
+        urgency = max(1, getattr(t, 'urgency_score', 1))
+        priority_weight = PRIORITY_WEIGHTS.get(getattr(t, 'priority', 'normal'), 1.0)
+        weights.append(urgency * priority_weight)
+
     total_weight = sum(weights)
 
     if total_weight <= 0:
@@ -63,6 +89,8 @@ def pick_random_todo_task(data_manager):
 def pick_random_entertainment_task(data_manager):
     """随机抽取娱乐任务
 
+    根据优先级权重进行选择，优先级高的任务被选中概率越大。
+
     参数:
         data_manager: 数据管理器实例
 
@@ -75,4 +103,18 @@ def pick_random_entertainment_task(data_manager):
     if not pending_tasks:
         return None
 
-    return random.choice(pending_tasks)
+    # 按优先级权重随机选择
+    weights = [PRIORITY_WEIGHTS.get(getattr(t, 'priority', 'normal'), 1.0) for t in pending_tasks]
+    total_weight = sum(weights)
+
+    if total_weight <= 0:
+        return random.choice(pending_tasks)
+
+    rand_val = random.uniform(0, total_weight)
+    cum_weight = 0
+    for i, w in enumerate(weights):
+        cum_weight += w
+        if rand_val <= cum_weight:
+            return pending_tasks[i]
+
+    return pending_tasks[-1]

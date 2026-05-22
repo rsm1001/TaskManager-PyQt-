@@ -38,9 +38,10 @@ class JsonExportImportHandler:
                     "category": task.category,
                     "week_day": task.week_day or "",
                     "status": task.status or "pending",
-                    "tags": task.tags or ""
+                    "tags": task.tags or "",
+                    "priority": getattr(task, 'priority', 'normal')
                 })
-            
+
             # 导出待办事项
             for task in self.session.query(TodoTask).all():
                 data["todo"].append({
@@ -53,9 +54,10 @@ class JsonExportImportHandler:
                     "urgency_score": task.urgency_score,
                     "category": task.category,
                     "status": task.status or "pending",
-                    "tags": task.tags or ""
+                    "tags": task.tags or "",
+                    "priority": getattr(task, 'priority', 'normal')
                 })
-            
+
             # 导出娱乐任务
             for task in self.session.query(EntertainmentTask).all():
                 data["entertainment"].append({
@@ -67,7 +69,8 @@ class JsonExportImportHandler:
                     "fun_category": task.fun_category,
                     "category": task.category,
                     "status": task.status or "pending",
-                    "tags": task.tags or ""
+                    "tags": task.tags or "",
+                    "priority": getattr(task, 'priority', 'normal')
                 })
             
             # 导出配置
@@ -114,10 +117,11 @@ class JsonExportImportHandler:
                         week_day=task_data.get("week_day", ""),
                         created_at=created_at,
                         status=task_data.get("status", "pending"),
-                        tags=task_data.get("tags", "")
+                        tags=task_data.get("tags", ""),
+                        priority=task_data.get("priority", "normal")
                     )
                     self.session.add(task)
-            
+
             # 导入待办事项
             if "todo" in data:
                 for task_data in data["todo"]:
@@ -127,7 +131,7 @@ class JsonExportImportHandler:
                         created_at = datetime.strptime(created_at_str, "%Y-%m-%d")
                     except ValueError:
                         created_at = datetime.now()
-                        
+
                     task = TodoTask(
                         id=task_data.get("id", str(uuid.uuid4())),  # 生成新ID以防冲突
                         title=task_data.get("title", ""),
@@ -137,10 +141,11 @@ class JsonExportImportHandler:
                         urgency_score=task_data.get("urgency_score", 0),
                         created_at=created_at,
                         status=task_data.get("status", "pending"),
-                        tags=task_data.get("tags", "")
+                        tags=task_data.get("tags", ""),
+                        priority=task_data.get("priority", "normal")
                     )
                     self.session.add(task)
-            
+
             # 导入娱乐任务
             if "entertainment" in data:
                 for task_data in data["entertainment"]:
@@ -150,7 +155,7 @@ class JsonExportImportHandler:
                         created_at = datetime.strptime(created_at_str, "%Y-%m-%d")
                     except ValueError:
                         created_at = datetime.now()
-                        
+
                     task = EntertainmentTask(
                         id=task_data.get("id", str(uuid.uuid4())),  # 生成新ID以防冲突
                         title=task_data.get("title", ""),
@@ -159,7 +164,8 @@ class JsonExportImportHandler:
                         fun_category=task_data.get("fun_category", "general"),
                         created_at=created_at,
                         status=task_data.get("status", "pending"),
-                        tags=task_data.get("tags", "")
+                        tags=task_data.get("tags", ""),
+                        priority=task_data.get("priority", "normal")
                     )
                     self.session.add(task)
             

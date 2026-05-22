@@ -104,6 +104,7 @@ class EntertainmentTaskManager:
             'tags': task.tags or '',
             'shortcut_path': task.shortcut_path or '',
             'category': task.category or '',
+            'priority': task.priority or 'normal',
             'created_at': task.created_at.isoformat() if task.created_at else '',
             'updated_at': task.updated_at.isoformat() if task.updated_at else '',
         }

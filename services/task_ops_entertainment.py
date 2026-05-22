@@ -74,7 +74,8 @@ class EntertainmentTaskOperations:
             completed=data['completed'],
             status=data.get('status', 'pending'),
             tags=data.get('tags', ''),
-            category=data.get('category', '')
+            category=data.get('category', ''),
+            priority=data.get('priority', 'normal')
         )
         self._w.load_entertainment_tasks()
         self._validate_and_refresh_filter('entertainment')
