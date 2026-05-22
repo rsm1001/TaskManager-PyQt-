@@ -67,29 +67,7 @@ def _render_shortcut_row(table, row, shortcut_item):
     btn.clicked.connect(on_click)
     table.setCellWidget(row, 0, btn)
 
-    # 类型列：显示文件/文件夹
-    if os.path.isfile(shortcut_path):
-        type_display = '文件'
-    elif os.path.isdir(shortcut_path):
-        type_display = '文件夹'
-    else:
-        type_display = '未知'
-    table.setItem(row, 1, QTableWidgetItem(type_display))
-
-    # 标签列
-    tags_display = tags if tags else '-'
-    table.setItem(row, 2, QTableWidgetItem(tags_display))
-
-    # 路径列
-    path_text = shortcut_path if shortcut_path else '-'
-    path_item = QTableWidgetItem(path_text)
-    path_item.setToolTip(path_text)
-    table.setItem(row, 3, path_item)
-
-    # 创建日期列
-    table.setItem(row, 4, QTableWidgetItem(shortcut_item.get('created_at', '-')))
-
-    # Claude按钮列：在文件所在目录启动Claude
+    # Terminal按钮列：在文件所在目录启动Claude
     claude_btn = QPushButton('>_')
     claude_btn.setCursor(Qt.CursorShape.PointingHandCursor)
     claude_btn.setToolTip(f'在 "{shortcut_path}" 所在目录启动Claude')
@@ -113,7 +91,39 @@ def _render_shortcut_row(table, row, shortcut_item):
     def on_claude_clicked(checked, p=shortcut_path):
         _open_in_terminal(p)
     claude_btn.clicked.connect(on_claude_clicked)
-    table.setCellWidget(row, 5, claude_btn)
+    table.setCellWidget(row, 1, claude_btn)
+
+    # 类型列：显示文件/文件夹
+    if os.path.isfile(shortcut_path):
+        type_display = '文件'
+    elif os.path.isdir(shortcut_path):
+        type_display = '文件夹'
+    else:
+        type_display = '未知'
+    table.setItem(row, 2, QTableWidgetItem(type_display))
+
+    # 标签列
+    tags_display = tags if tags else '-'
+    table.setItem(row, 3, QTableWidgetItem(tags_display))
+
+    # 路径列
+    path_text = shortcut_path if shortcut_path else '-'
+    path_item = QTableWidgetItem(path_text)
+    path_item.setToolTip(path_text)
+    table.setItem(row, 4, path_item)
+
+    # 创建日期列
+    from datetime import datetime
+    raw_date = shortcut_item.get('created_at', '-')
+    if raw_date and raw_date != '-':
+        try:
+            dt = datetime.fromisoformat(raw_date)
+            date_display = dt.strftime('%Y-%m-%d %H:%M')
+        except:
+            date_display = raw_date
+    else:
+        date_display = '-'
+    table.setItem(row, 5, QTableWidgetItem(date_display))
 
     # 将 id 存在按钮属性中，方便查找
     btn.setProperty("task_id", shortcut_item['id'])
