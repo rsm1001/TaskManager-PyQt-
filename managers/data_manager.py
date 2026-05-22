@@ -25,6 +25,7 @@ from managers.daily_task_manager import DailyTaskManager
 from managers.tag_manager import TagManager
 from services.daily_reset_service import DailyResetService
 from services.vacuum_service import VacuumService
+from services.trash_restoration_service import TrashRestorationService
 
 
 class TaskType(Enum):
@@ -53,6 +54,15 @@ class DataManager:
         self.tag_manager = TagManager(self.config_manager)
         self.daily_reset_service = DailyResetService(self.session, self.config_manager)
         self.vacuum_service = VacuumService(self.engine, config.config.TRASH_DATABASE_PATH)
+        self.trash_restoration_service = TrashRestorationService(
+            session=self.session,
+            shortcut_manager=self.shortcut_manager,
+            trash_manager=self.trash_manager,
+            vacuum_service=self.vacuum_service,
+            daily_task_manager=self.daily_task_manager,
+            todo_task_manager=self.todo_manager,
+            entertainment_task_manager=self.entertainment_manager
+        )
 
         # 检查并执行每日重置
         self.daily_reset_service.check_and_reset()
@@ -177,90 +187,17 @@ class DataManager:
 
     def restore_trashed_task(self, trash_id: str) -> bool:
         """恢复垃圾桶中的任务到主数据库"""
-        record = self.trash_manager.get_by_id(trash_id)
-        if not record:
-            return False
+        return self.trash_restoration_service.restore_task(trash_id)
 
-        task_type = record['task_type']
-        data = record['data']
-
-        if task_type == 'daily':
-            task = DailyTask(
-                id=data.get('id', str(uuid.uuid4())),
-                title=data.get('title', ''),
-                description=data.get('description', ''),
-                week_day=data.get('week_day', ''),
-                completed=data.get('completed', False),
-                status=data.get('status', 'pending'),
-                tags=data.get('tags', ''),
-                shortcut_path=data.get('shortcut_path', '')
-            )
-        elif task_type == 'todo':
-            task = TodoTask(
-                id=data.get('id', str(uuid.uuid4())),
-                title=data.get('title', ''),
-                description=data.get('description', ''),
-                deadline=data.get('deadline', ''),
-                completed=data.get('completed', False),
-                status=data.get('status', 'pending'),
-                tags=data.get('tags', ''),
-                shortcut_path=data.get('shortcut_path', '')
-            )
-        elif task_type == 'shortcut':
-            return self._restore_shortcut_from_trash(trash_id, data)
-        elif task_type == 'entertainment':
-            task = EntertainmentTask(
-                id=data.get('id', str(uuid.uuid4())),
-                title=data.get('title', ''),
-                description=data.get('description', ''),
-                fun_category=data.get('fun_category', 'general'),
-                completed=data.get('completed', False),
-                status=data.get('status', 'pending'),
-                tags=data.get('tags', ''),
-                shortcut_path=data.get('shortcut_path', '')
-            )
-        else:
-            return False
-
-        self.session.add(task)
-        self.session.commit()
-        self.trash_manager.delete_trash_record(trash_id)
-        return True
-
-    def _restore_shortcut_from_trash(self, trash_id: str, data: dict) -> bool:
-        """从垃圾桶恢复快捷入口"""
-        now = datetime.now().isoformat()
-        self.shortcut_manager._conn.execute(
-            "INSERT INTO shortcut_entries (id, title, shortcut_path, category, tags, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                data.get('id', str(uuid.uuid4())),
-                data.get('title', ''),
-                data.get('shortcut_path', ''),
-                data.get('category', 'todo'),
-                data.get('tags', ''),
-                data.get('created_at', now),
-                now
-            )
-        )
-        self.shortcut_manager._conn.commit()
-        self.trash_manager.delete_trash_record(trash_id)
-        return True
 
     def purge_trashed_task(self, trash_id: str):
-        self.trash_manager.delete_trash_record(trash_id)
-        self.vacuum_service.on_tasks_deleted(1)
+        self.trash_restoration_service.purge_task(trash_id)
 
     def purge_trashed_tasks(self, trash_ids: List[str]):
-        self.trash_manager.delete_trash_records(trash_ids)
-        self.vacuum_service.on_tasks_deleted(len(trash_ids))
+        self.trash_restoration_service.purge_tasks(trash_ids)
 
     def purge_all_trashed(self, task_type: str = None):
-        before = self.trash_manager.get_trashed_tasks(task_type)
-        count = len(before)
-        self.trash_manager.purge_all(task_type)
-        if count > 0:
-            self.vacuum_service.on_tasks_deleted(count)
+        self.trash_restoration_service.purge_all(task_type)
 
     # ==================== 快捷入口相关方法 ====================
 
@@ -281,7 +218,8 @@ class DataManager:
         return True
 
     def restore_shortcut(self, trash_id: str) -> bool:
-        return self._restore_shortcut_from_trash(trash_id, {})
+        """恢复快捷入口（委托给 TrashRestorationService）"""
+        return self.trash_restoration_service.restore_task(trash_id)
 
     # ==================== 紧急度（委托） ====================
 
