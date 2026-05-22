@@ -139,6 +139,17 @@ def migrate_db(engine):
             conn.commit()
         logger.info("已添加 entertainment_tasks.shortcut_path 字段")
 
+    # 清理 category 字段中的旧数据（之前用于存储任务类型，现改为用户分类）
+    # 将值为 'daily', 'todo', 'entertainment' 的记录清空
+    for table_name, type_val in [('daily_tasks', 'daily'), ('todo_tasks', 'todo'), ('entertainment_tasks', 'entertainment')]:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text(f"UPDATE {table_name} SET category = '' WHERE category = '{type_val}'"))
+                conn.commit()
+            logger.info(f"已清理 {table_name} 中的旧 category 值")
+        except Exception as e:
+            logger.warning(f"清理 {table_name} category 时出错: {e}")
+
 
 # 数据库连接和会话管理
 def init_db(db_path: str = "taskmanager.db", run_migration: bool = False):

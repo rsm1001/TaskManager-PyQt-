@@ -88,8 +88,8 @@ class DataManager:
 
     def create_daily_task(self, title: str, description: str = "", week_day: str = "",
                           completed: bool = False, status: str = "pending",
-                          tags: str = "", shortcut_path: str = "") -> DailyTask:
-        task = self.daily_task_manager.create(title, description, week_day, completed, status, tags, shortcut_path)
+                          tags: str = "", shortcut_path: str = "", category: str = "") -> DailyTask:
+        task = self.daily_task_manager.create(title, description, week_day, completed, status, tags, shortcut_path, category)
         self._enforce_task_limit('daily', DailyTask)
         return task
 
@@ -116,8 +116,8 @@ class DataManager:
 
     def create_todo_task(self, title: str, description: str = "", deadline: str = "",
                          completed: bool = False, status: str = "pending",
-                         tags: str = "", shortcut_path: str = "") -> TodoTask:
-        task = self.todo_manager.create(title, description, deadline, completed, status, tags, shortcut_path)
+                         tags: str = "", shortcut_path: str = "", category: str = "") -> TodoTask:
+        task = self.todo_manager.create(title, description, deadline, completed, status, tags, shortcut_path, category)
         self._enforce_task_limit('todo', TodoTask)
         return task
 
@@ -149,8 +149,8 @@ class DataManager:
     def create_entertainment_task(self, title: str, description: str = "",
                                   fun_category: str = "general", completed: bool = False,
                                   status: str = "pending", tags: str = "",
-                                  shortcut_path: str = "") -> EntertainmentTask:
-        task = self.entertainment_manager.create(title, description, fun_category, completed, status, tags, shortcut_path)
+                                  shortcut_path: str = "", category: str = "") -> EntertainmentTask:
+        task = self.entertainment_manager.create(title, description, fun_category, completed, status, tags, shortcut_path, category)
         self._enforce_task_limit('entertainment', EntertainmentTask)
         return task
 
@@ -328,6 +328,20 @@ class DataManager:
             "todo": {"total": len(todo_tasks), "completed": todo_completed, "expired": todo_expired},
             "entertainment": {"total": len(entertainment_tasks), "completed": entertainment_completed}
         }
+
+    # ==================== 分类管理 ====================
+
+    def get_all_categories(self, task_type: str) -> List[str]:
+        """获取指定任务类型的所有分类"""
+        return self.tag_manager.get_all_categories(task_type)
+
+    def add_category(self, category: str, task_type: str) -> bool:
+        """添加任务分类"""
+        return self.tag_manager.add_category(category, task_type)
+
+    def delete_category(self, category: str, task_type: str) -> bool:
+        """删除任务分类"""
+        return self.tag_manager.delete_category(category, task_type)
 
     # ==================== 标签管理 ====================
 

@@ -143,10 +143,11 @@ def load_daily_tasks_to_table(window):
     for row, task in enumerate(tasks):
         columns = [
             (1, task.title),
-            (2, task.week_day if task.week_day else '每天'),
-            (3, task.tags if task.tags else '-'),
-            (4, task.description or '-'),
-            (5, task.created_at.strftime('%Y-%m-%d'))
+            (2, task.category if task.category else '-'),
+            (3, task.week_day if task.week_day else '每天'),
+            (4, task.tags if task.tags else '-'),
+            (5, task.description or '-'),
+            (6, task.created_at.strftime('%Y-%m-%d'))
         ]
         _set_task_row_data(window.daily_table, row, task, columns)
 
@@ -170,10 +171,11 @@ def load_todo_tasks_to_table(window):
         columns = [
             (1, task.title),
             (2, task.deadline if task.deadline else '无'),
-            (3, f"{task.urgency_score:.2f}"),
-            (4, task.tags if task.tags else '-'),
-            (5, task.description or '-'),
-            (6, task.created_at.strftime('%Y-%m-%d'))
+            (3, task.category if task.category else '-'),
+            (4, f"{task.urgency_score:.2f}"),
+            (5, task.tags if task.tags else '-'),
+            (6, task.description or '-'),
+            (7, task.created_at.strftime('%Y-%m-%d'))
         ]
         _set_task_row_data(window.todo_table, row, task, columns)
 
@@ -192,9 +194,10 @@ def load_entertainment_tasks_to_table(window):
         columns = [
             (1, task.title),
             (2, task.fun_category),
-            (3, task.tags if task.tags else '-'),
-            (4, task.description or '-'),
-            (5, task.created_at.strftime('%Y-%m-%d'))
+            (3, task.category if task.category else '-'),
+            (4, task.tags if task.tags else '-'),
+            (5, task.description or '-'),
+            (6, task.created_at.strftime('%Y-%m-%d'))
         ]
         _set_task_row_data(window.entertainment_table, row, task, columns, editable_cols={1, 2, 3, 4})
 
@@ -308,10 +311,14 @@ def sort_todo_table_by_column(window, column):
     elif column == 2:
         tasks.sort(key=lambda x: (x.deadline or ''), reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
     elif column == 3:
-        tasks.sort(key=lambda x: x.urgency_score, reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
+        tasks.sort(key=lambda x: (x.category or ''), reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
     elif column == 4:
-        tasks.sort(key=lambda x: (x.description or '').lower(), reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
+        tasks.sort(key=lambda x: x.urgency_score, reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
     elif column == 5:
+        tasks.sort(key=lambda x: (x.tags or '').lower(), reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
+    elif column == 6:
+        tasks.sort(key=lambda x: (x.description or '').lower(), reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
+    elif column == 7:
         tasks.sort(key=lambda x: x.created_at, reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
 
     window.todo_table.setRowCount(len(tasks))
@@ -319,9 +326,10 @@ def sort_todo_table_by_column(window, column):
         columns = [
             (1, task.title),
             (2, task.deadline if task.deadline else '无'),
-            (3, f"{task.urgency_score:.2f}"),
-            (4, task.tags if task.tags else '-'),
-            (5, task.description or '-'),
-            (6, task.created_at.strftime('%Y-%m-%d'))
+            (3, task.category if task.category else '-'),
+            (4, f"{task.urgency_score:.2f}"),
+            (5, task.tags if task.tags else '-'),
+            (6, task.description or '-'),
+            (7, task.created_at.strftime('%Y-%m-%d'))
         ]
         _set_task_row_data(window.todo_table, row, task, columns)

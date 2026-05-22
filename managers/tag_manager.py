@@ -92,3 +92,69 @@ class TagManager:
     def get_or_create(self, tag: str, category: str) -> bool:
         """获取或创建标签（如果不存在则创建）"""
         return self.add_tag(tag, category)
+
+    # ==================== 分类管理 ====================
+
+    def _get_category_config_key(self, task_type: str) -> str:
+        """获取任务类型对应的分类配置键"""
+        return f"categories_{task_type}"
+
+    def get_all_categories(self, task_type: str) -> List[str]:
+        """
+        获取指定任务类型的所有分类
+
+        Args:
+            task_type: 任务类型（如 'daily', 'todo', 'entertainment'）
+        """
+        key = self._get_category_config_key(task_type)
+        cats_str = self._config_manager.get(key, "")
+        if not cats_str:
+            return []
+        return [c.strip() for c in cats_str.split(',') if c.strip()]
+
+    def _save_categories(self, task_type: str, categories: List[str]):
+        """保存任务类型分类列表（内部使用）"""
+        key = self._get_category_config_key(task_type)
+        cats_str = ','.join(sorted(set(categories)))
+        self._config_manager.set(key, cats_str)
+
+    def add_category(self, category: str, task_type: str) -> bool:
+        """
+        添加任务分类
+
+        Args:
+            category: 分类名称
+            task_type: 任务类型
+
+        Returns:
+            bool: 是否添加成功（分类已存在时也返回True）
+        """
+        category = category.strip()
+        if not category:
+            return False
+        categories = self.get_all_categories(task_type)
+        if category not in categories:
+            categories.append(category)
+            self._save_categories(task_type, categories)
+        return True
+
+    def delete_category(self, category: str, task_type: str) -> bool:
+        """
+        删除任务分类
+
+        Args:
+            category: 分类名称
+            task_type: 任务类型
+
+        Returns:
+            bool: 是否删除成功
+        """
+        category = category.strip()
+        if not category:
+            return False
+        categories = self.get_all_categories(task_type)
+        if category in categories:
+            categories.remove(category)
+            self._save_categories(task_type, categories)
+            return True
+        return False

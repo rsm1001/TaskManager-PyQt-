@@ -55,7 +55,8 @@ class TaskOperationHandler:
             week_day=data['weekday'],
             completed=data['completed'],
             status=data.get('status', 'pending'),
-            tags=data.get('tags', '')
+            tags=data.get('tags', ''),
+            category=data.get('category', '')
         )
         self._w.load_daily_tasks()
         self._validate_and_refresh_filter('daily')
@@ -86,7 +87,8 @@ class TaskOperationHandler:
             week_day=data['weekday'],
             completed=data['completed'],
             status=data.get('status', 'pending'),
-            tags=data.get('tags', '')
+            tags=data.get('tags', ''),
+            category=data.get('category', '')
         )
         self._w.load_daily_tasks()
         self._validate_and_refresh_filter('daily')

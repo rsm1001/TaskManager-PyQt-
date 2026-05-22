@@ -63,6 +63,20 @@ class TaskEditDialog(QDialog):
             self.weekday_combo.addItems(['每天', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'])
             weekday_layout.addWidget(self.weekday_combo)
             layout.addLayout(weekday_layout)
+
+            # 分类选择
+            category_layout = QHBoxLayout()
+            category_layout.addWidget(QLabel('分类:'))
+            self.folder_combo = QComboBox()
+            self.folder_combo.setEditable(True)
+            self.folder_combo.setMinimumWidth(150)
+            self._load_categories('daily')
+            category_layout.addWidget(self.folder_combo)
+
+            new_cat_btn = QPushButton('新建')
+            new_cat_btn.clicked.connect(lambda: self._create_new_category('daily'))
+            category_layout.addWidget(new_cat_btn)
+            layout.addLayout(category_layout)
         elif self.task_type == TaskType.TODO:
             deadline_layout = QHBoxLayout()
             deadline_layout.addWidget(QLabel('截止日期:'))
@@ -101,6 +115,20 @@ class TaskEditDialog(QDialog):
 
             quick_set_layout.addStretch()  # 添加弹性空间，使按钮靠左对齐
             layout.addLayout(quick_set_layout)
+
+            # 分类选择
+            category_layout = QHBoxLayout()
+            category_layout.addWidget(QLabel('分类:'))
+            self.folder_combo = QComboBox()
+            self.folder_combo.setEditable(True)
+            self.folder_combo.setMinimumWidth(150)
+            self._load_categories('todo')
+            category_layout.addWidget(self.folder_combo)
+
+            new_cat_btn = QPushButton('新建')
+            new_cat_btn.clicked.connect(lambda: self._create_new_category('todo'))
+            category_layout.addWidget(new_cat_btn)
+            layout.addLayout(category_layout)
         elif self.task_type == TaskType.ENTERTAINMENT:
             category_layout = QHBoxLayout()
             category_layout.addWidget(QLabel('类别:'))
@@ -108,6 +136,20 @@ class TaskEditDialog(QDialog):
             self.category_combo.addItems(['general', 'games', 'movies', 'sports', 'reading', 'music', 'other'])
             category_layout.addWidget(self.category_combo)
             layout.addLayout(category_layout)
+
+            # 分类选择（复用 fun_category 字段）
+            folder_layout = QHBoxLayout()
+            folder_layout.addWidget(QLabel('分类:'))
+            self.folder_combo = QComboBox()
+            self.folder_combo.setEditable(True)
+            self.folder_combo.setMinimumWidth(150)
+            self._load_categories('entertainment')
+            folder_layout.addWidget(self.folder_combo)
+
+            new_cat_btn = QPushButton('新建')
+            new_cat_btn.clicked.connect(lambda: self._create_new_category('entertainment'))
+            folder_layout.addWidget(new_cat_btn)
+            layout.addLayout(folder_layout)
 
         # 完成状态
         status_layout = QHBoxLayout()
@@ -152,6 +194,29 @@ class TaskEditDialog(QDialog):
         future_qdate = QDate(future_date.year, future_date.month, future_date.day)
         self.deadline_date.setDate(future_qdate)
 
+    def _load_categories(self, task_type: str):
+        """加载任务分类到下拉框"""
+        self.folder_combo.clear()
+        categories = []
+        if self.data_manager:
+            categories = self.data_manager.get_all_categories(task_type)
+        self.folder_combo.addItems(categories)
+
+    def _create_new_category(self, task_type: str):
+        """创建新分类"""
+        from PyQt6.QtWidgets import QInputDialog
+        new_cat, ok = QInputDialog.getText(self, "新建分类", "请输入分类名称:")
+        if ok and new_cat.strip():
+            new_cat = new_cat.strip()
+            if self.data_manager:
+                self.data_manager.add_category(new_cat, task_type)
+            # 添加到下拉框并选中
+            index = self.folder_combo.findText(new_cat)
+            if index < 0:
+                self.folder_combo.addItem(new_cat)
+                index = self.folder_combo.count() - 1
+            self.folder_combo.setCurrentIndex(index)
+
     def load_task_data(self):
         """加载任务数据到表单"""
         if self.task:
@@ -173,6 +238,11 @@ class TaskEditDialog(QDialog):
                 index = self.weekday_combo.findText(weekday)
                 if index >= 0:
                     self.weekday_combo.setCurrentIndex(index)
+                # 加载分类
+                if hasattr(self, 'folder_combo') and self.task.category:
+                    index = self.folder_combo.findText(self.task.category)
+                    if index >= 0:
+                        self.folder_combo.setCurrentIndex(index)
             elif self.task_type == TaskType.TODO:
                 if self.task.deadline:
                     try:
@@ -184,10 +254,20 @@ class TaskEditDialog(QDialog):
                 else:
                     # 如果没有截止日期，则使用当前日期
                     self.deadline_date.setDate(QDate.currentDate())
+                # 加载分类
+                if hasattr(self, 'folder_combo') and self.task.category:
+                    index = self.folder_combo.findText(self.task.category)
+                    if index >= 0:
+                        self.folder_combo.setCurrentIndex(index)
             elif self.task_type == TaskType.ENTERTAINMENT:
                 index = self.category_combo.findText(self.task.fun_category)
                 if index >= 0:
                     self.category_combo.setCurrentIndex(index)
+                # 加载分类（复用 category 字段）
+                if hasattr(self, 'folder_combo') and self.task.category:
+                    index = self.folder_combo.findText(self.task.category)
+                    if index >= 0:
+                        self.folder_combo.setCurrentIndex(index)
 
     def get_data(self):
         """获取表单数据"""
@@ -207,6 +287,7 @@ class TaskEditDialog(QDialog):
         if self.task_type == TaskType.DAILY:
             weekday = self.weekday_combo.currentText()
             data['weekday'] = '' if weekday == '每天' else weekday
+            data['category'] = self.folder_combo.currentText().strip() if hasattr(self, 'folder_combo') else ''
         elif self.task_type == TaskType.TODO:
             # 获取日期文本而不是直接比较日期对象
             deadline_text = self.deadline_date.text()
@@ -215,7 +296,9 @@ class TaskEditDialog(QDialog):
                 data['deadline'] = ''
             else:
                 data['deadline'] = self.deadline_date.date().toString('yyyy-MM-dd')
+            data['category'] = self.folder_combo.currentText().strip() if hasattr(self, 'folder_combo') else ''
         elif self.task_type == TaskType.ENTERTAINMENT:
             data['fun_category'] = self.category_combo.currentText()
+            data['category'] = self.folder_combo.currentText().strip() if hasattr(self, 'folder_combo') else ''
 
         return data

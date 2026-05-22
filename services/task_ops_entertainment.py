@@ -41,7 +41,8 @@ class EntertainmentTaskOperations:
             fun_category=data['fun_category'],
             completed=data['completed'],
             status=data.get('status', 'pending'),
-            tags=data.get('tags', '')
+            tags=data.get('tags', ''),
+            category=data.get('category', '')
         )
         self._w.load_entertainment_tasks()
         self._validate_and_refresh_filter('entertainment')
@@ -72,7 +73,8 @@ class EntertainmentTaskOperations:
             fun_category=data['fun_category'],
             completed=data['completed'],
             status=data.get('status', 'pending'),
-            tags=data.get('tags', '')
+            tags=data.get('tags', ''),
+            category=data.get('category', '')
         )
         self._w.load_entertainment_tasks()
         self._validate_and_refresh_filter('entertainment')

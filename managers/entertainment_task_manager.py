@@ -34,11 +34,12 @@ class EntertainmentTaskManager:
 
     def create(self, title: str, description: str = "", fun_category: str = "general",
                completed: bool = False, status: str = "pending", tags: str = "",
-               shortcut_path: str = "") -> EntertainmentTask:
+               shortcut_path: str = "", category: str = "") -> EntertainmentTask:
         """创建娱乐任务"""
         task = EntertainmentTask(
             title=title, description=description, fun_category=fun_category,
-            completed=completed, status=status, tags=tags, shortcut_path=shortcut_path
+            completed=completed, status=status, tags=tags, shortcut_path=shortcut_path,
+            category=category
         )
         self.session.add(task)
         self.session.commit()
@@ -102,6 +103,7 @@ class EntertainmentTaskManager:
             'status': task.status,
             'tags': task.tags or '',
             'shortcut_path': task.shortcut_path or '',
+            'category': task.category or '',
             'created_at': task.created_at.isoformat() if task.created_at else '',
             'updated_at': task.updated_at.isoformat() if task.updated_at else '',
         }
