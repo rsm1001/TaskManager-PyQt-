@@ -27,6 +27,83 @@ def _get_status_filter(status_text):
     return config.STATUS_FILTER_MAP.get(status_text, 'all')
 
 
+def load_search_results_to_table(window):
+    """加载全局搜索结果到搜索结果表格"""
+    keyword = getattr(window, 'search_input', None)
+    if keyword is None:
+        return
+    keyword_text = keyword.text().strip()
+
+    results = window.data_manager.search_all_tasks(keyword_text)
+
+    window.search_results_table.setRowCount(len(results))
+
+    # 类型映射
+    TYPE_LABELS = {
+        'daily': '每日任务',
+        'todo': '待办事项',
+        'entertainment': '娱乐任务',
+        'shortcut': '快捷入口',
+    }
+
+    for row, item in enumerate(results):
+        task_type = item.get('task_type', 'unknown')
+        type_label = TYPE_LABELS.get(task_type, task_type)
+
+        # 类型列
+        type_item = QTableWidgetItem(type_label)
+        type_item.setData(Qt.ItemDataRole.UserRole, item.get('id', ''))
+        window.search_results_table.setItem(row, 0, type_item)
+
+        # 状态列
+        status = item.get('status', 'pending')
+        status_text = config.STATUS_DISPLAY_MAP.get(status, '○')
+        status_item = QTableWidgetItem(status_text)
+        status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        status_item.setData(Qt.ItemDataRole.UserRole, item.get('id', ''))
+        window.search_results_table.setItem(row, 1, status_item)
+
+        # 标题列
+        title = item.get('title', '')
+        title_item = QTableWidgetItem(title)
+        title_item.setData(Qt.ItemDataRole.UserRole, item.get('id', ''))
+        window.search_results_table.setItem(row, 2, title_item)
+
+        # 分类列
+        category = item.get('category', '') or '-'
+        window.search_results_table.setItem(row, 3, QTableWidgetItem(category))
+
+        # 标签列
+        tags = item.get('tags', '') or '-'
+        window.search_results_table.setItem(row, 4, QTableWidgetItem(tags))
+
+        # 描述列
+        description = item.get('description', '') or '-'
+        desc_item = QTableWidgetItem(description)
+        if len(description) > 50:
+            desc_item.setToolTip(description)
+        window.search_results_table.setItem(row, 5, desc_item)
+
+        # 创建日期列
+        created_at = item.get('created_at', '')
+        if created_at:
+            if hasattr(created_at, 'strftime'):
+                date_str = created_at.strftime('%Y-%m-%d')
+            else:
+                date_str = str(created_at)[:10]
+        else:
+            date_str = '-'
+        window.search_results_table.setItem(row, 6, QTableWidgetItem(date_str))
+
+        # 优先级列
+        priority = item.get('priority', 'normal')
+        priority_display = PRIORITY_DISPLAY_MAP.get(priority, '普通')
+        window.search_results_table.setItem(row, 7, QTableWidgetItem(priority_display))
+
+    # 更新状态栏显示结果数量
+    window.search_status_label.setText(f"找到 {len(results)} 条结果")
+
+
 def _render_shortcut_row(table, row, shortcut_item):
     """渲染快捷入口表格的一行
 

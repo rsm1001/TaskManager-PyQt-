@@ -5,13 +5,14 @@ UI Components Module for Task Manager - PyQt6
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
                              QHeaderView, QPushButton, QLabel, QComboBox, QGroupBox, QSplitter,
-                             QAbstractItemView)
+                             QAbstractItemView, QLineEdit)
 from PyQt6.QtCore import Qt, QDate
 from datetime import datetime, date
 from PyQt6.QtGui import QColor
 import config.config as config
 from components.tag_filter_bar import TagFilterBar
 from managers.data_manager import TaskType
+from services.table_operations import load_search_results_to_table
 import os
 
 
@@ -315,3 +316,63 @@ def on_shortcut_tag_filter_clicked(parent_window, tag: str):
     """快捷入口标签筛选点击处理"""
     parent_window.current_shortcut_tag_filter = tag
     parent_window.load_shortcuts()
+
+
+def create_search_tab_ui(parent_window):
+    """创建全局搜索标签页"""
+    search_widget = QWidget()
+    search_layout = QVBoxLayout(search_widget)
+
+    # 搜索框区域
+    search_control_layout = QHBoxLayout()
+
+    search_control_layout.addWidget(QLabel('搜索:'))
+    parent_window.search_input = QLineEdit()
+    parent_window.search_input.setPlaceholderText('输入关键词搜索所有任务...')
+    parent_window.search_input.setMinimumWidth(300)
+    parent_window.search_input.textChanged.connect(parent_window.on_search_text_changed)
+    search_control_layout.addWidget(parent_window.search_input)
+
+    parent_window.search_clear_btn = QPushButton('清除')
+    parent_window.search_clear_btn.clicked.connect(parent_window.on_search_clear)
+    search_control_layout.addWidget(parent_window.search_clear_btn)
+
+    search_control_layout.addStretch()
+
+    # 搜索结果数量标签
+    parent_window.search_status_label = QLabel('请输入关键词搜索')
+    search_control_layout.addWidget(parent_window.search_status_label)
+
+    search_layout.addLayout(search_control_layout)
+
+    # 搜索结果表格
+    parent_window.search_results_table = QTableWidget()
+    parent_window.search_results_table.setColumnCount(8)
+    parent_window.search_results_table.setHorizontalHeaderLabels(
+        ['类型', '状态', '标题', '分类', '标签', '描述', '创建日期', '优先级']
+    )
+    parent_window.search_results_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+    parent_window.search_results_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+    parent_window.search_results_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+    parent_window.search_results_table.horizontalHeader().resizeSection(0, 80)
+    parent_window.search_results_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+    parent_window.search_results_table.horizontalHeader().resizeSection(1, 60)
+    parent_window.search_results_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+    parent_window.search_results_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+    parent_window.search_results_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+    parent_window.search_results_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+    parent_window.search_results_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
+    parent_window.search_results_table.horizontalHeader().resizeSection(6, 100)
+    parent_window.search_results_table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
+    parent_window.search_results_table.horizontalHeader().resizeSection(7, 70)
+    parent_window.search_results_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+    parent_window.search_results_table.cellDoubleClicked.connect(parent_window.on_search_result_double_click)
+
+    search_layout.addWidget(parent_window.search_results_table)
+
+    # 说明标签
+    hint_label = QLabel('提示: 双击结果行可跳转到对应任务')
+    hint_label.setStyleSheet("color: gray; font-size: 12px;")
+    search_layout.addWidget(hint_label)
+
+    return search_widget

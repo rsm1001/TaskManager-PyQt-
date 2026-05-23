@@ -19,6 +19,7 @@ from components.ui_components import (
     create_todo_tab_ui,
     create_entertainment_tab_ui,
     create_shortcuts_tab_ui,
+    create_search_tab_ui,
 )
 from components.ui_elements import create_menu_bar, create_toolbar
 from services.table_operations import (
@@ -30,6 +31,7 @@ from services.table_operations import (
     toggle_entertainment_task_status,
     sort_todo_table_by_column,
     load_shortcuts_to_table,
+    load_search_results_to_table,
 )
 from services.window_task_operations import TaskOperationHandler
 from utils.ui_messages import show_statistics_dialog, show_about_dialog
@@ -74,6 +76,7 @@ class TaskManagerMainWindow(QMainWindow):
         self.tab_widget = QTabWidget()
         main_layout.addWidget(self.tab_widget)
 
+        self.create_search_tab()
         self.create_daily_tab()
         self.create_todo_tab()
         self.create_entertainment_tab()
@@ -113,6 +116,11 @@ class TaskManagerMainWindow(QMainWindow):
         """创建快捷入口标签页"""
         shortcuts_widget = create_shortcuts_tab_ui(self)
         self.tab_widget.addTab(shortcuts_widget, '快捷入口')
+
+    def create_search_tab(self):
+        """创建全局搜索标签页"""
+        search_widget = create_search_tab_ui(self)
+        self.tab_widget.insertTab(0, search_widget, '搜索')
 
     def load_data(self):
         """加载所有数据"""
@@ -155,6 +163,88 @@ class TaskManagerMainWindow(QMainWindow):
     def load_shortcuts(self):
         """加载快捷入口"""
         load_shortcuts_to_table(self)
+
+    # ==================== 全局搜索 ====================
+
+    def on_search_text_changed(self, text: str):
+        """搜索框文字变化时加载搜索结果"""
+        if not text.strip():
+            self.search_results_table.setRowCount(0)
+            self.search_status_label.setText('请输入关键词搜索')
+            return
+        load_search_results_to_table(self)
+
+    def on_search_clear(self):
+        """清除搜索"""
+        self.search_input.clear()
+        self.search_results_table.setRowCount(0)
+        self.search_status_label.setText('请输入关键词搜索')
+
+    def on_search_result_double_click(self, row: int, column: int):
+        """双击搜索结果行，跳转到对应任务的Tab并选中"""
+        type_item = self.search_results_table.item(row, 0)
+        if type_item is None:
+            return
+
+        task_type_map = {
+            '每日任务': 'daily',
+            '待办事项': 'todo',
+            '娱乐任务': 'entertainment',
+            '快捷入口': 'shortcuts',
+        }
+
+        type_text = type_item.text()
+        target_tab = task_type_map.get(type_text)
+        if target_tab is None:
+            return
+
+        # 获取任务ID（存储在类型列的UserRole中）
+        task_id = type_item.data(Qt.ItemDataRole.UserRole)
+
+        # 切换到对应Tab（Tab 0是搜索，所以索引要+1）
+        tab_index_map = {
+            'daily': 1,
+            'todo': 2,
+            'entertainment': 3,
+            'shortcuts': 4,
+        }
+        target_index = tab_index_map.get(target_tab)
+        if target_index is not None:
+            self.tab_widget.setCurrentIndex(target_index)
+            # 选中对应行
+            self._select_task_in_table(target_tab, task_id)
+
+    def _select_task_in_table(self, task_type: str, task_id: str):
+        """在指定类型的表格中选中指定ID的任务"""
+        table_map = {
+            'daily': (self.daily_table, self.load_daily_tasks),
+            'todo': (self.todo_table, self.load_todo_tasks),
+            'entertainment': (self.entertainment_table, self.load_entertainment_tasks),
+            'shortcuts': (self.shortcuts_table, self.load_shortcuts),
+        }
+
+        table, reload_func = table_map.get(task_type, (None, None))
+        if table is None:
+            return
+
+        # 重新加载表格确保数据最新
+        reload_func()
+
+        # 查找并选中对应行
+        for row in range(table.rowCount()):
+            if task_type == 'shortcuts':
+                # 快捷入口的task_id存储在按钮属性中
+                btn = table.cellWidget(row, 0)
+                if btn and btn.property('task_id') == task_id:
+                    table.selectRow(row)
+                    return
+            else:
+                # 普通任务的task_id存储在UserRole中
+                item = table.item(row, 0)
+                if item and item.data(Qt.ItemDataRole.UserRole) == task_id:
+                    table.selectRow(row)
+                    table.scrollToItem(item)
+                    return
 
     # ==================== 每日任务操作（委托） ====================
 
