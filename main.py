@@ -425,12 +425,20 @@ class TaskManagerMainWindow(QMainWindow):
 
     def update_status_bar(self):
         """更新状态栏"""
-        stats = self.data_manager.get_statistics()
-        msg = (f"每日: {stats['daily']['completed']}/{stats['daily']['total']} 完成 | "
-               f"待办: {stats['todo']['completed']}/{stats['todo']['total']} 完成 "
-               f"({stats['todo']['expired']} 过期) | "
-               f"娱乐: {stats['entertainment']['completed']}/{stats['entertainment']['total']} 完成")
-        self.status_bar.showMessage(msg)
+        import logging
+        import traceback
+        logger = logging.getLogger(__name__)
+        try:
+            stats = self.data_manager.get_statistics()
+            msg = (f"每日: {stats['daily']['completed']}/{stats['daily']['total']} 完成 | "
+                   f"待办: {stats['todo']['completed']}/{stats['todo']['total']} 完成 "
+                   f"({stats['todo']['expired']} 过期) | "
+                   f"娱乐: {stats['entertainment']['completed']}/{stats['entertainment']['total']} 完成")
+            logger.info(f"设置状态栏: {msg}")
+            self.status_bar.showMessage(msg, 0)  # 0 表示永久显示，不自动消失
+        except Exception as e:
+            logger.error(f"更新状态栏失败: {e}\n{traceback.format_exc()}")
+            self.status_bar.showMessage(f"获取统计数据时出错: {e}", 0)
 
     def update_task_row_style(self, table, row, is_completed):
         """更新任务行样式（根据完成状态）"""
