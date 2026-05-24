@@ -60,8 +60,8 @@ class TrashDialog(QDialog):
 
         # 任务列表
         self.trash_table = QTableWidget()
-        self.trash_table.setColumnCount(5)
-        self.trash_table.setHorizontalHeaderLabels(['类型', '标题', '描述', '删除时间', '操作'])
+        self.trash_table.setColumnCount(6)
+        self.trash_table.setHorizontalHeaderLabels(['类型', '标题', '描述', '标签', '删除时间', '操作'])
         self.trash_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.trash_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.trash_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -155,18 +155,22 @@ class TrashDialog(QDialog):
                 desc = desc[:30] + '...'
             self.trash_table.setItem(row, 2, QTableWidgetItem(desc or '-'))
 
+            # 标签
+            tags = data.get('tags', '')
+            self.trash_table.setItem(row, 3, QTableWidgetItem(tags or '-'))
+
             # 删除时间
             try:
                 dt = datetime.fromisoformat(deleted_at)
                 time_str = dt.strftime('%Y-%m-%d %H:%M')
             except Exception:
                 time_str = deleted_at
-            self.trash_table.setItem(row, 3, QTableWidgetItem(time_str))
+            self.trash_table.setItem(row, 4, QTableWidgetItem(time_str))
 
             # 操作提示
             op_item = QTableWidgetItem('双击恢复')
             op_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.trash_table.setItem(row, 4, op_item)
+            self.trash_table.setItem(row, 5, op_item)
 
         # 双击恢复（先断开旧连接防止重复绑定）
         try:
