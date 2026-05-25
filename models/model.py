@@ -72,9 +72,20 @@ class EntertainmentTask(BaseModel):
 class Config(BaseModel):
     """配置模型"""
     __tablename__ = 'configs'
-    
+
     key = Column(String(100), unique=True, nullable=False)
     value = Column(Text)
+
+
+class ShortcutHistory(BaseModel):
+    """快捷入口历史记录模型"""
+    __tablename__ = 'shortcut_history'
+
+    shortcut_id = Column(String(100), nullable=False)  # 关联的快捷入口ID
+    shortcut_title = Column(String(255), nullable=False, default='')  # 快照标题
+    shortcut_path = Column(String(1000), default='')  # 快照路径
+    action_type = Column(String(20), default='open')  # 操作类型
+    is_pinned = Column(Integer, default=0)  # 是否置顶
 
 
 def migrate_db(engine):

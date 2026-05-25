@@ -3,12 +3,14 @@ Task Table Operations Module
 处理任务表格的各种操作，包括加载、状态切换、排序等功能
 """
 
+from functools import partial
 from PyQt6.QtWidgets import QTableWidgetItem
 from PyQt6.QtCore import Qt, QTimer
 import config.config as config
 
 from services.shortcut_table_service import (
     render_shortcut_row,
+    render_history_row,
     _open_shortcut_path,
 )
 
@@ -107,9 +109,9 @@ def load_search_results_to_table(window):
     window.search_status_label.setText(f"找到 {len(results)} 条结果")
 
 
-def _render_shortcut_row(table, row, shortcut_item):
+def _render_shortcut_row(table, row, shortcut_item, on_open_callback=None):
     """渲染快捷入口表格的一行（委托给 ShortcutTableService）"""
-    render_shortcut_row(table, row, shortcut_item)
+    render_shortcut_row(table, row, shortcut_item, on_open_callback)
 
 
 def _get_claude_path():
@@ -244,8 +246,63 @@ def load_shortcuts_to_table(window):
     tag_filter = getattr(window, 'current_shortcut_tag_filter', '')
     shortcuts = window.data_manager.get_all_shortcuts(tag=tag_filter if tag_filter else None)
     window.shortcuts_table.setRowCount(len(shortcuts))
+
+    def add_history_callback(shortcut_item):
+        """点击快捷入口时添加历史记录"""
+        window.data_manager.add_or_update_history(
+            shortcut_item['id'],
+            shortcut_item['title'],
+            shortcut_item['shortcut_path'],
+            shortcut_item.get('action_type', 'open')
+        )
+        if hasattr(window, 'load_shortcuts_history'):
+            window.load_shortcuts_history()
+        if hasattr(window, '_update_history_limit_label'):
+            window._update_history_limit_label()
+
     for row, item in enumerate(shortcuts):
-        _render_shortcut_row(window.shortcuts_table, row, item)
+        _render_shortcut_row(window.shortcuts_table, row, item, on_open_callback=add_history_callback)
+
+
+def load_shortcut_history_to_table(window):
+    """加载历史记录到历史记录表格"""
+    history_list = window.data_manager.get_all_history()
+    window.shortcut_history_table.setRowCount(len(history_list))
+    for row, item in enumerate(history_list):
+        render_history_row(
+            window.shortcut_history_table, row, item,
+            on_open_callback=partial(_on_history_open, window),
+            on_pin_callback=partial(_on_history_pin, window),
+            on_delete_callback=partial(_on_history_delete, window),
+            on_terminal_callback=partial(_on_history_terminal, window)
+        )
+
+
+def _on_history_open(window, history_item):
+    """打开历史记录对应的快捷入口"""
+    from services.shortcut_table_service import _open_shortcut_path
+    _open_shortcut_path(history_item.get('shortcut_path', ''), history_item.get('action_type', 'open'))
+
+
+def _on_history_terminal(window, history_item):
+    """在终端中打开历史记录对应的路径"""
+    from services.shortcut_table_service import _open_in_terminal
+    _open_in_terminal(history_item.get('shortcut_path', ''))
+
+
+def _on_history_pin(window, history_id):
+    """切换历史记录的置顶状态"""
+    window.data_manager.toggle_history_pin(history_id)
+    load_shortcut_history_to_table(window)
+
+
+def _on_history_delete(window, history_id):
+    """删除历史记录"""
+    if not window.data_manager.delete_history(history_id):
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.warning(window, '提示', '置顶记录不可删除')
+        return
+    load_shortcut_history_to_table(window)
 
 
 def toggle_daily_task_status(window, row, column):

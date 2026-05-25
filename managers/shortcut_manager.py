@@ -18,6 +18,7 @@ class ShortcutManager:
             db_path = config.config.DATABASE_PATH
         self._conn = sqlite3.connect(db_path)
         self._init_db()
+        self._init_history_db()
 
     def _init_db(self):
         """初始化快捷入口表结构"""
@@ -149,6 +150,177 @@ class ShortcutManager:
         self._conn.execute("DELETE FROM shortcut_entries WHERE id = ?", (shortcut_id,))
         self._conn.commit()
         return shortcut
+
+    # ==================== 历史记录相关方法 ====================
+
+    def _init_history_db(self):
+        """初始化历史记录表结构"""
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS shortcut_history (
+                id TEXT PRIMARY KEY,
+                shortcut_id TEXT NOT NULL,
+                shortcut_title TEXT NOT NULL DEFAULT '',
+                shortcut_path TEXT NOT NULL DEFAULT '',
+                action_type TEXT NOT NULL DEFAULT 'open',
+                opened_at TEXT NOT NULL,
+                is_pinned INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        # 兼容旧版本：检查并添加字段
+        cursor = self._conn.execute("PRAGMA table_info(shortcut_history)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'is_pinned' not in columns:
+            self._conn.execute("ALTER TABLE shortcut_history ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0")
+        if 'action_type' not in columns:
+            self._conn.execute("ALTER TABLE shortcut_history ADD COLUMN action_type TEXT NOT NULL DEFAULT 'open'")
+        if 'shortcut_title' not in columns:
+            self._conn.execute("ALTER TABLE shortcut_history ADD COLUMN shortcut_title TEXT NOT NULL DEFAULT ''")
+        if 'shortcut_path' not in columns:
+            self._conn.execute("ALTER TABLE shortcut_history ADD COLUMN shortcut_path TEXT NOT NULL DEFAULT ''")
+        if 'opened_at' not in columns:
+            self._conn.execute("ALTER TABLE shortcut_history ADD COLUMN opened_at TEXT NOT NULL DEFAULT ''")
+        self._conn.commit()
+
+    def get_history_limit(self) -> int:
+        """获取历史记录缓存数量限制"""
+        cursor = self._conn.execute(
+            "SELECT value FROM configs WHERE key = ?", ('shortcut_history_limit',)
+        )
+        row = cursor.fetchone()
+        if row and row[0]:
+            return int(row[0])
+        return config.config.SHORTCUT_HISTORY_DEFAULT_LIMIT
+
+    def set_history_limit(self, limit: int) -> bool:
+        """设置历史记录缓存数量限制"""
+        now = datetime.now().isoformat()
+        cursor = self._conn.execute(
+            "SELECT id FROM configs WHERE key = ?", ('shortcut_history_limit',)
+        )
+        row = cursor.fetchone()
+        if row:
+            self._conn.execute(
+                "UPDATE configs SET value = ?, updated_at = ? WHERE key = ?",
+                (str(limit), now, 'shortcut_history_limit')
+            )
+        else:
+            from models.model import BaseModel
+            import uuid
+            config_id = str(uuid.uuid4())
+            self._conn.execute(
+                "INSERT INTO configs (id, key, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (config_id, 'shortcut_history_limit', str(limit), now, now)
+            )
+        self._conn.commit()
+        return True
+
+    def get_all_history(self) -> List[Dict[str, Any]]:
+        """获取所有历史记录，按最后打开时间倒序"""
+        cursor = self._conn.execute(
+            "SELECT id, shortcut_id, shortcut_title, shortcut_path, action_type, opened_at, is_pinned FROM shortcut_history ORDER BY is_pinned DESC, opened_at DESC"
+        )
+        history = []
+        for row in cursor.fetchall():
+            hid, sid, title, path, action_type, opened_at, is_pinned = row
+            history.append({
+                'id': hid,
+                'shortcut_id': sid,
+                'shortcut_title': title or '',
+                'shortcut_path': path or '',
+                'action_type': action_type or 'open',
+                'opened_at': opened_at or '',
+                'is_pinned': is_pinned or 0
+            })
+        return history
+
+    def get_history_by_shortcut_id(self, shortcut_id: str) -> Optional[Dict[str, Any]]:
+        """根据快捷入口ID获取历史记录"""
+        cursor = self._conn.execute(
+            "SELECT id, shortcut_id, shortcut_title, shortcut_path, action_type, opened_at, is_pinned FROM shortcut_history WHERE shortcut_id = ?",
+            (shortcut_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        hid, sid, title, path, action_type, opened_at, is_pinned = row
+        return {
+            'id': hid,
+            'shortcut_id': sid,
+            'shortcut_title': title or '',
+            'shortcut_path': path or '',
+            'action_type': action_type or 'open',
+            'opened_at': opened_at or '',
+            'is_pinned': is_pinned or 0
+        }
+
+    def add_or_update_history(self, shortcut_id: str, shortcut_title: str, shortcut_path: str, action_type: str = 'open') -> bool:
+        """添加或更新历史记录（如果已存在则更新时间戳）"""
+        existing = self.get_history_by_shortcut_id(shortcut_id)
+        now = datetime.now().isoformat()
+        if existing:
+            self._conn.execute(
+                "UPDATE shortcut_history SET opened_at = ?, shortcut_title = ?, shortcut_path = ?, action_type = ? WHERE shortcut_id = ?",
+                (now, shortcut_title, shortcut_path, action_type, shortcut_id)
+            )
+        else:
+            hid = str(uuid.uuid4())
+            self._conn.execute(
+                "INSERT INTO shortcut_history (id, shortcut_id, shortcut_title, shortcut_path, action_type, opened_at, is_pinned) VALUES (?, ?, ?, ?, ?, ?, 0)",
+                (hid, shortcut_id, shortcut_title, shortcut_path, action_type, now)
+            )
+        self._conn.commit()
+        return True
+
+    def cleanup_history_except_pinned(self, keep_count: int) -> int:
+        """清理最旧的非置顶历史记录，保留最近 keep_count 条，返回删除数量"""
+        # 先统计非置顶记录数
+        cursor = self._conn.execute("SELECT COUNT(*) FROM shortcut_history WHERE is_pinned = 0")
+        total_count = cursor.fetchone()[0]
+        if total_count <= keep_count:
+            return 0
+        # 删除最旧的多余记录（保留 keep_count 条）
+        delete_count = total_count - keep_count
+        self._conn.execute(
+            """DELETE FROM shortcut_history WHERE id IN (
+                SELECT id FROM shortcut_history WHERE is_pinned = 0
+                ORDER BY opened_at ASC LIMIT ?
+            )""",
+            (delete_count,)
+        )
+        self._conn.commit()
+        return delete_count
+
+    def toggle_history_pin(self, history_id: str) -> bool:
+        """切换历史记录的置顶状态"""
+        cursor = self._conn.execute("SELECT is_pinned FROM shortcut_history WHERE id = ?", (history_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        new_pinned = 1 if row[0] == 0 else 0
+        self._conn.execute("UPDATE shortcut_history SET is_pinned = ? WHERE id = ?", (new_pinned, history_id))
+        self._conn.commit()
+        return True
+
+    def delete_history(self, history_id: str) -> bool:
+        """删除历史记录（置顶记录不可删除）"""
+        cursor = self._conn.execute("SELECT is_pinned FROM shortcut_history WHERE id = ?", (history_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        if row[0] == 1:
+            # 置顶记录不可删除
+            return False
+        self._conn.execute("DELETE FROM shortcut_history WHERE id = ?", (history_id,))
+        self._conn.commit()
+        return True
+
+    def clear_all_unpinned_history(self) -> int:
+        """清空所有非置顶历史记录，返回删除数量"""
+        cursor = self._conn.execute("SELECT COUNT(*) FROM shortcut_history WHERE is_pinned = 0")
+        count = cursor.fetchone()[0]
+        self._conn.execute("DELETE FROM shortcut_history WHERE is_pinned = 0")
+        self._conn.commit()
+        return count
 
     def close(self):
         """关闭数据库连接"""

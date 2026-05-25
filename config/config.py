@@ -49,6 +49,9 @@ URGENCY_HIGH = 3    # 高紧急程度阈值
 URGENCY_MEDIUM = 2  # 中紧急程度阈值
 URGENCY_LOW = 1     # 低紧急程度阈值
 
+# 快捷入口历史记录配置
+SHORTCUT_HISTORY_DEFAULT_LIMIT = 100  # 默认缓存数量
+
 # 算法配置
 DEFAULT_BASE_COEFFICIENT = 1.5
 

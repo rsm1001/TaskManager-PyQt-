@@ -249,6 +249,41 @@ class DataManager:
         """恢复快捷入口（委托给 TrashRestorationService）"""
         return self.trash_restoration_service.restore_task(trash_id)
 
+    # ==================== 快捷入口历史记录相关方法 ====================
+
+    def get_history_limit(self) -> int:
+        """获取历史记录缓存数量限制"""
+        return self.shortcut_manager.get_history_limit()
+
+    def set_history_limit(self, limit: int) -> bool:
+        """设置历史记录缓存数量限制"""
+        return self.shortcut_manager.set_history_limit(limit)
+
+    def get_all_history(self) -> list:
+        """获取所有历史记录"""
+        return self.shortcut_manager.get_all_history()
+
+    def add_or_update_history(self, shortcut_id: str, shortcut_title: str, shortcut_path: str, action_type: str = 'open') -> bool:
+        """添加或更新历史记录"""
+        result = self.shortcut_manager.add_or_update_history(shortcut_id, shortcut_title, shortcut_path, action_type)
+        if result:
+            # 清理超出限制的记录
+            limit = self.get_history_limit()
+            self.shortcut_manager.cleanup_history_except_pinned(limit)
+        return result
+
+    def toggle_history_pin(self, history_id: str) -> bool:
+        """切换历史记录的置顶状态"""
+        return self.shortcut_manager.toggle_history_pin(history_id)
+
+    def delete_history(self, history_id: str) -> bool:
+        """删除历史记录（置顶记录不可删除）"""
+        return self.shortcut_manager.delete_history(history_id)
+
+    def clear_all_unpinned_history(self) -> int:
+        """清空所有非置顶历史记录"""
+        return self.shortcut_manager.clear_all_unpinned_history()
+
     # ==================== 紧急度（委托） ====================
 
     def calculate_urgency_for_task(self, task: TodoTask):

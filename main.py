@@ -31,6 +31,7 @@ from services.table_operations import (
     toggle_entertainment_task_status,
     sort_todo_table_by_column,
     load_shortcuts_to_table,
+    load_shortcut_history_to_table,
     load_search_results_to_table,
 )
 from services.window_task_operations import TaskOperationHandler
@@ -128,6 +129,7 @@ class TaskManagerMainWindow(QMainWindow):
         self.load_todo_tasks()
         self.load_entertainment_tasks()
         self.load_shortcuts()
+        self.load_shortcuts_history()
         self.update_status_bar()
 
     # ==================== 加载与切换 ====================
@@ -163,6 +165,10 @@ class TaskManagerMainWindow(QMainWindow):
     def load_shortcuts(self):
         """加载快捷入口"""
         load_shortcuts_to_table(self)
+
+    def load_shortcuts_history(self):
+        """加载快捷入口历史记录"""
+        load_shortcut_history_to_table(self)
 
     # ==================== 全局搜索 ====================
 
@@ -364,6 +370,16 @@ class TaskManagerMainWindow(QMainWindow):
             return
         from services.table_operations import _open_shortcut_path
         _open_shortcut_path(shortcut_data['shortcut_path'], shortcut_data.get('action_type', 'open'))
+        # 添加到历史记录
+        self.data_manager.add_or_update_history(
+            shortcut_id,
+            shortcut_data['title'],
+            shortcut_data['shortcut_path'],
+            shortcut_data.get('action_type', 'open')
+        )
+        # 刷新历史记录表格和标签显示
+        self.load_shortcuts_history()
+        self._update_history_limit_label()
 
     def on_shortcuts_cell_clicked(self, row, col):
         """快捷入口表格单击处理（列0时触发按钮点击）"""
@@ -371,6 +387,35 @@ class TaskManagerMainWindow(QMainWindow):
             btn = self.shortcuts_table.cellWidget(row, 0)
             if btn:
                 btn.click()
+
+    def set_history_limit(self):
+        """设置历史记录缓存数量"""
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        current_limit = self.data_manager.get_history_limit()
+        new_limit, ok = QInputDialog.getInt(
+            self, '设置缓存数量',
+            '请输入历史记录缓存数量（1-1000）:',
+            value=current_limit, min=1, max=1000
+        )
+        if not ok:
+            return
+        self.data_manager.set_history_limit(new_limit)
+        self._update_history_limit_label()
+        self.load_shortcuts_history()
+        QMessageBox.information(self, '设置完成', f'历史记录缓存数量已设置为 {new_limit} 条')
+
+    def clear_history(self):
+        """清空历史记录（保留置顶）"""
+        from PyQt6.QtWidgets import QMessageBox
+        count = self.data_manager.clear_all_unpinned_history()
+        self.load_shortcuts_history()
+        QMessageBox.information(self, '清空完成', f'已清空 {count} 条非置顶历史记录')
+
+    def _update_history_limit_label(self):
+        """更新历史记录缓存数量标签"""
+        if hasattr(self, 'history_limit_label'):
+            limit = self.data_manager.get_history_limit()
+            self.history_limit_label.setText(f'当前缓存: {limit} 条')
 
     # ==================== 数据导入导出 ====================
 

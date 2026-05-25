@@ -5,7 +5,7 @@ UI Components Module for Task Manager - PyQt6
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
                              QHeaderView, QPushButton, QLabel, QComboBox, QGroupBox, QSplitter,
-                             QAbstractItemView, QLineEdit)
+                             QAbstractItemView, QLineEdit, QTabWidget)
 from PyQt6.QtCore import Qt, QDate
 from datetime import datetime, date
 from PyQt6.QtGui import QColor
@@ -257,6 +257,14 @@ def create_shortcuts_tab_ui(parent_window):
     shortcuts_widget = QWidget()
     shortcuts_layout = QVBoxLayout(shortcuts_widget)
 
+    # 添加子Tab控件区分"快捷入口"和"历史记录"
+    parent_window.shortcuts_tab_widget = QTabWidget()
+    shortcuts_layout.addWidget(parent_window.shortcuts_tab_widget)
+
+    # ==================== 子Tab1: 快捷入口 ====================
+    entries_widget = QWidget()
+    entries_layout = QVBoxLayout(entries_widget)
+
     # 标签分类栏
     from managers.tag_manager import TagManager
     parent_window.shortcut_tag_filter = TagFilterBar(parent=parent_window, data_manager=parent_window.data_manager)
@@ -265,7 +273,7 @@ def create_shortcuts_tab_ui(parent_window):
         value = "shortcut"
     parent_window.shortcut_tag_filter.set_task_type(ShortcutTaskType())
     parent_window.shortcut_tag_filter.tagClicked.connect(lambda tag: on_shortcut_tag_filter_clicked(parent_window, tag))
-    shortcuts_layout.addWidget(parent_window.shortcut_tag_filter)
+    entries_layout.addWidget(parent_window.shortcut_tag_filter)
 
     # 控制按钮区域
     control_layout = QHBoxLayout()
@@ -288,7 +296,7 @@ def create_shortcuts_tab_ui(parent_window):
 
     control_layout.addStretch()
 
-    shortcuts_layout.addLayout(control_layout)
+    entries_layout.addLayout(control_layout)
 
     # 快捷入口表格
     parent_window.shortcuts_table = QTableWidget()
@@ -308,7 +316,56 @@ def create_shortcuts_tab_ui(parent_window):
     parent_window.shortcuts_table.cellDoubleClicked.connect(parent_window.edit_shortcut)
     parent_window.shortcuts_table.cellClicked.connect(parent_window.on_shortcuts_cell_clicked)
 
-    shortcuts_layout.addWidget(parent_window.shortcuts_table)
+    entries_layout.addWidget(parent_window.shortcuts_table)
+
+    # ==================== 子Tab2: 历史记录 ====================
+    history_widget = QWidget()
+    history_layout = QVBoxLayout(history_widget)
+
+    # 控制按钮区域
+    history_control_layout = QHBoxLayout()
+
+    parent_window.history_limit_btn = QPushButton('设置缓存数量')
+    parent_window.history_limit_btn.clicked.connect(parent_window.set_history_limit)
+    history_control_layout.addWidget(parent_window.history_limit_btn)
+
+    parent_window.clear_history_btn = QPushButton('清空历史')
+    parent_window.clear_history_btn.clicked.connect(parent_window.clear_history)
+    history_control_layout.addWidget(parent_window.clear_history_btn)
+
+    # 显示当前缓存数量
+    limit = parent_window.data_manager.get_history_limit()
+    parent_window.history_limit_label = QLabel(f'当前缓存: {limit} 条')
+    history_control_layout.addWidget(parent_window.history_limit_label)
+
+    history_control_layout.addStretch()
+
+    history_layout.addLayout(history_control_layout)
+
+    # 历史记录表格
+    parent_window.shortcut_history_table = QTableWidget()
+    parent_window.shortcut_history_table.setColumnCount(6)
+    parent_window.shortcut_history_table.setHorizontalHeaderLabels(['名称', 'Terminal', '★', '路径', '最后打开', '操作'])
+    parent_window.shortcut_history_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+    parent_window.shortcut_history_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+    parent_window.shortcut_history_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+    parent_window.shortcut_history_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+    parent_window.shortcut_history_table.horizontalHeader().resizeSection(1, 45)
+    parent_window.shortcut_history_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+    parent_window.shortcut_history_table.horizontalHeader().resizeSection(2, 35)
+    parent_window.shortcut_history_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+    parent_window.shortcut_history_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+    parent_window.shortcut_history_table.horizontalHeader().resizeSection(4, 130)
+    parent_window.shortcut_history_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+    parent_window.shortcut_history_table.horizontalHeader().resizeSection(5, 100)
+    parent_window.shortcut_history_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+
+    history_layout.addWidget(parent_window.shortcut_history_table)
+
+    # 添加子Tab
+    parent_window.shortcuts_tab_widget.addTab(entries_widget, '快捷入口')
+    parent_window.shortcuts_tab_widget.addTab(history_widget, '历史记录')
+
     return shortcuts_widget
 
 
