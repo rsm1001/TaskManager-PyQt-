@@ -47,3 +47,11 @@ class ServiceFactory:
             )
             logger.info("TaskLimitService 已创建")
         return self._services['task_limit']
+
+    def get_pomodoro_service(self):
+        """获取番茄钟服务（单例）"""
+        if 'pomodoro' not in self._services:
+            from services.pomodoro_service import PomodoroService
+            self._services['pomodoro'] = PomodoroService(self._dm)
+            logger.info("PomodoroService 已创建")
+        return self._services['pomodoro']

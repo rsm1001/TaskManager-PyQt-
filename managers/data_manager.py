@@ -83,6 +83,10 @@ class DataManager:
         """获取任务限制服务"""
         return self._service_factory.get_task_limit_service()
 
+    def _get_pomodoro_service(self):
+        """获取番茄钟服务"""
+        return self._service_factory.get_pomodoro_service()
+
     # ==================== 会话管理 ====================
 
     def get_session(self):

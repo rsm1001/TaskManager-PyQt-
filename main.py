@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QTa
 from PyQt6.QtCore import Qt
 from dialogs.json_examples_dialog import JsonExamplesDialog
 from dialogs.trash_dialog import TrashDialog
+from dialogs.pomodoro_config_dialog import PomodoroConfigDialog
 from managers.data_manager import DataManager, TaskType
 from components.ui_components import (
     create_daily_tab_ui,
@@ -22,6 +23,7 @@ from components.ui_components import (
     create_search_tab_ui,
 )
 from components.ui_elements import create_menu_bar, create_toolbar
+from components.pomodoro_toolbar import PomodoroToolbarWidget
 from services.table_operations import (
     load_daily_tasks_to_table,
     load_todo_tasks_to_table,
@@ -61,6 +63,10 @@ class TaskManagerMainWindow(QMainWindow):
         # 状态切换防双击/防抖
         self._status_switching_row = -1   # 当前正在处理状态切换的行（-1表示无）
         self._status_switch_timestamps = {}  # task_id -> 上次切换时间戳(ms)
+        # 初始化番茄钟服务
+        self._pomodoro_service = self.data_manager._get_pomodoro_service()
+        self._pomodoro_toolbar = None
+        self._pomodoro_toolbar_positioned = False
         self.init_ui()
         self.load_data()
 
@@ -458,6 +464,27 @@ class TaskManagerMainWindow(QMainWindow):
         """显示统计信息"""
         stats = self.data_manager.get_statistics()
         show_statistics_dialog(stats)
+
+    def show_pomodoro(self):
+        """显示番茄钟工具栏"""
+        if self._pomodoro_toolbar is None:
+            self._pomodoro_toolbar = PomodoroToolbarWidget(self._pomodoro_service, self)
+        if not self._pomodoro_toolbar.isVisible():
+            if not self._pomodoro_toolbar_positioned:
+                # 首次显示时，设置在主窗口右下角
+                geo = self.geometry()
+                x = geo.right() - self._pomodoro_toolbar.width() - 10
+                y = geo.bottom() - self._pomodoro_toolbar.height() - 10
+                self._pomodoro_toolbar.move(x, y)
+                self._pomodoro_toolbar_positioned = True
+            self._pomodoro_toolbar.show()
+        else:
+            self._pomodoro_toolbar.hide()
+
+    def show_pomodoro_config(self):
+        """显示番茄钟配置对话框"""
+        dialog = PomodoroConfigDialog(self, self.data_manager)
+        dialog.exec()
 
     def show_json_examples(self):
         """显示JSON导入示例"""

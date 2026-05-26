@@ -44,6 +44,17 @@ def create_menu_bar(window):
     add_entertainment_action.triggered.connect(window.add_entertainment_task)
     edit_menu.addAction(add_entertainment_action)
 
+    # 番茄钟菜单
+    pomodoro_menu = menubar.addMenu('番茄钟')
+
+    show_pomodoro_action = QAction('显示番茄钟', window)
+    show_pomodoro_action.triggered.connect(window.show_pomodoro)
+    pomodoro_menu.addAction(show_pomodoro_action)
+
+    pomodoro_config_action = QAction('设置...', window)
+    pomodoro_config_action.triggered.connect(window.show_pomodoro_config)
+    pomodoro_menu.addAction(pomodoro_config_action)
+
     # 工具菜单
     tools_menu = menubar.addMenu('工具')
 
@@ -86,6 +97,11 @@ def create_menu_bar(window):
 def create_toolbar(window):
     """创建工具栏"""
     toolbar = window.addToolBar('工具栏')
+
+    # 番茄钟
+    toolbar.addAction('🍅 番茄钟', window.show_pomodoro)
+
+    toolbar.addSeparator()
 
     # 每日任务工具
     toolbar.addAction('添加每日', window.add_daily_task)
