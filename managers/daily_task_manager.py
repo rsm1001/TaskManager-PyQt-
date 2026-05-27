@@ -42,12 +42,13 @@ class DailyTaskManager:
 
     def create(self, title: str, description: str = "", week_day: str = "",
                completed: bool = False, status: str = "pending",
-               tags: str = "", shortcut_path: str = "", category: str = "") -> DailyTask:
+               tags: str = "", shortcut_path: str = "", category: str = "",
+               priority: str = "normal") -> DailyTask:
         """创建每日任务"""
         task = DailyTask(
             title=title, description=description, week_day=week_day,
             completed=completed, status=status, tags=tags, shortcut_path=shortcut_path,
-            category=category
+            category=category, priority=priority
         )
         self.session.add(task)
         self.session.commit()

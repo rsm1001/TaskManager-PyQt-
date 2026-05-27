@@ -6,6 +6,7 @@ Task Table Operations Module
 from functools import partial
 from PyQt6.QtWidgets import QTableWidgetItem
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QColor
 import config.config as config
 
 from services.shortcut_table_service import (
@@ -105,6 +106,15 @@ def load_search_results_to_table(window):
         priority_display = PRIORITY_DISPLAY_MAP.get(priority, '普通')
         window.search_results_table.setItem(row, 7, QTableWidgetItem(priority_display))
 
+        # 设置行背景色和文字颜色（基于优先级）
+        bg_color = QColor(config.PRIORITY_BG_COLORS.get(priority, '#FFFFFF'))
+        text_color = QColor(config.PRIORITY_TEXT_COLORS.get(priority, '#333333'))
+        for col in range(8):
+            cell_item = window.search_results_table.item(row, col)
+            if cell_item:
+                cell_item.setBackground(bg_color)
+                cell_item.setForeground(text_color)
+
     # 更新状态栏显示结果数量
     window.search_status_label.setText(f"找到 {len(results)} 条结果")
 
@@ -156,6 +166,16 @@ def _set_task_row_data(table, row, task, columns, editable_cols=None):
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         table.setItem(row, col_idx, item)
     status_item.setData(Qt.ItemDataRole.UserRole, task.id)
+
+    # 设置行背景色和文字颜色（基于优先级）
+    priority = getattr(task, 'priority', 'normal')
+    bg_color = QColor(config.PRIORITY_BG_COLORS.get(priority, '#FFFFFF'))
+    text_color = QColor(config.PRIORITY_TEXT_COLORS.get(priority, '#333333'))
+    for col_idx, _ in columns:
+        item = table.item(row, col_idx)
+        if item:
+            item.setBackground(bg_color)
+            item.setForeground(text_color)
 
 
 def load_daily_tasks_to_table(window):

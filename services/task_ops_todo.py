@@ -42,7 +42,8 @@ class TodoTaskOperations:
             completed=data['completed'],
             status=data.get('status', 'pending'),
             tags=data.get('tags', ''),
-            category=data.get('category', '')
+            category=data.get('category', ''),
+            priority=data.get('priority', 'normal')
         )
         self._w.load_todo_tasks()
         self._validate_and_refresh_filter('todo')

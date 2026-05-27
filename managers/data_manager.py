@@ -119,9 +119,10 @@ class DataManager:
 
     def create_daily_task(self, title: str, description: str = "", week_day: str = "",
                           completed: bool = False, status: str = "pending",
-                          tags: str = "", shortcut_path: str = "", category: str = "") -> DailyTask:
+                          tags: str = "", shortcut_path: str = "", category: str = "",
+                          priority: str = "normal") -> DailyTask:
         logger.info(f"创建每日任务: {title}")
-        task = self.daily_task_manager.create(title, description, week_day, completed, status, tags, shortcut_path, category)
+        task = self.daily_task_manager.create(title, description, week_day, completed, status, tags, shortcut_path, category, priority)
         self._get_task_limit_service().enforce_limit('daily', DailyTask)
         return task
 
@@ -149,9 +150,10 @@ class DataManager:
 
     def create_todo_task(self, title: str, description: str = "", deadline: str = "",
                          completed: bool = False, status: str = "pending",
-                         tags: str = "", shortcut_path: str = "", category: str = "") -> TodoTask:
+                         tags: str = "", shortcut_path: str = "", category: str = "",
+                         priority: str = "normal") -> TodoTask:
         logger.info(f"创建待办任务: {title}")
-        task = self.todo_manager.create(title, description, deadline, completed, status, tags, shortcut_path, category)
+        task = self.todo_manager.create(title, description, deadline, completed, status, tags, shortcut_path, category, priority)
         self._get_task_limit_service().enforce_limit('todo', TodoTask)
         return task
 
@@ -184,9 +186,10 @@ class DataManager:
     def create_entertainment_task(self, title: str, description: str = "",
                                   fun_category: str = "general", completed: bool = False,
                                   status: str = "pending", tags: str = "",
-                                  shortcut_path: str = "", category: str = "") -> EntertainmentTask:
+                                  shortcut_path: str = "", category: str = "",
+                                  priority: str = "normal") -> EntertainmentTask:
         logger.info(f"创建娱乐任务: {title}")
-        task = self.entertainment_manager.create(title, description, fun_category, completed, status, tags, shortcut_path, category)
+        task = self.entertainment_manager.create(title, description, fun_category, completed, status, tags, shortcut_path, category, priority)
         self._get_task_limit_service().enforce_limit('entertainment', EntertainmentTask)
         return task
 

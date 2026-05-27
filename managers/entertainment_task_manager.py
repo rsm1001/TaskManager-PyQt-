@@ -34,12 +34,13 @@ class EntertainmentTaskManager:
 
     def create(self, title: str, description: str = "", fun_category: str = "general",
                completed: bool = False, status: str = "pending", tags: str = "",
-               shortcut_path: str = "", category: str = "") -> EntertainmentTask:
+               shortcut_path: str = "", category: str = "",
+               priority: str = "normal") -> EntertainmentTask:
         """创建娱乐任务"""
         task = EntertainmentTask(
             title=title, description=description, fun_category=fun_category,
             completed=completed, status=status, tags=tags, shortcut_path=shortcut_path,
-            category=category
+            category=category, priority=priority
         )
         self.session.add(task)
         self.session.commit()
