@@ -60,9 +60,17 @@ class TrashDialog(QDialog):
 
         # 任务列表
         self.trash_table = QTableWidget()
-        self.trash_table.setColumnCount(6)
-        self.trash_table.setHorizontalHeaderLabels(['类型', '标题', '描述', '标签', '删除时间', '操作'])
-        self.trash_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.trash_table.setColumnCount(5)
+        self.trash_table.setHorizontalHeaderLabels(['类型', '标题', '描述', '标签', '删除时间'])
+        # 设置列宽策略：类型和标签收窄，时间列自动扩展
+        header = self.trash_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)  # 类型
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)      # 标题
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)      # 描述
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive) # 标签
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)      # 删除时间
+        self.trash_table.setColumnWidth(0, 70)   # 类型
+        self.trash_table.setColumnWidth(3, 70)   # 标签
         self.trash_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.trash_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         layout.addWidget(self.trash_table)
@@ -162,17 +170,13 @@ class TrashDialog(QDialog):
             # 删除时间
             try:
                 dt = datetime.fromisoformat(deleted_at)
-                time_str = dt.strftime('%Y-%m-%d %H:%M')
+                time_str = dt.strftime('%Y-%m-%d %H:%M:%S')
             except Exception:
                 time_str = deleted_at
             self.trash_table.setItem(row, 4, QTableWidgetItem(time_str))
 
-            # 操作提示
-            op_item = QTableWidgetItem('双击恢复')
-            op_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.trash_table.setItem(row, 5, op_item)
-
-        # 双击恢复（先断开旧连接防止重复绑定）
+        # 双击恢复提示
+        self.trash_table.setToolTip('双击某行可恢复该任务')
         try:
             self.trash_table.cellDoubleClicked.disconnect(self._on_double_click)
         except TypeError:
