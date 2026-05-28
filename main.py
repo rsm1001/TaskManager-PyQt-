@@ -10,7 +10,6 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QTabWidget, QDialog, QMessageBox, QStatusBar
-from PyQt6.QtCore import Qt
 from dialogs.json_examples_dialog import JsonExamplesDialog
 from dialogs.trash_dialog import TrashDialog
 from dialogs.pomodoro_config_dialog import PomodoroConfigDialog
@@ -41,6 +40,8 @@ from utils.ui_messages import show_statistics_dialog, show_about_dialog
 from utils.ui_messages import show_export_success, show_export_failure
 from utils.ui_messages import show_import_success, show_import_failure, confirm_data_import
 from utils.logging_config import setup_logging, get_logger
+from services.search_coordinator import SearchCoordinator
+from services.shortcut_operation_service import ShortcutOperationService
 
 import config.config
 
@@ -67,6 +68,8 @@ class TaskManagerMainWindow(QMainWindow):
         self._pomodoro_service = self.data_manager._get_pomodoro_service()
         self._pomodoro_toolbar = None
         self._pomodoro_toolbar_positioned = False
+        # 初始化搜索协调器
+        self._search_coordinator = SearchCoordinator(self)
         self.init_ui()
         self.load_data()
 
@@ -181,82 +184,18 @@ class TaskManagerMainWindow(QMainWindow):
     def on_search_text_changed(self, text: str):
         """搜索框文字变化时加载搜索结果"""
         if not text.strip():
-            self.search_results_table.setRowCount(0)
-            self.search_status_label.setText('请输入关键词搜索')
+            self._search_coordinator.clear_search_results()
             return
         load_search_results_to_table(self)
 
     def on_search_clear(self):
         """清除搜索"""
         self.search_input.clear()
-        self.search_results_table.setRowCount(0)
-        self.search_status_label.setText('请输入关键词搜索')
+        self._search_coordinator.clear_search_results()
 
     def on_search_result_double_click(self, row: int, column: int):
         """双击搜索结果行，跳转到对应任务的Tab并选中"""
-        type_item = self.search_results_table.item(row, 0)
-        if type_item is None:
-            return
-
-        task_type_map = {
-            '每日任务': 'daily',
-            '待办事项': 'todo',
-            '娱乐任务': 'entertainment',
-            '快捷入口': 'shortcuts',
-        }
-
-        type_text = type_item.text()
-        target_tab = task_type_map.get(type_text)
-        if target_tab is None:
-            return
-
-        # 获取任务ID（存储在类型列的UserRole中）
-        task_id = type_item.data(Qt.ItemDataRole.UserRole)
-
-        # 切换到对应Tab（Tab 0是搜索，所以索引要+1）
-        tab_index_map = {
-            'daily': 1,
-            'todo': 2,
-            'entertainment': 3,
-            'shortcuts': 4,
-        }
-        target_index = tab_index_map.get(target_tab)
-        if target_index is not None:
-            self.tab_widget.setCurrentIndex(target_index)
-            # 选中对应行
-            self._select_task_in_table(target_tab, task_id)
-
-    def _select_task_in_table(self, task_type: str, task_id: str):
-        """在指定类型的表格中选中指定ID的任务"""
-        table_map = {
-            'daily': (self.daily_table, self.load_daily_tasks),
-            'todo': (self.todo_table, self.load_todo_tasks),
-            'entertainment': (self.entertainment_table, self.load_entertainment_tasks),
-            'shortcuts': (self.shortcuts_table, self.load_shortcuts),
-        }
-
-        table, reload_func = table_map.get(task_type, (None, None))
-        if table is None:
-            return
-
-        # 重新加载表格确保数据最新
-        reload_func()
-
-        # 查找并选中对应行
-        for row in range(table.rowCount()):
-            if task_type == 'shortcuts':
-                # 快捷入口的task_id存储在按钮属性中
-                btn = table.cellWidget(row, 0)
-                if btn and btn.property('task_id') == task_id:
-                    table.selectRow(row)
-                    return
-            else:
-                # 普通任务的task_id存储在UserRole中
-                item = table.item(row, 0)
-                if item and item.data(Qt.ItemDataRole.UserRole) == task_id:
-                    table.selectRow(row)
-                    table.scrollToItem(item)
-                    return
+        self._search_coordinator.navigate_to_task(row)
 
     # ==================== 每日任务操作（委托） ====================
 
@@ -369,20 +308,9 @@ class TaskManagerMainWindow(QMainWindow):
         shortcut_id = btn.property('task_id')
         if not shortcut_id:
             return
-        # 获取快捷入口数据以确定操作类型
-        shortcuts = self.data_manager.get_all_shortcuts()
-        shortcut_data = next((s for s in shortcuts if s['id'] == shortcut_id), None)
-        if not shortcut_data:
-            return
-        from services.table_operations import _open_shortcut_path
-        _open_shortcut_path(shortcut_data['shortcut_path'], shortcut_data.get('action_type', 'open'))
-        # 添加到历史记录
-        self.data_manager.add_or_update_history(
-            shortcut_id,
-            shortcut_data['title'],
-            shortcut_data['shortcut_path'],
-            shortcut_data.get('action_type', 'open')
-        )
+        # 使用快捷入口操作服务
+        shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
+        result = shortcut_service.open_shortcut(shortcut_id)
         # 刷新历史记录表格和标签显示
         self.load_shortcuts_history()
         self._update_history_limit_label()
@@ -397,7 +325,8 @@ class TaskManagerMainWindow(QMainWindow):
     def set_history_limit(self):
         """设置历史记录缓存数量"""
         from PyQt6.QtWidgets import QInputDialog, QMessageBox
-        current_limit = self.data_manager.get_history_limit()
+        shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
+        current_limit = shortcut_service.get_history_limit()
         new_limit, ok = QInputDialog.getInt(
             self, '设置缓存数量',
             '请输入历史记录缓存数量（1-1000）:',
@@ -405,7 +334,7 @@ class TaskManagerMainWindow(QMainWindow):
         )
         if not ok:
             return
-        self.data_manager.set_history_limit(new_limit)
+        shortcut_service.set_history_limit(new_limit)
         self._update_history_limit_label()
         self.load_shortcuts_history()
         QMessageBox.information(self, '设置完成', f'历史记录缓存数量已设置为 {new_limit} 条')
@@ -413,14 +342,16 @@ class TaskManagerMainWindow(QMainWindow):
     def clear_history(self):
         """清空历史记录（保留置顶）"""
         from PyQt6.QtWidgets import QMessageBox
-        count = self.data_manager.clear_all_unpinned_history()
+        shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
+        count = shortcut_service.clear_history()
         self.load_shortcuts_history()
         QMessageBox.information(self, '清空完成', f'已清空 {count} 条非置顶历史记录')
 
     def _update_history_limit_label(self):
         """更新历史记录缓存数量标签"""
         if hasattr(self, 'history_limit_label'):
-            limit = self.data_manager.get_history_limit()
+            shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
+            limit = shortcut_service.get_history_limit()
             self.history_limit_label.setText(f'当前缓存: {limit} 条')
 
     # ==================== 数据导入导出 ====================
@@ -534,7 +465,8 @@ class TaskManagerMainWindow(QMainWindow):
 
     def cleanup_unused_tags_manual(self):
         """手动清理所有类别中未被任务使用的标签"""
-        result = self.data_manager.cleanup_unused_tags()
+        cleanup_service = self.data_manager._service_factory.get_tag_cleanup_service()
+        result = cleanup_service.cleanup_unused_tags()
         total_cleaned = sum(result.values())
         self.daily_tag_filter.refresh_tags()
         self.todo_tag_filter.refresh_tags()
