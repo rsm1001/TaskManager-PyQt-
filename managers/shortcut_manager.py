@@ -13,10 +13,15 @@ from typing import List, Dict, Any, Optional
 class ShortcutManager:
     """快捷入口管理器，负责 shortcut_entries 表的所有操作"""
 
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: str = None, connection=None):
         if db_path is None:
             db_path = config.config.DATABASE_PATH
-        self._conn = sqlite3.connect(db_path)
+        if connection is not None:
+            self._conn = connection
+            self._owns_connection = False
+        else:
+            self._conn = sqlite3.connect(db_path, check_same_thread=False)
+            self._owns_connection = True
         self._init_db()
         self._init_history_db()
 
@@ -324,6 +329,6 @@ class ShortcutManager:
 
     def close(self):
         """关闭数据库连接"""
-        if hasattr(self, '_conn') and self._conn:
+        if hasattr(self, '_conn') and self._conn and self._owns_connection:
             self._conn.close()
             self._conn = None

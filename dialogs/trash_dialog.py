@@ -112,7 +112,7 @@ class TrashDialog(QDialog):
     def _load_trashed(self):
         """加载垃圾桶中的任务"""
         filter_type = self._get_filter_type()
-        rows = self.data_manager.get_trashed_tasks(task_type=None)
+        rows = self.data_manager.get_trashed_tasks(task_type=filter_type)
 
         self.trash_table.setRowCount(len(rows))
         # 记录每行的 shortcut_path（用于搜索时判断快捷入口类型）

@@ -92,15 +92,16 @@ class EntertainmentTaskOperations:
         count = len(selected_rows)
         if confirm_batch_deletion(count, self._w) != QMessageBox.StandardButton.Yes:
             return
-        deleted = 0
+        task_ids = []
         for row_obj in selected_rows:
             row = row_obj.row()
             item = self._w.entertainment_table.item(row, 0)
             if item is None:
                 continue
             task_id = item.data(Qt.ItemDataRole.UserRole)
-            if task_id and self._w.data_manager.delete_entertainment_task(task_id):
-                deleted += 1
+            if task_id:
+                task_ids.append(task_id)
+        deleted = self._w.data_manager.delete_entertainment_tasks_batch(task_ids)
         self._w.load_entertainment_tasks()
         self._auto_cleanup_if_enabled()
         self._validate_and_refresh_filter('entertainment')

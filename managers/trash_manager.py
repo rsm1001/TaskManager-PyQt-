@@ -14,10 +14,15 @@ from typing import List, Optional, Dict, Any
 class TrashManager:
     """垃圾桶管理器，负责 trashed_tasks 表的所有操作"""
 
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: str = None, connection=None):
         if db_path is None:
             db_path = config.config.TRASH_DATABASE_PATH
-        self._conn = sqlite3.connect(db_path)
+        if connection is not None:
+            self._conn = connection
+            self._owns_connection = False
+        else:
+            self._conn = sqlite3.connect(db_path, check_same_thread=False)
+            self._owns_connection = True
         self._init_db()
 
     def _init_db(self):
@@ -43,6 +48,29 @@ class TrashManager:
         )
         self._conn.commit()
         return trash_id
+
+    def move_many_to_trash(self, entries: List[tuple]) -> List[str]:
+        """批量将任务移入垃圾桶
+
+        Args:
+            entries: List[(task_type, task_id, task_data), ...]
+        Returns:
+            List[trash_id]
+        """
+        if not entries:
+            return []
+        now = datetime.now().isoformat()
+        trash_ids = []
+        for task_type, task_id, task_data in entries:
+            trash_id = str(uuid.uuid4())
+            trash_ids.append(trash_id)
+            self._conn.execute(
+                'INSERT INTO trashed_tasks (id, task_type, task_id, data_json, deleted_at) '
+                'VALUES (?, ?, ?, ?, ?)',
+                (trash_id, task_type, task_id, json.dumps(task_data, ensure_ascii=False), now)
+            )
+        self._conn.commit()
+        return trash_ids
 
     def get_trashed_tasks(self, task_type: str = None) -> List[tuple]:
         """获取垃圾桶中的任务列表"""
@@ -96,6 +124,6 @@ class TrashManager:
 
     def close(self):
         """关闭数据库连接"""
-        if hasattr(self, '_conn') and self._conn:
+        if hasattr(self, '_conn') and self._conn and self._owns_connection:
             self._conn.close()
             self._conn = None

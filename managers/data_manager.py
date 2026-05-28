@@ -42,12 +42,17 @@ class DataManager:
         self.session = self.Session()
         logger.info(f"DataManager 初始化，数据库路径: {db_path}")
 
+        # 创建共享的 sqlite3 连接供子管理器共用，避免文件锁争用
+        # shortcut_entries 在 taskmanager.db，trashed_tasks 在 task_trash.db
+        self._main_conn = sqlite3.connect(config.config.DATABASE_PATH, check_same_thread=False)
+        self._trash_conn = sqlite3.connect(config.config.TRASH_DATABASE_PATH, check_same_thread=False)
+
         # 初始化子管理器（按功能垂直划分）
         self.todo_manager = TodoTaskManager(self.session)
         self.entertainment_manager = EntertainmentTaskManager(self.session)
         self.config_manager = ConfigManager(self.session)
-        self.trash_manager = TrashManager()
-        self.shortcut_manager = ShortcutManager()
+        self.trash_manager = TrashManager(connection=self._trash_conn)
+        self.shortcut_manager = ShortcutManager(connection=self._main_conn)
         self.daily_task_manager = DailyTaskManager(self.session)
         self.tag_manager = TagManager(self.config_manager)
         self.daily_reset_service = DailyResetService(self.session, self.config_manager)
@@ -99,6 +104,12 @@ class DataManager:
         self.session.close()
         self.trash_manager.close()
         self.shortcut_manager.close()
+        if hasattr(self, '_main_conn') and self._main_conn:
+            self._main_conn.close()
+            self._main_conn = None
+        if hasattr(self, '_trash_conn') and self._trash_conn:
+            self._trash_conn.close()
+            self._trash_conn = None
 
     def commit(self):
         """提交更改"""
@@ -137,6 +148,16 @@ class DataManager:
         self.trash_manager.move_to_trash('daily', task_id, task_data)
         return True
 
+    def delete_daily_tasks_batch(self, task_ids: list) -> int:
+        """批量删除每日任务（单次事务）"""
+        if not task_ids:
+            return 0
+        entries = self.daily_task_manager.delete_batch(task_ids)
+        if entries:
+            self.trash_manager.move_many_to_trash(entries)
+            self.session.commit()
+        return len(entries)
+
     def toggle_daily_task_completion(self, task_id: str) -> bool:
         return self.daily_task_manager.toggle_completion(task_id)
 
@@ -170,6 +191,16 @@ class DataManager:
         self.session.delete(task)
         self.session.commit()
         return True
+
+    def delete_todo_tasks_batch(self, task_ids: list) -> int:
+        """批量删除待办任务（单次事务）"""
+        if not task_ids:
+            return 0
+        entries = self.todo_manager.delete_batch(task_ids)
+        if entries:
+            self.trash_manager.move_many_to_trash(entries)
+            self.session.commit()
+        return len(entries)
 
     def toggle_todo_task_completion(self, task_id: str) -> bool:
         return self.todo_manager.toggle_completion(task_id)
@@ -206,6 +237,16 @@ class DataManager:
         self.session.delete(task)
         self.session.commit()
         return True
+
+    def delete_entertainment_tasks_batch(self, task_ids: list) -> int:
+        """批量删除娱乐任务（单次事务）"""
+        if not task_ids:
+            return 0
+        entries = self.entertainment_manager.delete_batch(task_ids)
+        if entries:
+            self.trash_manager.move_many_to_trash(entries)
+            self.session.commit()
+        return len(entries)
 
     def toggle_entertainment_task_completion(self, task_id: str) -> bool:
         return self.entertainment_manager.toggle_completion(task_id)

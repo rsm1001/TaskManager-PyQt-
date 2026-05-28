@@ -72,6 +72,18 @@ class EntertainmentTaskManager:
             self.session.commit()
         return task
 
+    def delete_batch(self, task_ids: list) -> list:
+        """批量删除任务（不commit，返回供垃圾箱序列化的数据列表）"""
+        if not task_ids:
+            return []
+        tasks = self.session.query(EntertainmentTask).filter(EntertainmentTask.id.in_(task_ids)).all()
+        result = []
+        for task in tasks:
+            result.append(('entertainment', task.id, self.to_dict(task)))
+        for task in tasks:
+            self.session.delete(task)
+        return result
+
     def toggle_completion(self, task_id: str) -> bool:
         """切换完成状态: pending -> completed -> abandoned -> pending"""
         task = self.get_by_id(task_id)

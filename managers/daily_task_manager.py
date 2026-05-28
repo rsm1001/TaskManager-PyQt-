@@ -98,6 +98,18 @@ class DailyTaskManager:
         self.session.commit()
         return task_data
 
+    def delete_batch(self, task_ids: list) -> list:
+        """批量删除每日任务（不commit，返回供垃圾箱序列化的数据列表）"""
+        if not task_ids:
+            return []
+        tasks = self.session.query(DailyTask).filter(DailyTask.id.in_(task_ids)).all()
+        result = []
+        for task in tasks:
+            result.append(('daily', task.id, self.to_dict(task)))
+        for task in tasks:
+            self.session.delete(task)
+        return result
+
     def toggle_completion(self, task_id: str) -> bool:
         """切换每日任务完成状态"""
         task = self.get_by_id(task_id)
