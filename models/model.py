@@ -36,6 +36,7 @@ class DailyTask(BaseModel):
     tags = Column(String(500), default="")  # 逗号分隔的标签，如"工作,紧急,项目A"
     shortcut_path = Column(String(1000), default="")  # 快捷入口路径，非空表示快捷入口
     priority = Column(String(20), default="normal")  # high, normal, low
+    subtasks = Column(Text, default='[]')  # 子任务（检查项）JSON 字符串，list of {id, title, completed}
 
 
 class TodoTask(BaseModel):
@@ -52,6 +53,7 @@ class TodoTask(BaseModel):
     tags = Column(String(500), default="")  # 逗号分隔的标签，如"工作,紧急,项目A"
     shortcut_path = Column(String(1000), default="")  # 快捷入口路径，非空表示快捷入口
     priority = Column(String(20), default="normal")  # high, normal, low
+    subtasks = Column(Text, default='[]')  # 子任务（检查项）JSON 字符串，list of {id, title, completed}
 
 
 class EntertainmentTask(BaseModel):
@@ -67,6 +69,7 @@ class EntertainmentTask(BaseModel):
     tags = Column(String(500), default="")  # 逗号分隔的标签，如"游戏,周末,多人"
     shortcut_path = Column(String(1000), default="")  # 快捷入口路径，非空表示快捷入口
     priority = Column(String(20), default="normal")  # high, normal, low
+    subtasks = Column(Text, default='[]')  # 子任务（检查项）JSON 字符串，list of {id, title, completed}
 
 
 class Config(BaseModel):
@@ -174,6 +177,30 @@ def migrate_db(engine):
             conn.execute(text("ALTER TABLE entertainment_tasks ADD COLUMN priority VARCHAR(20) DEFAULT 'normal'"))
             conn.commit()
         logger.info("已添加 entertainment_tasks.priority 字段")
+
+    # 检查并添加 todo_tasks.subtasks 字段
+    todo_columns = [col['name'] for col in inspector.get_columns('todo_tasks')]
+    if 'subtasks' not in todo_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE todo_tasks ADD COLUMN subtasks TEXT DEFAULT '[]'"))
+            conn.commit()
+        logger.info("已添加 todo_tasks.subtasks 字段")
+
+    # 检查并添加 daily_tasks.subtasks 字段
+    daily_columns = [col['name'] for col in inspector.get_columns('daily_tasks')]
+    if 'subtasks' not in daily_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE daily_tasks ADD COLUMN subtasks TEXT DEFAULT '[]'"))
+            conn.commit()
+        logger.info("已添加 daily_tasks.subtasks 字段")
+
+    # 检查并添加 entertainment_tasks.subtasks 字段
+    entertainment_columns = [col['name'] for col in inspector.get_columns('entertainment_tasks')]
+    if 'subtasks' not in entertainment_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE entertainment_tasks ADD COLUMN subtasks TEXT DEFAULT '[]'"))
+            conn.commit()
+        logger.info("已添加 entertainment_tasks.subtasks 字段")
 
     # 清理 category 字段中的旧数据（之前用于存储任务类型，现改为用户分类）
     # 将值为 'daily', 'todo', 'entertainment' 的记录清空

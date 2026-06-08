@@ -3,14 +3,16 @@ Task Manager - 任务编辑对话框模块
 将原来的 TaskEditDialog 类从 main.py 中分离出来以实现解耦
 """
 
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QTextEdit, 
-                             QLabel, QComboBox, QCheckBox, QDateEdit, QPushButton, QGridLayout)
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QTextEdit,
+                             QLabel, QComboBox, QCheckBox, QDateEdit, QPushButton, QGridLayout,
+                             QGroupBox, QScrollArea, QWidget)
 from PyQt6.QtCore import QDate
 from PyQt6.QtWidgets import QMessageBox
 from managers.data_manager import TaskType
 from widgets.tag_selector_widget import TagSelectorWidget
 from datetime import timedelta
 import datetime
+import json
 import uuid
 
 
@@ -22,6 +24,7 @@ class TaskEditDialog(QDialog):
         self.task_type = task_type
         self.task = task
         self.data_manager = data_manager
+        self._subtasks = []  # 仅 TODO 类型使用：list of {id, title, completed}
         self.init_ui()
         if task:
             self.load_task_data()
@@ -30,7 +33,7 @@ class TaskEditDialog(QDialog):
         """初始化界面"""
         self.setWindowTitle(f"{'编辑' if self.task else '添加'}{self.get_task_type_name()}")
         self.setModal(True)
-        self.resize(500, 400)
+        self.resize(560, 620)
 
         layout = QVBoxLayout()
 
@@ -178,6 +181,9 @@ class TaskEditDialog(QDialog):
             priority_layout.addStretch()
             layout.addLayout(priority_layout)
 
+        # 子任务（检查项）区域——三类任务共用
+        self._build_subtasks_section(layout)
+
         # 完成状态
         status_layout = QHBoxLayout()
         status_layout.addWidget(QLabel('状态:'))
@@ -199,6 +205,149 @@ class TaskEditDialog(QDialog):
         layout.addLayout(button_layout)
 
         self.setLayout(layout)
+
+    def _build_subtasks_section(self, parent_layout):
+        """构建子任务（检查项）UI 区域。仅 TODO 类型使用。"""
+        group = QGroupBox("子任务")
+        v = QVBoxLayout()
+
+        header = QHBoxLayout()
+        header.addWidget(QLabel("检查项列表"))
+        header.addStretch()
+        self.subtask_progress_label = QLabel("已完成 0/0")
+        header.addWidget(self.subtask_progress_label)
+        v.addLayout(header)
+
+        self.subtask_scroll = QScrollArea()
+        self.subtask_scroll.setWidgetResizable(True)
+        self.subtask_scroll.setMaximumHeight(220)
+        self.subtask_list_host = QWidget()
+        self.subtask_list_layout = QVBoxLayout()
+        self.subtask_list_layout.setContentsMargins(0, 0, 0, 0)
+        self.subtask_list_layout.addStretch(1)
+        self.subtask_list_host.setLayout(self.subtask_list_layout)
+        self.subtask_scroll.setWidget(self.subtask_list_host)
+        v.addWidget(self.subtask_scroll)
+
+        add_row = QHBoxLayout()
+        self.subtask_new_edit = QLineEdit()
+        self.subtask_new_edit.setPlaceholderText("新子任务内容，回车添加")
+        self.subtask_new_edit.returnPressed.connect(self._on_add_subtask_clicked)
+        self.subtask_new_edit.textChanged.connect(self._on_subtask_new_text_changed)
+        add_row.addWidget(self.subtask_new_edit)
+        self.subtask_add_btn = QPushButton("添加")
+        self.subtask_add_btn.setEnabled(False)
+        self.subtask_add_btn.clicked.connect(self._on_add_subtask_clicked)
+        add_row.addWidget(self.subtask_add_btn)
+        v.addLayout(add_row)
+
+        group.setLayout(v)
+        parent_layout.addWidget(group)
+
+    def _load_subtasks_from_task(self):
+        """从 self.task 的 subtasks 字段解析到内存列表（无 task 时清空）。"""
+        self._subtasks = []
+        if not self.task:
+            return
+        raw = getattr(self.task, 'subtasks', None) or '[]'
+        try:
+            parsed = json.loads(raw)
+            if not isinstance(parsed, list):
+                parsed = []
+        except (ValueError, TypeError):
+            parsed = []
+        self._subtasks = [
+            {
+                'id': str(item.get('id') or uuid.uuid4()),
+                'title': str(item.get('title', '')),
+                'completed': bool(item.get('completed', False)),
+            }
+            for item in parsed
+        ]
+
+    def _on_subtask_new_text_changed(self, text):
+        self.subtask_add_btn.setEnabled(bool(text.strip()))
+
+    def _on_add_subtask_clicked(self):
+        title = self.subtask_new_edit.text().strip()
+        if not title:
+            return
+        self._subtasks.append({
+            "id": str(uuid.uuid4()),
+            "title": title,
+            "completed": False,
+        })
+        self.subtask_new_edit.clear()
+        self._render_subtasks()
+        self.subtask_new_edit.setFocus()
+
+    def _on_delete_subtask_clicked(self, index):
+        if 0 <= index < len(self._subtasks):
+            del self._subtasks[index]
+            self._render_subtasks()
+
+    def _on_subtask_check_changed(self, index, checked):
+        if 0 <= index < len(self._subtasks):
+            self._subtasks[index]["completed"] = bool(checked)
+            self._update_subtask_progress()
+
+    def _on_subtask_title_edited(self, index, text):
+        if 0 <= index < len(self._subtasks):
+            new_title = text.strip()
+            if new_title:
+                self._subtasks[index]["title"] = new_title
+            else:
+                self._render_subtasks()
+
+    def _update_subtask_progress(self):
+        total = len(self._subtasks)
+        done = sum(1 for s in self._subtasks if s.get("completed"))
+        if hasattr(self, "subtask_progress_label"):
+            self.subtask_progress_label.setText(f"已完成 {done}/{total}")
+
+    def _render_subtasks(self):
+        from PyQt6.QtCore import Qt
+        if not hasattr(self, "subtask_list_layout"):
+            return
+        while self.subtask_list_layout.count() > 1:
+            item = self.subtask_list_layout.takeAt(0)
+            w = item.widget() if item else None
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
+
+        if not self._subtasks:
+            empty = QLabel("暂无子任务，点击下方添加")
+            empty.setStyleSheet("color: gray;")
+            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.subtask_list_layout.insertWidget(0, empty)
+        else:
+            for idx, item in enumerate(self._subtasks):
+                row = QWidget()
+                hl = QHBoxLayout()
+                hl.setContentsMargins(2, 2, 2, 2)
+
+                cb = QCheckBox()
+                cb.setChecked(bool(item.get("completed")))
+                cb.stateChanged.connect(
+                    lambda state, i=idx: self._on_subtask_check_changed(i, state == Qt.CheckState.Checked.value)
+                )
+                hl.addWidget(cb)
+
+                edit = QLineEdit(item.get("title", ""))
+                edit.editingFinished.connect(
+                    lambda i=idx, e=edit: self._on_subtask_title_edited(i, e.text())
+                )
+                hl.addWidget(edit, 1)
+
+                del_btn = QPushButton("删除")
+                del_btn.clicked.connect(lambda _checked=False, i=idx: self._on_delete_subtask_clicked(i))
+                hl.addWidget(del_btn)
+
+                row.setLayout(hl)
+                self.subtask_list_layout.insertWidget(self.subtask_list_layout.count() - 1, row)
+
+        self._update_subtask_progress()
 
     def get_task_type_name(self):
         """获取任务类型名称"""
@@ -296,6 +445,9 @@ class TaskEditDialog(QDialog):
                     if index >= 0:
                         self.folder_combo.setCurrentIndex(index)
 
+            # 加载子任务（三类任务共用）
+            self._load_subtasks_from_task()
+
             # 加载优先级
             if hasattr(self, 'priority_combo'):
                 priority_map = {'high': '重要', 'normal': '普通', 'low': '低'}
@@ -335,6 +487,9 @@ class TaskEditDialog(QDialog):
         elif self.task_type == TaskType.ENTERTAINMENT:
             data['fun_category'] = self.category_combo.currentText()
             data['category'] = self.folder_combo.currentText().strip() if hasattr(self, 'folder_combo') else ''
+
+        # 子任务（三类任务共用）
+        data['subtasks'] = json.dumps(self._subtasks, ensure_ascii=False)
 
         # 优先级
         if hasattr(self, 'priority_combo'):

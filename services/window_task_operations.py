@@ -57,7 +57,8 @@ class TaskOperationHandler:
             status=data.get('status', 'pending'),
             tags=data.get('tags', ''),
             category=data.get('category', ''),
-            priority=data.get('priority', 'normal')
+            priority=data.get('priority', 'normal'),
+            subtasks=data.get('subtasks', '[]')
         )
         self._w.load_daily_tasks()
         self._validate_and_refresh_filter('daily')
@@ -90,7 +91,8 @@ class TaskOperationHandler:
             status=data.get('status', 'pending'),
             tags=data.get('tags', ''),
             category=data.get('category', ''),
-            priority=data.get('priority', 'normal')
+            priority=data.get('priority', 'normal'),
+            subtasks=data.get('subtasks', '[]')
         )
         self._w.load_daily_tasks()
         self._validate_and_refresh_filter('daily')

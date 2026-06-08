@@ -39,7 +39,8 @@ class JsonExportImportHandler:
                     "week_day": task.week_day or "",
                     "status": task.status or "pending",
                     "tags": task.tags or "",
-                    "priority": getattr(task, 'priority', 'normal')
+                    "priority": getattr(task, 'priority', 'normal'),
+                    "subtasks": getattr(task, 'subtasks', '[]') or '[]'
                 })
 
             # 导出待办事项
@@ -55,7 +56,8 @@ class JsonExportImportHandler:
                     "category": task.category,
                     "status": task.status or "pending",
                     "tags": task.tags or "",
-                    "priority": getattr(task, 'priority', 'normal')
+                    "priority": getattr(task, 'priority', 'normal'),
+                    "subtasks": getattr(task, 'subtasks', '[]') or '[]'
                 })
 
             # 导出娱乐任务
@@ -70,7 +72,8 @@ class JsonExportImportHandler:
                     "category": task.category,
                     "status": task.status or "pending",
                     "tags": task.tags or "",
-                    "priority": getattr(task, 'priority', 'normal')
+                    "priority": getattr(task, 'priority', 'normal'),
+                    "subtasks": getattr(task, 'subtasks', '[]') or '[]'
                 })
             
             # 导出配置
@@ -118,7 +121,8 @@ class JsonExportImportHandler:
                         created_at=created_at,
                         status=task_data.get("status", "pending"),
                         tags=task_data.get("tags", ""),
-                        priority=task_data.get("priority", "normal")
+                        priority=task_data.get("priority", "normal"),
+                        subtasks=task_data.get("subtasks", "[]")
                     )
                     self.session.add(task)
 
@@ -142,7 +146,8 @@ class JsonExportImportHandler:
                         created_at=created_at,
                         status=task_data.get("status", "pending"),
                         tags=task_data.get("tags", ""),
-                        priority=task_data.get("priority", "normal")
+                        priority=task_data.get("priority", "normal"),
+                        subtasks=task_data.get("subtasks", "[]")
                     )
                     self.session.add(task)
 
@@ -165,7 +170,8 @@ class JsonExportImportHandler:
                         created_at=created_at,
                         status=task_data.get("status", "pending"),
                         tags=task_data.get("tags", ""),
-                        priority=task_data.get("priority", "normal")
+                        priority=task_data.get("priority", "normal"),
+                        subtasks=task_data.get("subtasks", "[]")
                     )
                     self.session.add(task)
             

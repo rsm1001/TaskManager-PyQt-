@@ -85,7 +85,8 @@ class TrashRestorationService:
             status=data.get('status', 'pending'),
             tags=data.get('tags', ''),
             shortcut_path=data.get('shortcut_path', ''),
-            priority=data.get('priority', 'normal')
+            priority=data.get('priority', 'normal'),
+            subtasks=data.get('subtasks', '[]')
         )
         self.session.add(task)
         self.session.commit()
@@ -103,7 +104,8 @@ class TrashRestorationService:
             status=data.get('status', 'pending'),
             tags=data.get('tags', ''),
             shortcut_path=data.get('shortcut_path', ''),
-            priority=data.get('priority', 'normal')
+            priority=data.get('priority', 'normal'),
+            subtasks=data.get('subtasks', '[]')
         )
         self.session.add(task)
         self.session.commit()
@@ -121,7 +123,8 @@ class TrashRestorationService:
             status=data.get('status', 'pending'),
             tags=data.get('tags', ''),
             shortcut_path=data.get('shortcut_path', ''),
-            priority=data.get('priority', 'normal')
+            priority=data.get('priority', 'normal'),
+            subtasks=data.get('subtasks', '[]')
         )
         self.session.add(task)
         self.session.commit()

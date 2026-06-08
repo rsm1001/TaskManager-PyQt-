@@ -43,7 +43,8 @@ class TodoTaskOperations:
             status=data.get('status', 'pending'),
             tags=data.get('tags', ''),
             category=data.get('category', ''),
-            priority=data.get('priority', 'normal')
+            priority=data.get('priority', 'normal'),
+            subtasks=data.get('subtasks', '[]')
         )
         self._w.load_todo_tasks()
         self._validate_and_refresh_filter('todo')
@@ -76,7 +77,8 @@ class TodoTaskOperations:
             status=data.get('status', 'pending'),
             tags=data.get('tags', ''),
             category=data.get('category', ''),
-            priority=data.get('priority', 'normal')
+            priority=data.get('priority', 'normal'),
+            subtasks=data.get('subtasks', '[]')
         )
         self._w.load_todo_tasks()
         self._validate_and_refresh_filter('todo')
