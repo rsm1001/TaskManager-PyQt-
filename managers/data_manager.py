@@ -1,21 +1,16 @@
 """
-Task Manager - 数据访问和管理类
-处理数据库的CRUD操作、JSON导入导出、每日重置等
-通过组合子管理器实现模块化架构
+Task Manager - 数据管理外观（Facade）
+为上层 UI/Service 提供统一的业务入口，内部按功能垂直委托给多个编排器
+（Task / Shortcut / Tag / Trash / Config Orchestrator）
+通过 OrchestratorFactory 工厂模式解耦编排器的创建
 """
 
 import logging
-from models.model import DailyTask, TodoTask, EntertainmentTask, Config, init_db
-from datetime import datetime, date
-import json
-import uuid
-import config.config
-import sqlite3
 from typing import List, Dict, Any, Optional
 
-logger = logging.getLogger(__name__)
+from models.model import DailyTask, TodoTask, EntertainmentTask
 
-# 导入子管理器
+from managers.data_access import DataAccess
 from managers.todo_task_manager import TodoTaskManager
 from managers.entertainment_task_manager import EntertainmentTaskManager
 from managers.config_manager import ConfigManager
@@ -25,29 +20,37 @@ from managers.daily_task_manager import DailyTaskManager
 from managers.tag_manager import TagManager
 from managers.task_type import TaskType
 
-# 导入服务
 from services.daily_reset_service import DailyResetService
 from services.vacuum_service import VacuumService
 from services.trash_restoration_service import TrashRestorationService
 from services.service_factory import ServiceFactory
+from services.orchestrator_factory import OrchestratorFactory
+
+logger = logging.getLogger(__name__)
 
 
 class DataManager:
-    """数据管理器 - 组合子管理器实现模块化"""
+    """数据管理外观
 
-    def __init__(self, db_path: str = None):
-        if db_path is None:
-            db_path = config.config.DATABASE_PATH
-        self.engine, self.Session = init_db(db_path, run_migration=True)
-        self.session = self.Session()
-        logger.info(f"DataManager 初始化，数据库路径: {db_path}")
+    通过编排器（Orchestrator）解耦各业务领域：
+        - task_orchestrator: 任务 CRUD + 紧急度 + JSON 导入导出
+        - shortcut_orchestrator: 快捷入口 + 历史记录
+        - tag_orchestrator: 标签 + 分类 + 清理
+        - trash_orchestrator: 垃圾桶查询 / 恢复 / 清理
+        - config_orchestrator: 配置 get / set
+    """
 
-        # 创建共享的 sqlite3 连接供子管理器共用，避免文件锁争用
-        # shortcut_entries 在 taskmanager.db，trashed_tasks 在 task_trash.db
-        self._main_conn = sqlite3.connect(config.config.DATABASE_PATH, check_same_thread=False)
-        self._trash_conn = sqlite3.connect(config.config.TRASH_DATABASE_PATH, check_same_thread=False)
+    def __init__(self, db_path: Optional[str] = None):
+        """初始化数据管理外观"""
+        # 基础设施：DB session / 连接
+        self._data_access = DataAccess(db_path=db_path)
+        self.session = self._data_access.get_session()
+        self.engine = self._data_access.engine
 
-        # 初始化子管理器（按功能垂直划分）
+        # 底层 Repository（保持对外属性名兼容）
+        self._main_conn = self._data_access.get_main_connection()
+        self._trash_conn = self._data_access.get_trash_connection()
+
         self.todo_manager = TodoTaskManager(self.session)
         self.entertainment_manager = EntertainmentTaskManager(self.session)
         self.config_manager = ConfigManager(self.session)
@@ -55,7 +58,11 @@ class DataManager:
         self.shortcut_manager = ShortcutManager(connection=self._main_conn)
         self.daily_task_manager = DailyTaskManager(self.session)
         self.tag_manager = TagManager(self.config_manager)
+
+        # 服务层
         self.daily_reset_service = DailyResetService(self.session, self.config_manager)
+        import config.config
+
         self.vacuum_service = VacuumService(self.engine, config.config.TRASH_DATABASE_PATH)
         self.trash_restoration_service = TrashRestorationService(
             session=self.session,
@@ -64,457 +71,303 @@ class DataManager:
             vacuum_service=self.vacuum_service,
             daily_task_manager=self.daily_task_manager,
             todo_task_manager=self.todo_manager,
-            entertainment_task_manager=self.entertainment_manager
+            entertainment_task_manager=self.entertainment_manager,
         )
 
-        # 初始化服务工厂
+        # 工厂：服务 + 编排器
         self._service_factory = ServiceFactory(self)
+        self._orchestrator_factory = OrchestratorFactory(self)
 
-        # 检查并执行每日重置
+        # 触发每日重置
         self.daily_reset_service.check_and_reset()
-        logger.info("DataManager 初始化完成")
+        logger.info("DataManager 初始化完成 | request_id=init")
 
-    # ==================== 服务获取方法 ====================
+    # ==================== 编排器访问器 ====================
+
+    @property
+    def task_orchestrator(self):
+        return self._orchestrator_factory.get_task_orchestrator()
+
+    @property
+    def shortcut_orchestrator(self):
+        return self._orchestrator_factory.get_shortcut_orchestrator()
+
+    @property
+    def tag_orchestrator(self):
+        return self._orchestrator_factory.get_tag_orchestrator()
+
+    @property
+    def trash_orchestrator(self):
+        return self._orchestrator_factory.get_trash_orchestrator()
+
+    @property
+    def config_orchestrator(self):
+        return self._orchestrator_factory.get_config_orchestrator()
+
+    # ==================== 服务工厂代理 ====================
 
     def _get_statistics_service(self):
-        """获取统计服务"""
         return self._service_factory.get_statistics_service()
 
     def _get_search_service(self):
-        """获取搜索服务"""
         return self._service_factory.get_search_service()
 
     def _get_task_limit_service(self):
-        """获取任务限制服务"""
         return self._service_factory.get_task_limit_service()
 
     def _get_pomodoro_service(self):
-        """获取番茄钟服务"""
         return self._service_factory.get_pomodoro_service()
 
     # ==================== 会话管理 ====================
 
     def get_session(self):
-        """获取数据库会话"""
         return self.session
 
     def close_session(self):
-        """关闭数据库会话"""
-        logger.info("关闭数据库会话")
-        self.session.close()
+        logger.info("关闭数据库会话 | request_id=close")
         self.trash_manager.close()
         self.shortcut_manager.close()
-        if hasattr(self, '_main_conn') and self._main_conn:
-            self._main_conn.close()
-            self._main_conn = None
-        if hasattr(self, '_trash_conn') and self._trash_conn:
-            self._trash_conn.close()
-            self._trash_conn = None
+        self._data_access.close()
 
     def commit(self):
-        """提交更改"""
         self.session.commit()
 
     def rollback(self):
-        """回滚更改"""
         self.session.rollback()
 
-    # ==================== DailyTask 相关方法 ====================
+    # ==================== DailyTask 委托 ====================
 
-    def get_daily_tasks(self, weekday: Optional[str] = None,
-                        status: Optional[str] = None, tag: Optional[str] = None) -> List[DailyTask]:
-        return self.daily_task_manager.get_tasks(weekday=weekday, status=status, tag=tag)
+    def get_daily_tasks(self, weekday=None, status=None, tag=None) -> List[DailyTask]:
+        return self.task_orchestrator.get_daily_tasks(weekday=weekday, status=status, tag=tag)
 
     def get_daily_task_by_id(self, task_id: str) -> Optional[DailyTask]:
-        return self.daily_task_manager.get_by_id(task_id)
+        return self.task_orchestrator.get_daily_task_by_id(task_id)
 
-    def create_daily_task(self, title: str, description: str = "", week_day: str = "",
-                          completed: bool = False, status: str = "pending",
-                          tags: str = "", shortcut_path: str = "", category: str = "",
-                          priority: str = "normal", subtasks: str = "[]") -> DailyTask:
-        logger.info(f"创建每日任务: {title}")
-        task = self.daily_task_manager.create(title, description, week_day, completed, status, tags, shortcut_path, category, priority, subtasks)
-        self._get_task_limit_service().enforce_limit('daily', DailyTask)
-        return task
+    def create_daily_task(self, title, description="", week_day="",
+                          completed=False, status="pending",
+                          tags="", shortcut_path="", category="",
+                          priority="normal", subtasks="[]") -> DailyTask:
+        return self.task_orchestrator.create_daily_task(
+            title=title, description=description, week_day=week_day,
+            completed=completed, status=status, tags=tags,
+            shortcut_path=shortcut_path, category=category,
+            priority=priority, subtasks=subtasks,
+        )
 
-    def update_daily_task(self, task_id: str, **kwargs) -> bool:
-        return self.daily_task_manager.update(task_id, **kwargs)
+    def update_daily_task(self, task_id, **kwargs) -> bool:
+        return self.task_orchestrator.update_daily_task(task_id, **kwargs)
 
-    def delete_daily_task(self, task_id: str) -> bool:
-        task_data = self.daily_task_manager.delete(task_id)
-        if task_data is None:
-            return False
-        logger.info(f"删除每日任务: {task_id}")
-        self.trash_manager.move_to_trash('daily', task_id, task_data)
-        return True
+    def delete_daily_task(self, task_id) -> bool:
+        return self.task_orchestrator.delete_daily_task(task_id)
 
-    def delete_daily_tasks_batch(self, task_ids: list) -> int:
-        """批量删除每日任务（单次事务）"""
-        if not task_ids:
-            return 0
-        entries = self.daily_task_manager.delete_batch(task_ids)
-        if entries:
-            self.trash_manager.move_many_to_trash(entries)
-            self.session.commit()
-        return len(entries)
+    def delete_daily_tasks_batch(self, task_ids) -> int:
+        return self.task_orchestrator.delete_daily_tasks_batch(task_ids)
 
-    def toggle_daily_task_completion(self, task_id: str) -> bool:
-        return self.daily_task_manager.toggle_completion(task_id)
+    def toggle_daily_task_completion(self, task_id) -> bool:
+        return self.task_orchestrator.toggle_daily_task_completion(task_id)
 
     # ==================== TodoTask 委托 ====================
 
-    def get_todo_tasks(self, status: Optional[str] = None, tag: Optional[str] = None) -> List[TodoTask]:
-        return self.todo_manager.get_tasks(status=status, tag=tag)
+    def get_todo_tasks(self, status=None, tag=None) -> List[TodoTask]:
+        return self.task_orchestrator.get_todo_tasks(status=status, tag=tag)
 
-    def get_todo_task_by_id(self, task_id: str) -> Optional[TodoTask]:
-        return self.todo_manager.get_by_id(task_id)
+    def get_todo_task_by_id(self, task_id) -> Optional[TodoTask]:
+        return self.task_orchestrator.get_todo_task_by_id(task_id)
 
-    def create_todo_task(self, title: str, description: str = "", deadline: str = "",
-                         completed: bool = False, status: str = "pending",
-                         tags: str = "", shortcut_path: str = "", category: str = "",
-                         priority: str = "normal", subtasks: str = "[]") -> TodoTask:
-        logger.info(f"创建待办任务: {title}")
-        task = self.todo_manager.create(title, description, deadline, completed, status, tags, shortcut_path, category, priority, subtasks)
-        self._get_task_limit_service().enforce_limit('todo', TodoTask)
-        return task
+    def create_todo_task(self, title, description="", deadline="",
+                         completed=False, status="pending",
+                         tags="", shortcut_path="", category="",
+                         priority="normal", subtasks="[]") -> TodoTask:
+        return self.task_orchestrator.create_todo_task(
+            title=title, description=description, deadline=deadline,
+            completed=completed, status=status, tags=tags,
+            shortcut_path=shortcut_path, category=category,
+            priority=priority, subtasks=subtasks,
+        )
 
-    def update_todo_task(self, task_id: str, **kwargs) -> bool:
-        return self.todo_manager.update(task_id, **kwargs)
+    def update_todo_task(self, task_id, **kwargs) -> bool:
+        return self.task_orchestrator.update_todo_task(task_id, **kwargs)
 
-    def delete_todo_task(self, task_id: str) -> bool:
-        task = self.todo_manager.get_by_id(task_id)
-        if not task:
-            return False
-        task_data = self.todo_manager.to_dict(task)
-        logger.info(f"删除待办任务: {task_id}")
-        self.trash_manager.move_to_trash('todo', task_id, task_data)
-        self.session.delete(task)
-        self.session.commit()
-        return True
+    def delete_todo_task(self, task_id) -> bool:
+        return self.task_orchestrator.delete_todo_task(task_id)
 
-    def delete_todo_tasks_batch(self, task_ids: list) -> int:
-        """批量删除待办任务（单次事务）"""
-        if not task_ids:
-            return 0
-        entries = self.todo_manager.delete_batch(task_ids)
-        if entries:
-            self.trash_manager.move_many_to_trash(entries)
-            self.session.commit()
-        return len(entries)
+    def delete_todo_tasks_batch(self, task_ids) -> int:
+        return self.task_orchestrator.delete_todo_tasks_batch(task_ids)
 
-    def toggle_todo_task_completion(self, task_id: str) -> bool:
-        return self.todo_manager.toggle_completion(task_id)
+    def toggle_todo_task_completion(self, task_id) -> bool:
+        return self.task_orchestrator.toggle_todo_task_completion(task_id)
 
     # ==================== EntertainmentTask 委托 ====================
 
-    def get_entertainment_tasks(self, status: Optional[str] = None,
-                                tag: Optional[str] = None) -> List[EntertainmentTask]:
-        return self.entertainment_manager.get_tasks(status=status, tag=tag)
+    def get_entertainment_tasks(self, status=None, tag=None) -> List[EntertainmentTask]:
+        return self.task_orchestrator.get_entertainment_tasks(status=status, tag=tag)
 
-    def get_entertainment_task_by_id(self, task_id: str) -> Optional[EntertainmentTask]:
-        return self.entertainment_manager.get_by_id(task_id)
+    def get_entertainment_task_by_id(self, task_id) -> Optional[EntertainmentTask]:
+        return self.task_orchestrator.get_entertainment_task_by_id(task_id)
 
-    def create_entertainment_task(self, title: str, description: str = "",
-                                  fun_category: str = "general", completed: bool = False,
-                                  status: str = "pending", tags: str = "",
-                                  shortcut_path: str = "", category: str = "",
-                                  priority: str = "normal", subtasks: str = "[]") -> EntertainmentTask:
-        logger.info(f"创建娱乐任务: {title}")
-        task = self.entertainment_manager.create(title, description, fun_category, completed, status, tags, shortcut_path, category, priority, subtasks)
-        self._get_task_limit_service().enforce_limit('entertainment', EntertainmentTask)
-        return task
+    def create_entertainment_task(self, title, description="",
+                                  fun_category="general", completed=False,
+                                  status="pending", tags="",
+                                  shortcut_path="", category="",
+                                  priority="normal", subtasks="[]") -> EntertainmentTask:
+        return self.task_orchestrator.create_entertainment_task(
+            title=title, description=description, fun_category=fun_category,
+            completed=completed, status=status, tags=tags,
+            shortcut_path=shortcut_path, category=category,
+            priority=priority, subtasks=subtasks,
+        )
 
-    def update_entertainment_task(self, task_id: str, **kwargs) -> bool:
-        return self.entertainment_manager.update(task_id, **kwargs)
+    def update_entertainment_task(self, task_id, **kwargs) -> bool:
+        return self.task_orchestrator.update_entertainment_task(task_id, **kwargs)
 
-    def delete_entertainment_task(self, task_id: str) -> bool:
-        task = self.entertainment_manager.get_by_id(task_id)
-        if not task:
-            return False
-        task_data = self.entertainment_manager.to_dict(task)
-        logger.info(f"删除娱乐任务: {task_id}")
-        self.trash_manager.move_to_trash('entertainment', task_id, task_data)
-        self.session.delete(task)
-        self.session.commit()
-        return True
+    def delete_entertainment_task(self, task_id) -> bool:
+        return self.task_orchestrator.delete_entertainment_task(task_id)
 
-    def delete_entertainment_tasks_batch(self, task_ids: list) -> int:
-        """批量删除娱乐任务（单次事务）"""
-        if not task_ids:
-            return 0
-        entries = self.entertainment_manager.delete_batch(task_ids)
-        if entries:
-            self.trash_manager.move_many_to_trash(entries)
-            self.session.commit()
-        return len(entries)
+    def delete_entertainment_tasks_batch(self, task_ids) -> int:
+        return self.task_orchestrator.delete_entertainment_tasks_batch(task_ids)
 
-    def toggle_entertainment_task_completion(self, task_id: str) -> bool:
-        return self.entertainment_manager.toggle_completion(task_id)
+    def toggle_entertainment_task_completion(self, task_id) -> bool:
+        return self.task_orchestrator.toggle_entertainment_task_completion(task_id)
 
-    # ==================== 垃圾桶相关方法 ====================
+    # ==================== 垃圾桶 ====================
 
-    def get_trashed_tasks(self, task_type: str = None):
-        return self.trash_manager.get_trashed_tasks(task_type)
+    def get_trashed_tasks(self, task_type=None):
+        return self.trash_orchestrator.get_trashed_tasks(task_type)
 
-    def restore_trashed_task(self, trash_id: str) -> bool:
-        """恢复垃圾桶中的任务到主数据库"""
-        logger.info(f"恢复垃圾桶任务: {trash_id}")
-        return self.trash_restoration_service.restore_task(trash_id)
+    def restore_trashed_task(self, trash_id) -> bool:
+        return self.trash_orchestrator.restore(trash_id)
 
-    def purge_trashed_task(self, trash_id: str):
-        logger.info(f"永久删除垃圾桶任务: {trash_id}")
-        self.trash_restoration_service.purge_task(trash_id)
+    def purge_trashed_task(self, trash_id):
+        self.trash_orchestrator.purge(trash_id)
 
-    def purge_trashed_tasks(self, trash_ids: List[str]):
-        logger.info(f"批量永久删除垃圾桶任务: {len(trash_ids)} 个")
-        self.trash_restoration_service.purge_tasks(trash_ids)
+    def purge_trashed_tasks(self, trash_ids):
+        self.trash_orchestrator.purge_many(trash_ids)
 
-    def purge_all_trashed(self, task_type: str = None):
-        logger.info(f"清空所有垃圾桶任务，类型: {task_type}")
-        self.trash_restoration_service.purge_all(task_type)
+    def purge_all_trashed(self, task_type=None):
+        self.trash_orchestrator.purge_all(task_type)
 
-    # ==================== 快捷入口相关方法 ====================
+    # ==================== 快捷入口 ====================
 
-    def get_all_shortcuts(self, tag: str = None) -> list:
-        return self.shortcut_manager.get_all(tag=tag)
+    def get_all_shortcuts(self, tag=None) -> list:
+        return self.shortcut_orchestrator.get_all(tag=tag)
 
-    def create_shortcut(self, task_type: str, title: str, shortcut_path: str, tags: str = '', action_type: str = 'open') -> bool:
-        logger.info(f"创建快捷入口: {title}")
-        return self.shortcut_manager.create(task_type, title, shortcut_path, tags, action_type)
+    def create_shortcut(self, task_type, title, shortcut_path, tags="", action_type="open") -> bool:
+        return self.shortcut_orchestrator.create(task_type, title, shortcut_path, tags, action_type)
 
-    def update_shortcut(self, shortcut_id: str, title: str = None, shortcut_path: str = None, tags: str = None, action_type: str = None) -> bool:
-        return self.shortcut_manager.update(shortcut_id, title, shortcut_path, tags, action_type)
+    def update_shortcut(self, shortcut_id, title=None, shortcut_path=None,
+                        tags=None, action_type=None) -> bool:
+        return self.shortcut_orchestrator.update(
+            shortcut_id, title=title, shortcut_path=shortcut_path,
+            tags=tags, action_type=action_type,
+        )
 
-    def delete_shortcut(self, shortcut_id: str) -> bool:
-        shortcut_data = self.shortcut_manager.delete(shortcut_id)
-        if shortcut_data is None:
-            return False
-        logger.info(f"删除快捷入口: {shortcut_id}")
-        self.trash_manager.move_to_trash('shortcut', shortcut_id, shortcut_data)
-        return True
+    def delete_shortcut(self, shortcut_id) -> bool:
+        return self.shortcut_orchestrator.delete(shortcut_id)
 
-    def restore_shortcut(self, trash_id: str) -> bool:
-        """恢复快捷入口（委托给 TrashRestorationService）"""
-        return self.trash_restoration_service.restore_task(trash_id)
+    def restore_shortcut(self, trash_id) -> bool:
+        return self.trash_orchestrator.restore_shortcut(trash_id)
 
-    # ==================== 快捷入口历史记录相关方法 ====================
+    # ==================== 快捷入口历史 ====================
 
     def get_history_limit(self) -> int:
-        """获取历史记录缓存数量限制"""
-        return self.shortcut_manager.get_history_limit()
+        return self.shortcut_orchestrator.get_history_limit()
 
-    def set_history_limit(self, limit: int) -> bool:
-        """设置历史记录缓存数量限制"""
-        return self.shortcut_manager.set_history_limit(limit)
+    def set_history_limit(self, limit) -> bool:
+        return self.shortcut_orchestrator.set_history_limit(limit)
 
     def get_all_history(self) -> list:
-        """获取所有历史记录"""
-        return self.shortcut_manager.get_all_history()
+        return self.shortcut_orchestrator.get_all_history()
 
-    def add_or_update_history(self, shortcut_id: str, shortcut_title: str, shortcut_path: str, action_type: str = 'open') -> bool:
-        """添加或更新历史记录"""
-        result = self.shortcut_manager.add_or_update_history(shortcut_id, shortcut_title, shortcut_path, action_type)
-        if result:
-            # 清理超出限制的记录
-            limit = self.get_history_limit()
-            self.shortcut_manager.cleanup_history_except_pinned(limit)
-        return result
+    def add_or_update_history(self, shortcut_id, shortcut_title, shortcut_path,
+                              action_type="open") -> bool:
+        return self.shortcut_orchestrator.add_or_update_history(
+            shortcut_id, shortcut_title, shortcut_path, action_type,
+        )
 
-    def toggle_history_pin(self, history_id: str) -> bool:
-        """切换历史记录的置顶状态"""
-        return self.shortcut_manager.toggle_history_pin(history_id)
+    def toggle_history_pin(self, history_id) -> bool:
+        return self.shortcut_orchestrator.toggle_history_pin(history_id)
 
-    def delete_history(self, history_id: str) -> bool:
-        """删除历史记录（置顶记录不可删除）"""
-        return self.shortcut_manager.delete_history(history_id)
+    def delete_history(self, history_id) -> bool:
+        return self.shortcut_orchestrator.delete_history(history_id)
 
     def clear_all_unpinned_history(self) -> int:
-        """清空所有非置顶历史记录"""
-        return self.shortcut_manager.clear_all_unpinned_history()
+        return self.shortcut_orchestrator.clear_all_unpinned_history()
 
-    # ==================== 紧急度（委托） ====================
+    # ==================== 紧急度 ====================
 
     def calculate_urgency_for_task(self, task: TodoTask):
-        self.todo_manager._calculate_urgency(task)
+        self.task_orchestrator.calculate_urgency_for_task(task)
 
     def recalculate_all_urgency(self):
-        self.todo_manager.recalculate_all_urgency()
+        self.task_orchestrator.recalculate_all_urgency()
 
-    # ==================== 配置管理（委托） ====================
+    # ==================== 配置 ====================
 
-    def get_config(self, key: str, default: str = "") -> str:
-        return self.config_manager.get(key, default)
+    def get_config(self, key, default="") -> str:
+        return self.config_orchestrator.get(key, default)
 
-    def set_config(self, key: str, value: str):
-        self.config_manager.set(key, value)
+    def set_config(self, key, value):
+        self.config_orchestrator.set(key, value)
 
     # ==================== JSON 导入导出 ====================
 
-    def export_to_json(self, filepath: str = "tasks_export.json") -> bool:
-        from handlers.json_handler import JsonExportImportHandler
-        handler = JsonExportImportHandler(self.session)
-        return handler.export_to_json(filepath)
+    def export_to_json(self, filepath="tasks_export.json") -> bool:
+        return self.task_orchestrator.export_to_json(filepath)
 
-    def import_from_json(self, filepath: str = "tasks_export.json") -> bool:
-        from handlers.json_handler import JsonExportImportHandler
-        handler = JsonExportImportHandler(self.session)
-        return handler.import_from_json(filepath)
+    def import_from_json(self, filepath="tasks_export.json") -> bool:
+        return self.task_orchestrator.import_from_json(filepath)
 
-    # ==================== 统计（委托给 StatisticsService） ====================
+    # ==================== 统计 ====================
 
     def get_statistics(self) -> Dict[str, Any]:
-        """获取所有任务的统计信息"""
         return self._get_statistics_service().get_statistics()
 
-    # ==================== 分类管理 ====================
+    # ==================== 分类 ====================
 
-    def get_all_categories(self, task_type: str) -> List[str]:
-        """获取指定任务类型的所有分类"""
-        return self.tag_manager.get_all_categories(task_type)
+    def get_all_categories(self, task_type) -> List[str]:
+        return self.tag_orchestrator.get_all_categories(task_type)
 
-    def add_category(self, category: str, task_type: str) -> bool:
-        """添加任务分类"""
-        return self.tag_manager.add_category(category, task_type)
+    def add_category(self, category, task_type) -> bool:
+        return self.tag_orchestrator.add_category(category, task_type)
 
-    def delete_category(self, category: str, task_type: str) -> bool:
-        """删除任务分类"""
-        return self.tag_manager.delete_category(category, task_type)
+    def delete_category(self, category, task_type) -> bool:
+        return self.tag_orchestrator.delete_category(category, task_type)
 
-    # ==================== 标签管理 ====================
+    # ==================== 标签 ====================
 
-    def get_all_tags(self, category: str) -> List[str]:
-        """获取指定类别的所有标签"""
-        return self.tag_manager.get_all_tags(category)
+    def get_all_tags(self, category) -> List[str]:
+        return self.tag_orchestrator.get_all_tags(category)
 
-    def add_tag(self, tag: str, category: str) -> bool:
-        """添加类别标签"""
-        return self.tag_manager.add_tag(tag, category)
+    def add_tag(self, tag, category) -> bool:
+        return self.tag_orchestrator.add_tag(tag, category)
 
-    def delete_tag(self, tag: str, category: str) -> bool:
-        """删除类别标签（仅当标签未被该类别任务使用时可删除）"""
-        # 构建该类别任务标签检查函数
-        def check_tag_in_tasks(tag_name):
-            if category == 'daily':
-                for task in self.get_daily_tasks():
-                    if task.tags:
-                        tag_list = [t.strip() for t in task.tags.split(',') if t.strip()]
-                        if tag_name in tag_list:
-                            return True
-            elif category == 'todo':
-                for task in self.get_todo_tasks():
-                    if task.tags:
-                        tag_list = [t.strip() for t in task.tags.split(',') if t.strip()]
-                        if tag_name in tag_list:
-                            return True
-            elif category == 'entertainment':
-                for task in self.get_entertainment_tasks():
-                    if task.tags:
-                        tag_list = [t.strip() for t in task.tags.split(',') if t.strip()]
-                        if tag_name in tag_list:
-                            return True
-            elif category == 'shortcut':
-                for s in self.get_all_shortcuts():
-                    if s.get('tags'):
-                        tag_list = [t.strip() for t in s.get('tags').split(',') if t.strip()]
-                        if tag_name in tag_list:
-                            return True
-            return False
+    def delete_tag(self, tag, category) -> bool:
+        return self.tag_orchestrator.delete_tag(tag, category)
 
-        return self.tag_manager.delete_tag(tag, category, [check_tag_in_tasks])
-
-    def get_or_create_tag(self, tag: str, category: str) -> bool:
-        """获取或创建类别标签"""
-        return self.tag_manager.get_or_create(tag, category)
+    def get_or_create_tag(self, tag, category) -> bool:
+        return self.tag_orchestrator.get_or_create_tag(tag, category)
 
     def cleanup_unused_tags(self) -> Dict[str, int]:
-        """
-        检测并删除所有类别中未被任务使用的标签库标签
-
-        Returns:
-            Dict[str, int]: 每个类别的清理结果，格式 {category: 删除数量}
-        """
-        logger.info("开始清理未使用的标签")
-        categories = ['daily', 'todo', 'entertainment', 'shortcut']
-        result = {}
-
-        for category in categories:
-            # 从 configs 表读取该类别的标签库
-            stored_tags = set(self.tag_manager.get_all_tags(category))
-            if not stored_tags:
-                result[category] = 0
-                continue
-
-            # 收集该类别所有任务中实际在用的标签
-            in_use_tags = set()
-            if category == 'daily':
-                for task in self.get_daily_tasks():
-                    if task.tags:
-                        for t in task.tags.split(','):
-                            t = t.strip()
-                            if t:
-                                in_use_tags.add(t)
-            elif category == 'todo':
-                for task in self.get_todo_tasks():
-                    if task.tags:
-                        for t in task.tags.split(','):
-                            t = t.strip()
-                            if t:
-                                in_use_tags.add(t)
-            elif category == 'entertainment':
-                for task in self.get_entertainment_tasks():
-                    if task.tags:
-                        for t in task.tags.split(','):
-                            t = t.strip()
-                            if t:
-                                in_use_tags.add(t)
-            elif category == 'shortcut':
-                for s in self.get_all_shortcuts():
-                    if s.get('tags'):
-                        for t in s.get('tags').split(','):
-                            t = t.strip()
-                            if t:
-                                in_use_tags.add(t)
-
-            # 标签库中不在 in_use_tags 中的标签为未使用
-            unused = stored_tags - in_use_tags
-            if unused:
-                remaining = stored_tags - unused
-                self.tag_manager._save_tags(category, sorted(remaining))
-                # 同时清理 visible_tags_{category} 中也已不存在的标签，保持标签栏显示同步
-                visible_key = f'visible_tags_{category}'
-                visible_val = self.config_manager.get(visible_key, '')
-                if visible_val:
-                    visible_tags = [t.strip() for t in visible_val.split(',') if t.strip()]
-                    cleaned_visible = [t for t in visible_tags if t in remaining]
-                    self.config_manager.set(visible_key, ','.join(cleaned_visible))
-                result[category] = len(unused)
-            else:
-                result[category] = 0
-
-        logger.info(f"标签清理完成: {result}")
-        return result
+        return self.tag_orchestrator.cleanup_unused_tags()
 
     # ==================== 每日重置（兼容旧调用） ====================
 
     def check_daily_reset(self):
-        """兼容旧调用，内部委托给 DailyResetService"""
         self.daily_reset_service.check_and_reset()
 
     def reset_daily_tasks(self):
-        """兼容旧调用，直接触发重置"""
         self.daily_reset_service._do_reset()
 
-    # ==================== 全局搜索（委托给 SearchService） ====================
+    # ==================== 全局搜索 ====================
 
-    def search_all_tasks(self, keyword: str) -> List[Dict[str, Any]]:
-        """全局搜索所有任务类型"""
+    def search_all_tasks(self, keyword) -> List[Dict[str, Any]]:
         return self._get_search_service().search_all_tasks(keyword)
 
 
 if __name__ == "__main__":
     dm = DataManager()
     logger.info("数据管理器初始化成功")
-    logger.info(f"每日任务数量: {len(dm.get_daily_tasks())}")
-    logger.info(f"待办事项数量: {len(dm.get_todo_tasks())}")
-    logger.info(f"娱乐任务数量: {len(dm.get_entertainment_tasks())}")
+    logger.info("每日任务数量: %d", len(dm.get_daily_tasks()))
+    logger.info("待办事项数量: %d", len(dm.get_todo_tasks()))
+    logger.info("娱乐任务数量: %d", len(dm.get_entertainment_tasks()))
     dm.close_session()
