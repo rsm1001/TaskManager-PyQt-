@@ -66,6 +66,11 @@ URGENCY_LOW = 1     # 低紧急程度阈值
 # 快捷入口历史记录配置
 SHORTCUT_HISTORY_DEFAULT_LIMIT = 100  # 默认缓存数量
 
+# Claude 启动选项配置（持久化键 + 默认值）
+CLAUDE_DANGEROUS_SKIP_PERMISSIONS_KEY = "claude_dangerously_skip_permissions"
+CLAUDE_DANGEROUS_SKIP_PERMISSIONS_DEFAULT = False  # 默认不放权
+CLAUDE_DANGEROUS_SKIP_PERMISSIONS_FLAG = "--dangerously-skip-permissions"
+
 # 算法配置
 DEFAULT_BASE_COEFFICIENT = 1.5
 

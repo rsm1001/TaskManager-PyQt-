@@ -5,7 +5,7 @@ UI Components Module for Task Manager - PyQt6
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
                              QHeaderView, QPushButton, QLabel, QComboBox, QGroupBox, QSplitter,
-                             QAbstractItemView, QLineEdit, QTabWidget)
+                             QAbstractItemView, QLineEdit, QTabWidget, QCheckBox)
 from PyQt6.QtCore import Qt, QDate
 from datetime import datetime, date
 from PyQt6.QtGui import QColor
@@ -295,6 +295,18 @@ def create_shortcuts_tab_ui(parent_window):
     control_layout.addWidget(parent_window.open_shortcut_btn)
 
     control_layout.addStretch()
+
+    # Claude 启动放权开关：勾选后，Terminal 启动时附带 --dangerously-skip-permissions
+    parent_window.claude_skip_perm_checkbox = QCheckBox('放权启动 Claude')
+    parent_window.claude_skip_perm_checkbox.setToolTip(
+        '勾选后，通过"快捷入口"和"历史记录"中的 Terminal 按钮启动 Claude 时，\n'
+        '会自动带上 --dangerously-skip-permissions 参数（放权所有工具调用）。\n'
+        '状态会持久化保存，下次启动仍然生效。'
+    )
+    parent_window.claude_skip_perm_checkbox.stateChanged.connect(
+        parent_window.on_claude_skip_permission_toggled
+    )
+    control_layout.addWidget(parent_window.claude_skip_perm_checkbox)
 
     entries_layout.addLayout(control_layout)
 

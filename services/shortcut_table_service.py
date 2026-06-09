@@ -5,6 +5,8 @@ Shortcut Table Service - 快捷入口表格服务模块
 
 import os
 import logging
+import sqlite3
+import config.config as _config
 from PyQt6.QtWidgets import QPushButton, QWidget, QHBoxLayout
 from PyQt6.QtCore import Qt, QProcess, QUrl
 from PyQt6.QtGui import QDesktopServices
@@ -38,14 +40,46 @@ def _get_claude_path():
     return 'claude'  # fallback
 
 
+def _is_dangerously_skip_permissions_enabled():
+    """读取持久化的"放权启动"开关，失败时回落到默认值。
+
+    该函数被启动 claude 的命令调用，调用频次低（用户点击时），因此
+    直接打开一次 sqlite 只读连接查询即可，不引入额外缓存复杂度。
+    """
+    try:
+        conn = sqlite3.connect(_config.DATABASE_PATH)
+        try:
+            cursor = conn.execute(
+                "SELECT value FROM configs WHERE key = ?",
+                (_config.CLAUDE_DANGEROUS_SKIP_PERMISSIONS_KEY,),
+            )
+            row = cursor.fetchone()
+        finally:
+            conn.close()
+        if not row or row[0] is None:
+            return _config.CLAUDE_DANGEROUS_SKIP_PERMISSIONS_DEFAULT
+        return str(row[0]).strip().lower() in ('1', 'true', 'yes', 'on')
+    except Exception as e:
+        logger.warning(f"读取 Claude 放权设置失败，回落默认: {e}")
+        return _config.CLAUDE_DANGEROUS_SKIP_PERMISSIONS_DEFAULT
+
+
+def _build_claude_command():
+    """根据"放权启动"开关构造 claude 启动命令字符串。"""
+    cmd = _get_claude_path()
+    if _is_dangerously_skip_permissions_enabled():
+        cmd = f"{cmd} {_config.CLAUDE_DANGEROUS_SKIP_PERMISSIONS_FLAG}"
+    return cmd
+
+
 def _open_in_terminal(path):
     """在文件/文件夹所在目录启动cmd执行claude"""
     if not path:
         return
     target_dir = os.path.dirname(os.path.abspath(path)) if os.path.isfile(path) else os.path.abspath(path)
-    claude_path = _get_claude_path()
-    logger.info(f"在终端中打开路径: {target_dir}")
-    os.system(f'start cmd /k "cd /d {target_dir} && {claude_path}"')
+    claude_cmd = _build_claude_command()
+    logger.info(f"在终端中打开路径: {target_dir}, 命令: {claude_cmd}")
+    os.system(f'start cmd /k "cd /d {target_dir} && {claude_cmd}"')
 
 
 def _open_shortcut_path(path, action_type='open'):
@@ -64,7 +98,11 @@ def _open_shortcut_path(path, action_type='open'):
     if action_type == 'script':
         # 执行脚本：在文件所在目录启动cmd执行claude
         script_dir = os.path.dirname(os.path.abspath(path)) if path else ''
-        QProcess.startDetached('cmd.exe', ['/c', 'start', 'cmd', '/k', f'cd /d "{script_dir}" && claude'], script_dir)
+        claude_cmd = _build_claude_command()
+        QProcess.startDetached(
+            'cmd.exe', ['/c', 'start', 'cmd', '/k', f'cd /d "{script_dir}" && {claude_cmd}'],
+            script_dir,
+        )
     elif os.path.isfile(path) and path.lower().endswith(('.bat', '.cmd')):
         # bat/cmd 文件：用 QProcess 执行，设置正确的工作目录
         working_dir = os.path.dirname(os.path.abspath(path))

@@ -219,6 +219,41 @@ class ShortcutManager:
         self._conn.commit()
         return True
 
+    def get_dangerously_skip_permissions(self) -> bool:
+        """获取 Claude 启动时是否放权（--dangerously-skip-permissions）"""
+        cursor = self._conn.execute(
+            "SELECT value FROM configs WHERE key = ?",
+            (config.config.CLAUDE_DANGEROUS_SKIP_PERMISSIONS_KEY,)
+        )
+        row = cursor.fetchone()
+        if not row or row[0] is None:
+            return config.config.CLAUDE_DANGEROUS_SKIP_PERMISSIONS_DEFAULT
+        return str(row[0]).strip().lower() in ('1', 'true', 'yes', 'on')
+
+    def set_dangerously_skip_permissions(self, enabled: bool) -> bool:
+        """设置 Claude 启动时是否放权"""
+        now = datetime.now().isoformat()
+        key = config.config.CLAUDE_DANGEROUS_SKIP_PERMISSIONS_KEY
+        value = '1' if enabled else '0'
+        cursor = self._conn.execute(
+            "SELECT id FROM configs WHERE key = ?", (key,)
+        )
+        row = cursor.fetchone()
+        if row:
+            self._conn.execute(
+                "UPDATE configs SET value = ?, updated_at = ? WHERE key = ?",
+                (value, now, key)
+            )
+        else:
+            import uuid
+            config_id = str(uuid.uuid4())
+            self._conn.execute(
+                "INSERT INTO configs (id, key, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (config_id, key, value, now, now)
+            )
+        self._conn.commit()
+        return True
+
     def get_all_history(self) -> List[Dict[str, Any]]:
         """获取所有历史记录，按最后打开时间倒序"""
         cursor = self._conn.execute(

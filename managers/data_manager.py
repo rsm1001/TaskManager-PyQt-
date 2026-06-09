@@ -275,6 +275,12 @@ class DataManager:
     def set_history_limit(self, limit) -> bool:
         return self.shortcut_orchestrator.set_history_limit(limit)
 
+    def get_dangerously_skip_permissions(self) -> bool:
+        return self.shortcut_orchestrator.get_dangerously_skip_permissions()
+
+    def set_dangerously_skip_permissions(self, enabled: bool) -> bool:
+        return self.shortcut_orchestrator.set_dangerously_skip_permissions(enabled)
+
     def get_all_history(self) -> list:
         return self.shortcut_orchestrator.get_all_history()
 

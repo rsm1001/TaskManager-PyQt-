@@ -139,6 +139,7 @@ class TaskManagerMainWindow(QMainWindow):
         self.load_entertainment_tasks()
         self.load_shortcuts()
         self.load_shortcuts_history()
+        self._load_claude_skip_permission_state()
         self.update_status_bar()
 
     # ==================== 加载与切换 ====================
@@ -353,6 +354,42 @@ class TaskManagerMainWindow(QMainWindow):
             shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
             limit = shortcut_service.get_history_limit()
             self.history_limit_label.setText(f'当前缓存: {limit} 条')
+
+    # ==================== Claude 启动放权开关 ====================
+
+    def _load_claude_skip_permission_state(self):
+        """启动时从持久化层恢复放权开关状态。"""
+        if not hasattr(self, 'claude_skip_perm_checkbox'):
+            return
+        try:
+            shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
+            enabled = shortcut_service.get_dangerously_skip_permissions()
+        except Exception as e:
+            logger.warning(f"加载 Claude 放权状态失败，使用默认: {e}")
+            enabled = config.config.CLAUDE_DANGEROUS_SKIP_PERMISSIONS_DEFAULT
+        # blockSignals 防止加载阶段触发写入回持久化
+        self.claude_skip_perm_checkbox.blockSignals(True)
+        self.claude_skip_perm_checkbox.setChecked(enabled)
+        self.claude_skip_perm_checkbox.blockSignals(False)
+
+    def on_claude_skip_permission_toggled(self, state):
+        """勾选/取消"放权启动 Claude"时持久化最新值。"""
+        enabled = bool(state)
+        try:
+            shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
+            shortcut_service.set_dangerously_skip_permissions(enabled)
+            if enabled:
+                self.status_bar.showMessage('已开启 Claude 放权启动（--dangerously-skip-permissions）', 3000)
+            else:
+                self.status_bar.showMessage('已关闭 Claude 放权启动，恢复默认行为', 3000)
+        except Exception as e:
+            logger.error(f"保存 Claude 放权状态失败: {e}", exc_info=True)
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, '保存失败', f'无法保存放权设置: {e}')
+            # 回滚 UI 状态
+            self.claude_skip_perm_checkbox.blockSignals(True)
+            self.claude_skip_perm_checkbox.setChecked(not enabled)
+            self.claude_skip_perm_checkbox.blockSignals(False)
 
     # ==================== 数据导入导出 ====================
 

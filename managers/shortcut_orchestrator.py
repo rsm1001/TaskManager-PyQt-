@@ -72,6 +72,14 @@ class ShortcutOrchestrator:
     def set_history_limit(self, limit: int) -> bool:
         return self._shortcut.set_history_limit(limit)
 
+    # ==================== Claude 启动放权设置 ====================
+
+    def get_dangerously_skip_permissions(self) -> bool:
+        return self._shortcut.get_dangerously_skip_permissions()
+
+    def set_dangerously_skip_permissions(self, enabled: bool) -> bool:
+        return self._shortcut.set_dangerously_skip_permissions(enabled)
+
     def get_all_history(self) -> list:
         return self._shortcut.get_all_history()
 
