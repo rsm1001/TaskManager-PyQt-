@@ -26,19 +26,9 @@ WINDOW_WIDTH = 1200
 WINDOW_HEIGHT = 800
 WINDOW_TITLE = f"{APP_NAME} v{APP_VERSION}"
 
-# 优先级颜色配置（背景色）
-PRIORITY_BG_COLORS = {
-    'high': '#FFEBEE',    # 浅红色 - 重要任务醒目提示
-    'normal': '#E3F2FD',  # 浅蓝色 - 普通任务
-    'low': '#F5F5F5'      # 浅灰色 - 低优先级
-}
-
-# 优先级文字颜色配置
-PRIORITY_TEXT_COLORS = {
-    'high': '#B71C1C',    # 深红色文字
-    'normal': '#0D47A1',  # 深蓝色文字
-    'low': '#757575'      # 灰色文字
-}
+# 优先级颜色配置（从 managers.priority 派生）
+# 真正的定义在 managers/priority.py PRIORITY_LEVELS
+from managers.priority import PRIORITY_BG_COLORS, PRIORITY_TEXT_COLORS  # noqa: E402,F401
 
 # 颜色配置
 COLOR_COMPLETED = "#4CAF50"  # 绿色

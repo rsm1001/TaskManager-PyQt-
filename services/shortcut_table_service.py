@@ -14,17 +14,14 @@ from PyQt6.QtWidgets import QPushButton, QTableWidgetItem
 
 logger = logging.getLogger(__name__)
 
-# 优先级显示映射
-PRIORITY_DISPLAY_MAP = {
-    'high': '重要',
-    'normal': '普通',
-    'low': '低'
-}
+# 优先级显示映射（从 managers.priority 派生）
+# 真正的定义在 managers/priority.py PRIORITY_LEVELS
+from managers.priority import PRIORITY_DISPLAY_MAP, get_priority_label  # noqa: E402,F401
 
 
 def _get_priority_display(priority):
     """获取优先级的显示文本"""
-    return PRIORITY_DISPLAY_MAP.get(priority, '普通')
+    return get_priority_label(priority)
 
 
 def _get_claude_path():

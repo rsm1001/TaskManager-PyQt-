@@ -15,17 +15,18 @@ from services.shortcut_table_service import (
     _open_shortcut_path,
 )
 
-# 优先级显示映射（保留给外部使用）
-PRIORITY_DISPLAY_MAP = {
-    'high': '重要',
-    'normal': '普通',
-    'low': '低'
-}
+# 优先级显示/排序（从 managers.priority 派生）
+# 真正的定义在 managers/priority.py PRIORITY_LEVELS
+from managers.priority import (  # noqa: E402,F401
+    PRIORITY_DISPLAY_MAP,
+    get_priority_label,
+    get_priority_rank,
+)
 
 
 def _get_priority_display(priority):
     """获取优先级的显示文本"""
-    return PRIORITY_DISPLAY_MAP.get(priority, '普通')
+    return get_priority_label(priority)
 
 
 def _get_status_filter(status_text):
@@ -430,7 +431,11 @@ def sort_todo_table_by_column(window, column):
     elif column == 7:
         tasks.sort(key=lambda x: x.created_at, reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
     elif column == 8:
-        tasks.sort(key=lambda x: getattr(x, 'priority', 'normal'), reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
+        # 用 rank 字典排序，5 档下不能字符串字典序（"high" < "idle" 字典序错乱）
+        tasks.sort(
+            key=lambda x: get_priority_rank(getattr(x, 'priority', 'normal')),
+            reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder)
+        )
 
     window.todo_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):

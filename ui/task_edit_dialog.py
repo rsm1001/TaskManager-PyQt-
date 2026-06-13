@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QText
 from PyQt6.QtCore import QDate
 from PyQt6.QtWidgets import QMessageBox
 from managers.data_manager import TaskType
+from managers.priority import PRIORITY_LABELS, LABEL_TO_KEY, DEFAULT_PRIORITY, get_priority_label
 from widgets.tag_selector_widget import TagSelectorWidget
 from datetime import timedelta
 import datetime
@@ -85,7 +86,7 @@ class TaskEditDialog(QDialog):
             priority_layout = QHBoxLayout()
             priority_layout.addWidget(QLabel('优先级:'))
             self.priority_combo = QComboBox()
-            self.priority_combo.addItems(['重要', '普通', '低'])
+            self.priority_combo.addItems(PRIORITY_LABELS)
             priority_layout.addWidget(self.priority_combo)
             priority_layout.addStretch()
             layout.addLayout(priority_layout)
@@ -146,7 +147,7 @@ class TaskEditDialog(QDialog):
             priority_layout = QHBoxLayout()
             priority_layout.addWidget(QLabel('优先级:'))
             self.priority_combo = QComboBox()
-            self.priority_combo.addItems(['重要', '普通', '低'])
+            self.priority_combo.addItems(PRIORITY_LABELS)
             priority_layout.addWidget(self.priority_combo)
             priority_layout.addStretch()
             layout.addLayout(priority_layout)
@@ -176,7 +177,7 @@ class TaskEditDialog(QDialog):
             priority_layout = QHBoxLayout()
             priority_layout.addWidget(QLabel('优先级:'))
             self.priority_combo = QComboBox()
-            self.priority_combo.addItems(['重要', '普通', '低'])
+            self.priority_combo.addItems(PRIORITY_LABELS)
             priority_layout.addWidget(self.priority_combo)
             priority_layout.addStretch()
             layout.addLayout(priority_layout)
@@ -450,8 +451,7 @@ class TaskEditDialog(QDialog):
 
             # 加载优先级
             if hasattr(self, 'priority_combo'):
-                priority_map = {'high': '重要', 'normal': '普通', 'low': '低'}
-                priority_text = priority_map.get(getattr(self.task, 'priority', 'normal'), '普通')
+                priority_text = get_priority_label(getattr(self.task, 'priority', DEFAULT_PRIORITY))
                 index = self.priority_combo.findText(priority_text)
                 if index >= 0:
                     self.priority_combo.setCurrentIndex(index)
@@ -493,7 +493,6 @@ class TaskEditDialog(QDialog):
 
         # 优先级
         if hasattr(self, 'priority_combo'):
-            priority_map = {'重要': 'high', '普通': 'normal', '低': 'low'}
-            data['priority'] = priority_map.get(self.priority_combo.currentText(), 'normal')
+            data['priority'] = LABEL_TO_KEY.get(self.priority_combo.currentText(), DEFAULT_PRIORITY)
 
         return data
