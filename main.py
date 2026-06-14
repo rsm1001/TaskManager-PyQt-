@@ -60,7 +60,12 @@ class TaskManagerMainWindow(QMainWindow):
         self.data_manager = DataManager()
         # 初始化任务操作处理器
         self._task_handler = TaskOperationHandler(self)
-        self.current_tag_filter = ""  # 当前标签筛选
+        # 各 tab 独立的标签筛选条件字符串（解决全局共享导致的跨 tab 干扰问题）
+        # 注意：Tab 创建时会创建 daily_tag_filter 等名字的 TagFilterBar 实例，
+        #       所以这里用 _value 后缀区分，load 函数里读取时也用这个后缀
+        self.daily_tag_filter_value = ""
+        self.todo_tag_filter_value = ""
+        self.entertainment_tag_filter_value = ""
         # 状态切换防双击/防抖
         self._status_switching_row = -1   # 当前正在处理状态切换的行（-1表示无）
         self._status_switch_timestamps = {}  # task_id -> 上次切换时间戳(ms)

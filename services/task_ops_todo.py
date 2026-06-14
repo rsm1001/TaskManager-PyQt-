@@ -130,11 +130,11 @@ class TodoTaskOperations:
 
     def _validate_and_refresh_filter(self, task_type: str):
         """验证并刷新标签筛选状态"""
-        current_tag = self._w.current_tag_filter
+        current_tag = self._w.todo_tag_filter_value
         filter_bar = self._w.todo_tag_filter
         filter_bar.refresh_tags()
         visible_tags = filter_bar.get_visible_tags()
         if current_tag and current_tag not in visible_tags:
-            self._w.current_tag_filter = ''
+            self._w.todo_tag_filter_value = ''
             self._w.load_todo_tasks()
             filter_bar.update_button_states()

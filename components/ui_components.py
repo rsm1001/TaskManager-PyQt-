@@ -18,8 +18,10 @@ import os
 
 def on_tag_filter_clicked(parent_window, tag: str, task_type: str):
     """标签筛选点击处理"""
-    attr_name = 'current_tag_filter'
+    attr_name = f'{task_type}_tag_filter_value'
     setattr(parent_window, attr_name, tag)
+    import logging
+    logging.getLogger(__name__).info(f"[标签筛选] 设置筛选 | task_type={task_type} | tag='{tag}'")
 
     if task_type == 'daily':
         parent_window.load_daily_tasks()

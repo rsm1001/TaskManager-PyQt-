@@ -3,11 +3,14 @@ Task Table Operations Module
 处理任务表格的各种操作，包括加载、状态切换、排序等功能
 """
 
+import logging
 from functools import partial
 from PyQt6.QtWidgets import QTableWidgetItem
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 import config.config as config
+
+logger = logging.getLogger(__name__)
 
 from services.shortcut_table_service import (
     render_shortcut_row,
@@ -190,7 +193,7 @@ def load_daily_tasks_to_table(window):
         weekday_filter = weekday
 
     status_filter = _get_status_filter(window.daily_status_combo.currentText())
-    tag_filter = getattr(window, 'current_tag_filter', '')
+    tag_filter = getattr(window, 'daily_tag_filter_value', '')
 
     tasks = window.data_manager.get_daily_tasks(weekday=weekday_filter, status=status_filter, tag=tag_filter)
 
@@ -218,7 +221,7 @@ def load_todo_tasks_to_table(window):
     else:
         status_filter = _get_status_filter(status_text)
 
-    tag_filter = getattr(window, 'current_tag_filter', '')
+    tag_filter = getattr(window, 'todo_tag_filter_value', '')
 
     tasks = window.data_manager.get_todo_tasks(status=status_filter, tag=tag_filter)
 
@@ -242,7 +245,7 @@ def load_todo_tasks_to_table(window):
 def load_entertainment_tasks_to_table(window):
     """加载娱乐任务到表格"""
     status_filter = _get_status_filter(window.entertainment_status_combo.currentText())
-    tag_filter = getattr(window, 'current_tag_filter', '')
+    tag_filter = getattr(window, 'entertainment_tag_filter_value', '')
 
     tasks = window.data_manager.get_entertainment_tasks(status=status_filter, tag=tag_filter)
 
@@ -342,6 +345,7 @@ def toggle_daily_task_status(window, row, column):
             window._status_switch_timestamps[task_id] = time.time() * 1000
             # 标记当前行，防止双击事件触发编辑
             window._status_switching_row = row
+            logger.info(f"[状态切换] 每日任务 | task_id={task_id} | row={row}")
             window.data_manager.toggle_daily_task_completion(task_id)
             QTimer.singleShot(0, lambda: setattr(window, '_status_switching_row', -1))
             load_daily_tasks_to_table(window)
@@ -364,6 +368,7 @@ def toggle_todo_task_status(window, row, column):
             window._status_switch_timestamps[task_id] = time.time() * 1000
             # 标记当前行，防止双击事件触发编辑
             window._status_switching_row = row
+            logger.info(f"[状态切换] 待办事项 | task_id={task_id} | row={row}")
             window.data_manager.toggle_todo_task_completion(task_id)
             QTimer.singleShot(0, lambda: setattr(window, '_status_switching_row', -1))
             load_todo_tasks_to_table(window)
@@ -386,6 +391,7 @@ def toggle_entertainment_task_status(window, row, column):
             window._status_switch_timestamps[task_id] = time.time() * 1000
             # 标记当前行，防止双击事件触发编辑
             window._status_switching_row = row
+            logger.info(f"[状态切换] 娱乐任务 | task_id={task_id} | row={row}")
             window.data_manager.toggle_entertainment_task_completion(task_id)
             QTimer.singleShot(0, lambda: setattr(window, '_status_switching_row', -1))
             load_entertainment_tasks_to_table(window)

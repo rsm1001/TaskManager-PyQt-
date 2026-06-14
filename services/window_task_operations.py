@@ -4,10 +4,13 @@
 按功能垂直划分：每日任务、待办事项、娱乐任务、快捷入口、批量操作
 """
 
+import logging
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import Qt
 from managers.data_manager import TaskType
 from ui.task_edit_dialog import TaskEditDialog
+
+logger = logging.getLogger(__name__)
 from utils.ui_messages import (
     show_task_added_confirmation,
     show_task_updated_confirmation,
@@ -121,17 +124,18 @@ class TaskOperationHandler:
             current_tag = getattr(self._w, 'current_shortcut_tag_filter', '')
             filter_bar = self._w.shortcut_tag_filter
         else:
-            current_tag = self._w.current_tag_filter
+            current_tag = getattr(self._w, f'{task_type}_tag_filter_value', '')
             filter_bar = getattr(self._w, f'{task_type}_tag_filter')
 
         filter_bar.refresh_tags()
         visible_tags = filter_bar.get_visible_tags()
 
         if current_tag and current_tag not in visible_tags:
+            logger.info(f"[标签筛选] 标签 '{current_tag}' 不在可见列表，已清空 | task_type={task_type}")
             if task_type == 'shortcuts':
                 self._w.current_shortcut_tag_filter = ''
             else:
-                self._w.current_tag_filter = ''
+                setattr(self._w, f'{task_type}_tag_filter_value', '')
             self._reload_tasks(task_type)
             filter_bar.update_button_states()
 
