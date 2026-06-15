@@ -155,8 +155,8 @@ class DataManager:
 
     # ==================== DailyTask 委托 ====================
 
-    def get_daily_tasks(self, weekday: Optional[str] = None, status: Optional[str] = None, tag: Optional[str] = None) -> List["DailyTask"]:
-        return self.task_orchestrator.get_daily_tasks(weekday=weekday, status=status, tag=tag)
+    def get_daily_tasks(self, weekday: Optional[str] = None, status: Optional[str] = None, tag: Optional[str] = None, keyword: Optional[str] = None) -> List["DailyTask"]:
+        return self.task_orchestrator.get_daily_tasks(weekday=weekday, status=status, tag=tag, keyword=keyword)
 
     def get_daily_task_by_id(self, task_id: str) -> Optional["DailyTask"]:
         return self.task_orchestrator.get_daily_task_by_id(task_id)
@@ -195,8 +195,8 @@ class DataManager:
 
     # ==================== TodoTask 委托 ====================
 
-    def get_todo_tasks(self, status: Optional[str] = None, tag: Optional[str] = None) -> List["TodoTask"]:
-        return self.task_orchestrator.get_todo_tasks(status=status, tag=tag)
+    def get_todo_tasks(self, status: Optional[str] = None, tag: Optional[str] = None, keyword: Optional[str] = None) -> List["TodoTask"]:
+        return self.task_orchestrator.get_todo_tasks(status=status, tag=tag, keyword=keyword)
 
     def get_todo_task_by_id(self, task_id: str) -> Optional["TodoTask"]:
         return self.task_orchestrator.get_todo_task_by_id(task_id)
@@ -235,8 +235,8 @@ class DataManager:
 
     # ==================== EntertainmentTask 委托 ====================
 
-    def get_entertainment_tasks(self, status: Optional[str] = None, tag: Optional[str] = None) -> List["EntertainmentTask"]:
-        return self.task_orchestrator.get_entertainment_tasks(status=status, tag=tag)
+    def get_entertainment_tasks(self, status: Optional[str] = None, tag: Optional[str] = None, keyword: Optional[str] = None) -> List["EntertainmentTask"]:
+        return self.task_orchestrator.get_entertainment_tasks(status=status, tag=tag, keyword=keyword)
 
     def get_entertainment_task_by_id(self, task_id: str) -> Optional["EntertainmentTask"]:
         return self.task_orchestrator.get_entertainment_task_by_id(task_id)
@@ -292,8 +292,8 @@ class DataManager:
 
     # ==================== 快捷入口 ====================
 
-    def get_all_shortcuts(self, tag: Optional[str] = None) -> List[Any]:
-        return self.shortcut_orchestrator.get_all(tag=tag)
+    def get_all_shortcuts(self, tag: Optional[str] = None, keyword: Optional[str] = None) -> List[Any]:
+        return self.shortcut_orchestrator.get_all(tag=tag, keyword=keyword)
 
     def create_shortcut(
         self,

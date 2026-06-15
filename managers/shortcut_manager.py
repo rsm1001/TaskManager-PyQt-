@@ -49,17 +49,35 @@ class ShortcutManager:
             self._conn.execute("ALTER TABLE shortcut_entries ADD COLUMN action_type TEXT NOT NULL DEFAULT 'open'")
         self._conn.commit()
 
-    def get_all(self, tag: str = None) -> List[Dict[str, Any]]:
-        """获取所有快捷入口，可按标签筛选"""
+    def get_all(self, tag: str = None, keyword: str = None) -> List[Dict[str, Any]]:
+        """获取所有快捷入口，可按标签/关键词筛选
+
+        Args:
+            tag: 标签筛选（逗号分隔的标签中包含该值），None 不过滤
+            keyword: 关键词筛选（模糊匹配 title/tags/shortcut_path/category）
+        """
+        conditions = []
+        params = []
+
         if tag:
-            cursor = self._conn.execute(
-                "SELECT id, title, shortcut_path, action_type, category, tags, created_at FROM shortcut_entries WHERE tags LIKE ? ORDER BY created_at DESC",
-                (f'%{tag}%',)
+            conditions.append("tags LIKE ?")
+            params.append(f"%{tag}%")
+
+        if keyword:
+            kw = f"%{keyword}%"
+            conditions.append(
+                "(title LIKE ? OR tags LIKE ? OR shortcut_path LIKE ? OR category LIKE ?)"
             )
-        else:
-            cursor = self._conn.execute(
-                "SELECT id, title, shortcut_path, action_type, category, tags, created_at FROM shortcut_entries ORDER BY created_at DESC"
-            )
+            params.extend([kw, kw, kw, kw])
+
+        where_clause = ""
+        if conditions:
+            where_clause = " WHERE " + " AND ".join(conditions)
+
+        cursor = self._conn.execute(
+            f"SELECT id, title, shortcut_path, action_type, category, tags, created_at FROM shortcut_entries{where_clause} ORDER BY created_at DESC",
+            params
+        )
         shortcuts = []
         for row in cursor.fetchall():
             sid, title, path, action_type, category, tags, created = row

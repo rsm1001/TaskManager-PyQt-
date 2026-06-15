@@ -14,8 +14,14 @@ class EntertainmentTaskManager:
 
     # ==================== 查询 ====================
 
-    def get_tasks(self, status: Optional[str] = None, tag: Optional[str] = None) -> List[EntertainmentTask]:
-        """获取娱乐任务列表"""
+    def get_tasks(self, status: Optional[str] = None, tag: Optional[str] = None, keyword: Optional[str] = None) -> List[EntertainmentTask]:
+        """获取娱乐任务列表
+
+        Args:
+            status: 状态筛选，None/'all' 不过滤
+            tag: 标签筛选（模糊包含），None 不过滤
+            keyword: 关键词筛选（模糊匹配 title/description/tags/category）
+        """
         query = self.session.query(EntertainmentTask)
 
         if status and status != "all":
@@ -23,6 +29,15 @@ class EntertainmentTaskManager:
 
         if tag:
             query = query.filter(EntertainmentTask.tags.contains(tag))
+
+        if keyword:
+            kw = f"%{keyword}%"
+            query = query.filter(
+                (EntertainmentTask.title.ilike(kw)) |
+                (EntertainmentTask.description.ilike(kw)) |
+                (EntertainmentTask.tags.ilike(kw)) |
+                (EntertainmentTask.category.ilike(kw))
+            )
 
         return query.order_by(EntertainmentTask.fun_category, EntertainmentTask.title).all()
 

@@ -217,7 +217,7 @@ def load_todo_tasks_to_table(window):
     """加载待办事项到表格"""
     status_text = window.todo_status_combo.currentText()
     if status_text == '已过期':
-        status_filter = 'all'
+        status_filter = 'expired'
     else:
         status_filter = _get_status_filter(status_text)
 
@@ -414,7 +414,7 @@ def sort_todo_table_by_column(window, column):
 
     status_text = window.todo_status_combo.currentText()
     if status_text == '已过期':
-        status_filter = 'all'
+        status_filter = 'expired'
     else:
         status_filter = _get_status_filter(status_text)
 

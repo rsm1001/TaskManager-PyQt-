@@ -270,10 +270,7 @@ def create_shortcuts_tab_ui(parent_window):
     # 标签分类栏
     from managers.tag_manager import TagManager
     parent_window.shortcut_tag_filter = TagFilterBar(parent=parent_window, data_manager=parent_window.data_manager)
-    # 临时设置一个假的 task_type 用于快捷入口
-    class ShortcutTaskType:
-        value = "shortcut"
-    parent_window.shortcut_tag_filter.set_task_type(ShortcutTaskType())
+    parent_window.shortcut_tag_filter.set_task_type(TaskType.SHORTCUT)
     parent_window.shortcut_tag_filter.tagClicked.connect(lambda tag: on_shortcut_tag_filter_clicked(parent_window, tag))
     entries_layout.addWidget(parent_window.shortcut_tag_filter)
 

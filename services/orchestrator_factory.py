@@ -38,6 +38,7 @@ class OrchestratorFactory:
                 entertainment_task_manager=self._dm.entertainment_manager,
                 trash_manager=self._dm.trash_manager,
                 task_limit_service_factory=self._dm._get_task_limit_service,
+                shortcut_manager=self._dm.shortcut_manager,
             )
             logger.info("TaskOrchestrator 已创建 | request_id=create_orchestrator")
         return self._instances["task"]

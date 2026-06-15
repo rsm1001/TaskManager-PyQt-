@@ -14,8 +14,15 @@ class DailyTaskManager:
     def __init__(self, session):
         self.session = session
 
-    def get_tasks(self, weekday: str = None, status: str = None, tag: str = None) -> List[DailyTask]:
-        """获取每日任务列表"""
+    def get_tasks(self, weekday: str = None, status: str = None, tag: str = None, keyword: str = None) -> List[DailyTask]:
+        """获取每日任务列表
+
+        Args:
+            weekday: 星期筛选，None 不过滤
+            status: 状态筛选，None/'all' 不过滤
+            tag: 标签筛选（模糊包含），None 不过滤
+            keyword: 关键词筛选（模糊匹配 title/description/tags/category），None 不过滤
+        """
         query = self.session.query(DailyTask)
 
         if weekday and weekday != "all":
@@ -33,6 +40,15 @@ class DailyTaskManager:
 
         if tag:
             query = query.filter(DailyTask.tags.contains(tag))
+
+        if keyword:
+            kw = f"%{keyword}%"
+            query = query.filter(
+                (DailyTask.title.ilike(kw)) |
+                (DailyTask.description.ilike(kw)) |
+                (DailyTask.tags.ilike(kw)) |
+                (DailyTask.category.ilike(kw))
+            )
 
         return query.order_by(DailyTask.week_day, DailyTask.title).all()
 

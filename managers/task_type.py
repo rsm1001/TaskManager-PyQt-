@@ -15,7 +15,9 @@ class TaskType(Enum):
         DAILY: 每日必做任务
         TODO:  待办事项
         ENTERTAINMENT: 娱乐任务
+        SHORTCUT: 快捷入口
     """
     DAILY = "daily"
     TODO = "todo"
     ENTERTAINMENT = "entertainment"
+    SHORTCUT = "shortcut"

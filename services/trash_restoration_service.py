@@ -148,7 +148,6 @@ class TrashRestorationService:
             )
         )
         self.shortcut_manager._conn.commit()
-        self.trash_manager.delete_trash_record(trash_id)
         logger.debug(f"快捷入口已恢复: id={data.get('id')}")
         return True
 

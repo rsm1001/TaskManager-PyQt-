@@ -268,22 +268,35 @@ class TaskOperationHandler:
     # ==================== 批量改状态 ====================
 
     def _batch_change_status(self, table, task_type: str, task_ids: list, new_status: str):
-        """通用批量修改状态逻辑"""
+        """通用批量修改状态逻辑（整批原子化：任一失败则全部回滚）"""
+        session = self._w.data_manager.session
         updated = 0
-        for task_id in task_ids:
-            if task_type == 'daily':
-                self._w.data_manager.update_daily_task(task_id, status=new_status)
-                updated += 1
-            elif task_type == 'todo':
-                self._w.data_manager.update_todo_task(task_id, status=new_status)
-                updated += 1
-            elif task_type == 'entertainment':
-                self._w.data_manager.update_entertainment_task(task_id, status=new_status)
-                updated += 1
+        try:
+            # 开启事务（暂停 autocommit），各 update_*_task 内部仍会 commit 但属于同一事务分支
+            session.begin_nested()
+            for task_id in task_ids:
+                if task_type == 'daily':
+                    self._w.data_manager.update_daily_task(task_id, status=new_status)
+                    updated += 1
+                elif task_type == 'todo':
+                    self._w.data_manager.update_todo_task(task_id, status=new_status)
+                    updated += 1
+                elif task_type == 'entertainment':
+                    self._w.data_manager.update_entertainment_task(task_id, status=new_status)
+                    updated += 1
+            session.commit()  # 整批提交
+        except Exception:
+            logger.error("批量状态修改失败，已回滚整批操作 | request_id=batch_status | task_type=%s", task_type, exc_info=True)
+            try:
+                session.rollback()
+            except Exception:
+                # 事务可能已部分提交，rollback 失败时忽略
+                pass
+            updated = 0
         self._reload_tasks(task_type)
         self._validate_and_refresh_filter(task_type)
         show_task_updated_confirmation(task_type, self._w)
-        self._w.status_bar.showMessage(f'{task_type} 状态批量更新成功 ({updated}/{len(task_ids)})')
+        self._w.status_bar.showMessage(f'{task_type} 状态批量更新成功 ({updated}/{len(task_ids)})' if updated > 0 else f'{task_type} 状态批量更新失败')
 
     def _show_batch_status_dialog(self, task_type: str, task_ids: list, table):
         """显示批量选择状态的对话框并执行"""
@@ -400,41 +413,54 @@ class TaskOperationHandler:
         self._do_batch_edit_tags(task_type, task_ids, add_tags, remove_tags)
 
     def _do_batch_edit_tags(self, task_type: str, task_ids: list, add_tags: set, remove_tags: set):
-        """执行批量标签编辑"""
+        """执行批量标签编辑（整批原子化：任一失败则全部回滚）"""
+        session = self._w.data_manager.session
         updated = 0
-        for task_id in task_ids:
-            if task_type == 'daily':
-                task = self._w.data_manager.get_daily_task_by_id(task_id)
-                if not task:
-                    continue
-                tag_set = set(t.strip() for t in (task.tags or '').split(',') if t.strip())
-                tag_set.update(add_tags)
-                tag_set.difference_update(remove_tags)
-                new_tags = ','.join(sorted(tag_set))
-                self._w.data_manager.update_daily_task(task_id, tags=new_tags)
-                updated += 1
-            elif task_type == 'todo':
-                task = self._w.data_manager.get_todo_task_by_id(task_id)
-                if not task:
-                    continue
-                tag_set = set(t.strip() for t in (task.tags or '').split(',') if t.strip())
-                tag_set.update(add_tags)
-                tag_set.difference_update(remove_tags)
-                new_tags = ','.join(sorted(tag_set))
-                self._w.data_manager.update_todo_task(task_id, tags=new_tags)
-                updated += 1
-            elif task_type == 'entertainment':
-                task = self._w.data_manager.get_entertainment_task_by_id(task_id)
-                if not task:
-                    continue
-                tag_set = set(t.strip() for t in (task.tags or '').split(',') if t.strip())
-                tag_set.update(add_tags)
-                tag_set.difference_update(remove_tags)
-                new_tags = ','.join(sorted(tag_set))
-                self._w.data_manager.update_entertainment_task(task_id, tags=new_tags)
-                updated += 1
+        try:
+            # 开启事务（暂停 autocommit），各 update_*_task 内部仍会 commit 但属于同一事务分支
+            session.begin_nested()
+            for task_id in task_ids:
+                if task_type == 'daily':
+                    task = self._w.data_manager.get_daily_task_by_id(task_id)
+                    if not task:
+                        continue
+                    tag_set = set(t.strip() for t in (task.tags or '').split(',') if t.strip())
+                    tag_set.update(add_tags)
+                    tag_set.difference_update(remove_tags)
+                    new_tags = ','.join(sorted(tag_set))
+                    self._w.data_manager.update_daily_task(task_id, tags=new_tags)
+                    updated += 1
+                elif task_type == 'todo':
+                    task = self._w.data_manager.get_todo_task_by_id(task_id)
+                    if not task:
+                        continue
+                    tag_set = set(t.strip() for t in (task.tags or '').split(',') if t.strip())
+                    tag_set.update(add_tags)
+                    tag_set.difference_update(remove_tags)
+                    new_tags = ','.join(sorted(tag_set))
+                    self._w.data_manager.update_todo_task(task_id, tags=new_tags)
+                    updated += 1
+                elif task_type == 'entertainment':
+                    task = self._w.data_manager.get_entertainment_task_by_id(task_id)
+                    if not task:
+                        continue
+                    tag_set = set(t.strip() for t in (task.tags or '').split(',') if t.strip())
+                    tag_set.update(add_tags)
+                    tag_set.difference_update(remove_tags)
+                    new_tags = ','.join(sorted(tag_set))
+                    self._w.data_manager.update_entertainment_task(task_id, tags=new_tags)
+                    updated += 1
+            session.commit()  # 整批提交
+        except Exception:
+            logger.error("批量标签编辑失败，已回滚整批操作 | request_id=batch_tag | task_type=%s", task_type, exc_info=True)
+            try:
+                session.rollback()
+            except Exception:
+                # 事务可能已部分提交，rollback 失败时忽略
+                pass
+            updated = 0
         self._reload_tasks(task_type)
         self._auto_cleanup_if_enabled()
         self._validate_and_refresh_filter(task_type)
         show_task_updated_confirmation(task_type, self._w)
-        self._w.status_bar.showMessage(f'{task_type} 标签批量更新成功 ({updated}/{len(task_ids)})')
+        self._w.status_bar.showMessage(f'{task_type} 标签批量更新成功 ({updated}/{len(task_ids)})' if updated > 0 else f'{task_type} 标签批量更新失败')

@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 
 class JsonExportImportHandler:
     """JSON导入导出处理器"""
-    
-    def __init__(self, session):
+
+    def __init__(self, session, shortcut_manager=None):
         self.session = session
+        self.shortcut_manager = shortcut_manager
 
     def export_to_json(self, filepath: str = "tasks_export.json") -> bool:
         """导出数据到JSON文件"""
@@ -24,6 +25,8 @@ class JsonExportImportHandler:
                 "daily": [],
                 "todo": [],
                 "entertainment": [],
+                "shortcuts": [],
+                "history": [],
                 "config": {}
             }
             
@@ -75,7 +78,37 @@ class JsonExportImportHandler:
                     "priority": getattr(task, 'priority', 'normal'),
                     "subtasks": getattr(task, 'subtasks', '[]') or '[]'
                 })
-            
+
+            # 导出快捷入口
+            if self.shortcut_manager:
+                for row in self.shortcut_manager._conn.execute(
+                    "SELECT id, title, shortcut_path, action_type, category, tags, created_at, updated_at FROM shortcut_entries"
+                ).fetchall():
+                    data["shortcuts"].append({
+                        "id": row[0],
+                        "title": row[1],
+                        "shortcut_path": row[2] or "",
+                        "action_type": row[3] or "open",
+                        "category": row[4] or "todo",
+                        "tags": row[5] or "",
+                        "created_at": row[6] or "",
+                        "updated_at": row[7] or "",
+                    })
+
+                # 导出历史记录
+                for row in self.shortcut_manager._conn.execute(
+                    "SELECT id, shortcut_id, shortcut_title, shortcut_path, action_type, opened_at, is_pinned FROM shortcut_history"
+                ).fetchall():
+                    data["history"].append({
+                        "id": row[0],
+                        "shortcut_id": row[1],
+                        "shortcut_title": row[2] or "",
+                        "shortcut_path": row[3] or "",
+                        "action_type": row[4] or "open",
+                        "opened_at": row[5] or "",
+                        "is_pinned": row[6],
+                    })
+
             # 导出配置
             configs = self.session.query(Config).all()
             for config in configs:
@@ -101,6 +134,12 @@ class JsonExportImportHandler:
             self.session.query(TodoTask).delete()
             self.session.query(EntertainmentTask).delete()
             self.session.query(Config).delete()
+
+            # 清空快捷入口和历史记录（使用原生连接）
+            if self.shortcut_manager:
+                self.shortcut_manager._conn.execute("DELETE FROM shortcut_entries")
+                self.shortcut_manager._conn.execute("DELETE FROM shortcut_history")
+                self.shortcut_manager._conn.commit()
             
             # 导入每日任务
             if "daily" in data:
@@ -174,7 +213,42 @@ class JsonExportImportHandler:
                         subtasks=task_data.get("subtasks", "[]")
                     )
                     self.session.add(task)
-            
+
+            # 导入快捷入口
+            if "shortcuts" in data and self.shortcut_manager:
+                for sc_data in data["shortcuts"]:
+                    self.shortcut_manager._conn.execute(
+                        "INSERT INTO shortcut_entries (id, title, shortcut_path, action_type, category, tags, created_at, updated_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            sc_data.get("id", str(uuid.uuid4())),
+                            sc_data.get("title", ""),
+                            sc_data.get("shortcut_path", ""),
+                            sc_data.get("action_type", "open"),
+                            sc_data.get("category", "todo"),
+                            sc_data.get("tags", ""),
+                            sc_data.get("created_at", datetime.now().isoformat()),
+                            sc_data.get("updated_at", datetime.now().isoformat()),
+                        )
+                    )
+
+                # 导入历史记录
+                for hist_data in data.get("history", []):
+                    self.shortcut_manager._conn.execute(
+                        "INSERT INTO shortcut_history (id, shortcut_id, shortcut_title, shortcut_path, action_type, opened_at, is_pinned) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            hist_data.get("id", str(uuid.uuid4())),
+                            hist_data.get("shortcut_id", ""),
+                            hist_data.get("shortcut_title", ""),
+                            hist_data.get("shortcut_path", ""),
+                            hist_data.get("action_type", "open"),
+                            hist_data.get("opened_at", datetime.now().isoformat()),
+                            hist_data.get("is_pinned", 0),
+                        )
+                    )
+                self.shortcut_manager._conn.commit()
+
             # 导入配置
             if "config" in data:
                 for key, value in data["config"].items():

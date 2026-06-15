@@ -24,8 +24,8 @@ class ShortcutOrchestrator:
 
     # ==================== 快捷入口 CRUD ====================
 
-    def get_all(self, tag: Optional[str] = None) -> list:
-        return self._shortcut.get_all(tag=tag)
+    def get_all(self, tag: Optional[str] = None, keyword: Optional[str] = None) -> list:
+        return self._shortcut.get_all(tag=tag, keyword=keyword)
 
     def create(
         self,

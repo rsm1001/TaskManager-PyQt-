@@ -15,15 +15,41 @@ class TodoTaskManager:
 
     # ==================== 查询 ====================
 
-    def get_tasks(self, status: Optional[str] = None, tag: Optional[str] = None) -> List[TodoTask]:
-        """获取待办任务列表"""
+    def get_tasks(self, status: Optional[str] = None, tag: Optional[str] = None, keyword: Optional[str] = None) -> List[TodoTask]:
+        """获取待办任务列表
+
+        Args:
+            status: 筛选状态，'all' 时不过滤；'expired' 时筛选已过期任务；
+                    其他值（pending/completed/abandoned）精确匹配 status 字段
+            tag: 标签过滤（模糊包含）
+            keyword: 关键词筛选（模糊匹配 title/description/tags/category）
+        """
         query = self.session.query(TodoTask)
 
         if status and status != "all":
-            query = query.filter(TodoTask.status == status)
+            if status == "expired":
+                # 已过期：deadline 不为空、未完成、且截止日期早于今天
+                today = date.today()
+                query = query.filter(
+                    (TodoTask.deadline.isnot(None)) &
+                    (TodoTask.deadline != "") &
+                    (TodoTask.deadline < today.strftime("%Y-%m-%d")) &
+                    (TodoTask.status != "completed")
+                )
+            else:
+                query = query.filter(TodoTask.status == status)
 
         if tag:
             query = query.filter(TodoTask.tags.contains(tag))
+
+        if keyword:
+            kw = f"%{keyword}%"
+            query = query.filter(
+                (TodoTask.title.ilike(kw)) |
+                (TodoTask.description.ilike(kw)) |
+                (TodoTask.tags.ilike(kw)) |
+                (TodoTask.category.ilike(kw))
+            )
 
         return query.order_by(TodoTask.deadline.desc(), TodoTask.urgency_score.desc()).all()
 
