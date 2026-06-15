@@ -125,6 +125,48 @@ def show_statistics_dialog(stats, parent=None):
     QMessageBox.information(parent, '统计信息', msg)
 
 
+def show_type_check_dialog(parent=None):
+    """运行 mypy 类型检查并显示结果对话框"""
+    import subprocess
+    import sys
+
+    files = [
+        "models/model.py",
+        "managers/data_access.py",
+        "managers/task_orchestrator.py",
+        "managers/data_manager.py",
+        "managers/priority.py",
+        "managers/task_type.py",
+        "services/statistics_service.py",
+        "services/service_factory.py",
+    ]
+    cmd = [
+        sys.executable, "-m", "mypy",
+        *files,
+        "--config-file", "pyproject.toml",
+        "--follow-imports=skip",
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        QMessageBox.warning(parent, "类型检查", "mypy 运行超时（> 2 分钟）")
+        return
+    except FileNotFoundError:
+        QMessageBox.warning(parent, "类型检查", "未找到 mypy，请先安装：pip install mypy")
+        return
+
+    output = result.stdout + result.stderr
+    if not output.strip():
+        output = "（无输出）"
+
+    QMessageBox.information(
+        parent,
+        "类型检查结果",
+        f"退出码: {result.returncode}\n\n{output[:3000]}",
+    )
+
+
 def show_about_dialog(parent=None):
     """显示关于信息对话框"""
     QMessageBox.about(parent, '关于', '''任务管理系统 v1.0

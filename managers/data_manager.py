@@ -6,10 +6,9 @@ Task Manager - 数据管理外观（Facade）
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 
-from models.model import DailyTask, TodoTask, EntertainmentTask
-
+from managers.task_type import TaskType  # noqa: F401 供外部 from managers.data_manager import TaskType
 from managers.data_access import DataAccess
 from managers.todo_task_manager import TodoTaskManager
 from managers.entertainment_task_manager import EntertainmentTaskManager
@@ -18,13 +17,15 @@ from managers.trash_manager import TrashManager
 from managers.shortcut_manager import ShortcutManager
 from managers.daily_task_manager import DailyTaskManager
 from managers.tag_manager import TagManager
-from managers.task_type import TaskType
-
-from services.daily_reset_service import DailyResetService
-from services.vacuum_service import VacuumService
-from services.trash_restoration_service import TrashRestorationService
 from services.service_factory import ServiceFactory
-from services.orchestrator_factory import OrchestratorFactory
+
+if TYPE_CHECKING:
+    from services.orchestrator_factory import OrchestratorFactory
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+    from sqlalchemy.engine import Engine
+    from models.model import DailyTask, TodoTask, EntertainmentTask
 
 logger = logging.getLogger(__name__)
 
@@ -40,31 +41,56 @@ class DataManager:
         - config_orchestrator: 配置 get / set
     """
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: Optional[str] = None) -> None:
         """初始化数据管理外观"""
         # 基础设施：DB session / 连接
-        self._data_access = DataAccess(db_path=db_path)
-        self.session = self._data_access.get_session()
-        self.engine = self._data_access.engine
+        self._data_access: "DataAccess" = DataAccess(db_path=db_path)
+        self.session: "Session" = self._data_access.get_session()
+        self.engine: "Engine" = self._data_access.engine
 
         # 底层 Repository（保持对外属性名兼容）
         self._main_conn = self._data_access.get_main_connection()
         self._trash_conn = self._data_access.get_trash_connection()
 
-        self.todo_manager = TodoTaskManager(self.session)
-        self.entertainment_manager = EntertainmentTaskManager(self.session)
-        self.config_manager = ConfigManager(self.session)
-        self.trash_manager = TrashManager(connection=self._trash_conn)
-        self.shortcut_manager = ShortcutManager(connection=self._main_conn)
-        self.daily_task_manager = DailyTaskManager(self.session)
-        self.tag_manager = TagManager(self.config_manager)
+        self.todo_manager: "TodoTaskManager" = TodoTaskManager(self.session)
+        self.entertainment_manager: "EntertainmentTaskManager" = EntertainmentTaskManager(self.session)
+        self.config_manager: "ConfigManager" = ConfigManager(self.session)
+        self.trash_manager: "TrashManager" = TrashManager(connection=self._trash_conn)
+        self.shortcut_manager: "ShortcutManager" = ShortcutManager(connection=self._main_conn)
+        self.daily_task_manager: "DailyTaskManager" = DailyTaskManager(self.session)
+        self.tag_manager: "TagManager" = TagManager(self.config_manager)
 
         # 服务层
-        self.daily_reset_service = DailyResetService(self.session, self.config_manager)
+        self.daily_reset_service = self._make_daily_reset_service()
         import config.config
 
-        self.vacuum_service = VacuumService(self.engine, config.config.TRASH_DATABASE_PATH)
-        self.trash_restoration_service = TrashRestorationService(
+        self.vacuum_service = self._make_vacuum_service()
+        self.trash_restoration_service = self._make_trash_restoration_service()
+
+        # 工厂：服务 + 编排器（延迟导入避免循环依赖）
+        from services.service_factory import ServiceFactory  # noqa: PLC0415
+        from services.orchestrator_factory import OrchestratorFactory  # noqa: PLC0415
+        self._service_factory: "ServiceFactory" = ServiceFactory(self)
+        self._orchestrator_factory: "OrchestratorFactory" = OrchestratorFactory(self)
+
+        # 触发每日重置
+        self.daily_reset_service.check_and_reset()
+        logger.info("DataManager 初始化完成 | request_id=init")
+
+    # ==================== 内部工厂方法 ====================
+
+    def _make_daily_reset_service(self) -> Any:
+        from services.daily_reset_service import DailyResetService
+        return DailyResetService(self.session, self.config_manager)
+
+    def _make_vacuum_service(self) -> Any:
+        from services.vacuum_service import VacuumService
+        import config.config
+        return VacuumService(self.engine, config.config.TRASH_DATABASE_PATH)
+
+    def _make_trash_restoration_service(self) -> Any:
+        from services.trash_restoration_service import TrashRestorationService
+        return TrashRestorationService(
             session=self.session,
             shortcut_manager=self.shortcut_manager,
             trash_manager=self.trash_manager,
@@ -74,79 +100,80 @@ class DataManager:
             entertainment_task_manager=self.entertainment_manager,
         )
 
-        # 工厂：服务 + 编排器
-        self._service_factory = ServiceFactory(self)
-        self._orchestrator_factory = OrchestratorFactory(self)
-
-        # 触发每日重置
-        self.daily_reset_service.check_and_reset()
-        logger.info("DataManager 初始化完成 | request_id=init")
-
     # ==================== 编排器访问器 ====================
 
     @property
-    def task_orchestrator(self):
+    def task_orchestrator(self) -> Any:
         return self._orchestrator_factory.get_task_orchestrator()
 
     @property
-    def shortcut_orchestrator(self):
+    def shortcut_orchestrator(self) -> Any:
         return self._orchestrator_factory.get_shortcut_orchestrator()
 
     @property
-    def tag_orchestrator(self):
+    def tag_orchestrator(self) -> Any:
         return self._orchestrator_factory.get_tag_orchestrator()
 
     @property
-    def trash_orchestrator(self):
+    def trash_orchestrator(self) -> Any:
         return self._orchestrator_factory.get_trash_orchestrator()
 
     @property
-    def config_orchestrator(self):
+    def config_orchestrator(self) -> Any:
         return self._orchestrator_factory.get_config_orchestrator()
 
     # ==================== 服务工厂代理 ====================
 
-    def _get_statistics_service(self):
+    def _get_statistics_service(self) -> Any:
         return self._service_factory.get_statistics_service()
 
-    def _get_search_service(self):
+    def _get_search_service(self) -> Any:
         return self._service_factory.get_search_service()
 
-    def _get_task_limit_service(self):
+    def _get_task_limit_service(self) -> Any:
         return self._service_factory.get_task_limit_service()
 
-    def _get_pomodoro_service(self):
+    def _get_pomodoro_service(self) -> Any:
         return self._service_factory.get_pomodoro_service()
 
     # ==================== 会话管理 ====================
 
-    def get_session(self):
+    def get_session(self) -> "Session":
         return self.session
 
-    def close_session(self):
+    def close_session(self) -> None:
         logger.info("关闭数据库会话 | request_id=close")
         self.trash_manager.close()
         self.shortcut_manager.close()
         self._data_access.close()
 
-    def commit(self):
+    def commit(self) -> None:
         self.session.commit()
 
-    def rollback(self):
+    def rollback(self) -> None:
         self.session.rollback()
 
     # ==================== DailyTask 委托 ====================
 
-    def get_daily_tasks(self, weekday=None, status=None, tag=None) -> List[DailyTask]:
+    def get_daily_tasks(self, weekday: Optional[str] = None, status: Optional[str] = None, tag: Optional[str] = None) -> List["DailyTask"]:
         return self.task_orchestrator.get_daily_tasks(weekday=weekday, status=status, tag=tag)
 
-    def get_daily_task_by_id(self, task_id: str) -> Optional[DailyTask]:
+    def get_daily_task_by_id(self, task_id: str) -> Optional["DailyTask"]:
         return self.task_orchestrator.get_daily_task_by_id(task_id)
 
-    def create_daily_task(self, title, description="", week_day="",
-                          completed=False, status="pending",
-                          tags="", shortcut_path="", category="",
-                          priority="normal", subtasks="[]") -> DailyTask:
+    def create_daily_task(
+        self,
+        title: str,
+        description: str = "",
+        week_day: str = "",
+        completed: bool = False,
+        status: str = "pending",
+        tags: str = "",
+        shortcut_path: str = "",
+        category: str = "",
+        priority: str = "normal",
+        subtasks: str = "[]",
+    ) -> "DailyTask":
         return self.task_orchestrator.create_daily_task(
             title=title, description=description, week_day=week_day,
             completed=completed, status=status, tags=tags,
@@ -154,30 +181,39 @@ class DataManager:
             priority=priority, subtasks=subtasks,
         )
 
-    def update_daily_task(self, task_id, **kwargs) -> bool:
+    def update_daily_task(self, task_id: str, **kwargs: Any) -> bool:
         return self.task_orchestrator.update_daily_task(task_id, **kwargs)
 
-    def delete_daily_task(self, task_id) -> bool:
+    def delete_daily_task(self, task_id: str) -> bool:
         return self.task_orchestrator.delete_daily_task(task_id)
 
-    def delete_daily_tasks_batch(self, task_ids) -> int:
+    def delete_daily_tasks_batch(self, task_ids: List[str]) -> int:
         return self.task_orchestrator.delete_daily_tasks_batch(task_ids)
 
-    def toggle_daily_task_completion(self, task_id) -> bool:
+    def toggle_daily_task_completion(self, task_id: str) -> bool:
         return self.task_orchestrator.toggle_daily_task_completion(task_id)
 
     # ==================== TodoTask 委托 ====================
 
-    def get_todo_tasks(self, status=None, tag=None) -> List[TodoTask]:
+    def get_todo_tasks(self, status: Optional[str] = None, tag: Optional[str] = None) -> List["TodoTask"]:
         return self.task_orchestrator.get_todo_tasks(status=status, tag=tag)
 
-    def get_todo_task_by_id(self, task_id) -> Optional[TodoTask]:
+    def get_todo_task_by_id(self, task_id: str) -> Optional["TodoTask"]:
         return self.task_orchestrator.get_todo_task_by_id(task_id)
 
-    def create_todo_task(self, title, description="", deadline="",
-                         completed=False, status="pending",
-                         tags="", shortcut_path="", category="",
-                         priority="normal", subtasks="[]") -> TodoTask:
+    def create_todo_task(
+        self,
+        title: str,
+        description: str = "",
+        deadline: str = "",
+        completed: bool = False,
+        status: str = "pending",
+        tags: str = "",
+        shortcut_path: str = "",
+        category: str = "",
+        priority: str = "normal",
+        subtasks: str = "[]",
+    ) -> "TodoTask":
         return self.task_orchestrator.create_todo_task(
             title=title, description=description, deadline=deadline,
             completed=completed, status=status, tags=tags,
@@ -185,31 +221,39 @@ class DataManager:
             priority=priority, subtasks=subtasks,
         )
 
-    def update_todo_task(self, task_id, **kwargs) -> bool:
+    def update_todo_task(self, task_id: str, **kwargs: Any) -> bool:
         return self.task_orchestrator.update_todo_task(task_id, **kwargs)
 
-    def delete_todo_task(self, task_id) -> bool:
+    def delete_todo_task(self, task_id: str) -> bool:
         return self.task_orchestrator.delete_todo_task(task_id)
 
-    def delete_todo_tasks_batch(self, task_ids) -> int:
+    def delete_todo_tasks_batch(self, task_ids: List[str]) -> int:
         return self.task_orchestrator.delete_todo_tasks_batch(task_ids)
 
-    def toggle_todo_task_completion(self, task_id) -> bool:
+    def toggle_todo_task_completion(self, task_id: str) -> bool:
         return self.task_orchestrator.toggle_todo_task_completion(task_id)
 
     # ==================== EntertainmentTask 委托 ====================
 
-    def get_entertainment_tasks(self, status=None, tag=None) -> List[EntertainmentTask]:
+    def get_entertainment_tasks(self, status: Optional[str] = None, tag: Optional[str] = None) -> List["EntertainmentTask"]:
         return self.task_orchestrator.get_entertainment_tasks(status=status, tag=tag)
 
-    def get_entertainment_task_by_id(self, task_id) -> Optional[EntertainmentTask]:
+    def get_entertainment_task_by_id(self, task_id: str) -> Optional["EntertainmentTask"]:
         return self.task_orchestrator.get_entertainment_task_by_id(task_id)
 
-    def create_entertainment_task(self, title, description="",
-                                  fun_category="general", completed=False,
-                                  status="pending", tags="",
-                                  shortcut_path="", category="",
-                                  priority="normal", subtasks="[]") -> EntertainmentTask:
+    def create_entertainment_task(
+        self,
+        title: str,
+        description: str = "",
+        fun_category: str = "general",
+        completed: bool = False,
+        status: str = "pending",
+        tags: str = "",
+        shortcut_path: str = "",
+        category: str = "",
+        priority: str = "normal",
+        subtasks: str = "[]",
+    ) -> "EntertainmentTask":
         return self.task_orchestrator.create_entertainment_task(
             title=title, description=description, fun_category=fun_category,
             completed=completed, status=status, tags=tags,
@@ -217,54 +261,67 @@ class DataManager:
             priority=priority, subtasks=subtasks,
         )
 
-    def update_entertainment_task(self, task_id, **kwargs) -> bool:
+    def update_entertainment_task(self, task_id: str, **kwargs: Any) -> bool:
         return self.task_orchestrator.update_entertainment_task(task_id, **kwargs)
 
-    def delete_entertainment_task(self, task_id) -> bool:
+    def delete_entertainment_task(self, task_id: str) -> bool:
         return self.task_orchestrator.delete_entertainment_task(task_id)
 
-    def delete_entertainment_tasks_batch(self, task_ids) -> int:
+    def delete_entertainment_tasks_batch(self, task_ids: List[str]) -> int:
         return self.task_orchestrator.delete_entertainment_tasks_batch(task_ids)
 
-    def toggle_entertainment_task_completion(self, task_id) -> bool:
+    def toggle_entertainment_task_completion(self, task_id: str) -> bool:
         return self.task_orchestrator.toggle_entertainment_task_completion(task_id)
 
     # ==================== 垃圾桶 ====================
 
-    def get_trashed_tasks(self, task_type=None):
+    def get_trashed_tasks(self, task_type: Optional[str] = None) -> List[Any]:
         return self.trash_orchestrator.get_trashed_tasks(task_type)
 
-    def restore_trashed_task(self, trash_id) -> bool:
+    def restore_trashed_task(self, trash_id: str) -> bool:
         return self.trash_orchestrator.restore(trash_id)
 
-    def purge_trashed_task(self, trash_id):
+    def purge_trashed_task(self, trash_id: str) -> None:
         self.trash_orchestrator.purge(trash_id)
 
-    def purge_trashed_tasks(self, trash_ids):
+    def purge_trashed_tasks(self, trash_ids: List[str]) -> None:
         self.trash_orchestrator.purge_many(trash_ids)
 
-    def purge_all_trashed(self, task_type=None):
+    def purge_all_trashed(self, task_type: Optional[str] = None) -> None:
         self.trash_orchestrator.purge_all(task_type)
 
     # ==================== 快捷入口 ====================
 
-    def get_all_shortcuts(self, tag=None) -> list:
+    def get_all_shortcuts(self, tag: Optional[str] = None) -> List[Any]:
         return self.shortcut_orchestrator.get_all(tag=tag)
 
-    def create_shortcut(self, task_type, title, shortcut_path, tags="", action_type="open") -> bool:
+    def create_shortcut(
+        self,
+        task_type: str,
+        title: str,
+        shortcut_path: str,
+        tags: str = "",
+        action_type: str = "open",
+    ) -> bool:
         return self.shortcut_orchestrator.create(task_type, title, shortcut_path, tags, action_type)
 
-    def update_shortcut(self, shortcut_id, title=None, shortcut_path=None,
-                        tags=None, action_type=None) -> bool:
+    def update_shortcut(
+        self,
+        shortcut_id: str,
+        title: Optional[str] = None,
+        shortcut_path: Optional[str] = None,
+        tags: Optional[str] = None,
+        action_type: Optional[str] = None,
+    ) -> bool:
         return self.shortcut_orchestrator.update(
             shortcut_id, title=title, shortcut_path=shortcut_path,
             tags=tags, action_type=action_type,
         )
 
-    def delete_shortcut(self, shortcut_id) -> bool:
+    def delete_shortcut(self, shortcut_id: str) -> bool:
         return self.shortcut_orchestrator.delete(shortcut_id)
 
-    def restore_shortcut(self, trash_id) -> bool:
+    def restore_shortcut(self, trash_id: str) -> bool:
         return self.trash_orchestrator.restore_shortcut(trash_id)
 
     # ==================== 快捷入口历史 ====================
@@ -272,7 +329,7 @@ class DataManager:
     def get_history_limit(self) -> int:
         return self.shortcut_orchestrator.get_history_limit()
 
-    def set_history_limit(self, limit) -> bool:
+    def set_history_limit(self, limit: int) -> bool:
         return self.shortcut_orchestrator.set_history_limit(limit)
 
     def get_dangerously_skip_permissions(self) -> bool:
@@ -281,19 +338,24 @@ class DataManager:
     def set_dangerously_skip_permissions(self, enabled: bool) -> bool:
         return self.shortcut_orchestrator.set_dangerously_skip_permissions(enabled)
 
-    def get_all_history(self) -> list:
+    def get_all_history(self) -> List[Any]:
         return self.shortcut_orchestrator.get_all_history()
 
-    def add_or_update_history(self, shortcut_id, shortcut_title, shortcut_path,
-                              action_type="open") -> bool:
+    def add_or_update_history(
+        self,
+        shortcut_id: str,
+        shortcut_title: str,
+        shortcut_path: str,
+        action_type: str = "open",
+    ) -> bool:
         return self.shortcut_orchestrator.add_or_update_history(
             shortcut_id, shortcut_title, shortcut_path, action_type,
         )
 
-    def toggle_history_pin(self, history_id) -> bool:
+    def toggle_history_pin(self, history_id: str) -> bool:
         return self.shortcut_orchestrator.toggle_history_pin(history_id)
 
-    def delete_history(self, history_id) -> bool:
+    def delete_history(self, history_id: str) -> bool:
         return self.shortcut_orchestrator.delete_history(history_id)
 
     def clear_all_unpinned_history(self) -> int:
@@ -301,26 +363,26 @@ class DataManager:
 
     # ==================== 紧急度 ====================
 
-    def calculate_urgency_for_task(self, task: TodoTask):
+    def calculate_urgency_for_task(self, task: "TodoTask") -> None:
         self.task_orchestrator.calculate_urgency_for_task(task)
 
-    def recalculate_all_urgency(self):
+    def recalculate_all_urgency(self) -> None:
         self.task_orchestrator.recalculate_all_urgency()
 
     # ==================== 配置 ====================
 
-    def get_config(self, key, default="") -> str:
+    def get_config(self, key: str, default: str = "") -> str:
         return self.config_orchestrator.get(key, default)
 
-    def set_config(self, key, value):
+    def set_config(self, key: str, value: str) -> None:
         self.config_orchestrator.set(key, value)
 
     # ==================== JSON 导入导出 ====================
 
-    def export_to_json(self, filepath="tasks_export.json") -> bool:
+    def export_to_json(self, filepath: str = "tasks_export.json") -> bool:
         return self.task_orchestrator.export_to_json(filepath)
 
-    def import_from_json(self, filepath="tasks_export.json") -> bool:
+    def import_from_json(self, filepath: str = "tasks_export.json") -> bool:
         return self.task_orchestrator.import_from_json(filepath)
 
     # ==================== 统计 ====================
@@ -330,27 +392,27 @@ class DataManager:
 
     # ==================== 分类 ====================
 
-    def get_all_categories(self, task_type) -> List[str]:
+    def get_all_categories(self, task_type: str) -> List[str]:
         return self.tag_orchestrator.get_all_categories(task_type)
 
-    def add_category(self, category, task_type) -> bool:
+    def add_category(self, category: str, task_type: str) -> bool:
         return self.tag_orchestrator.add_category(category, task_type)
 
-    def delete_category(self, category, task_type) -> bool:
+    def delete_category(self, category: str, task_type: str) -> bool:
         return self.tag_orchestrator.delete_category(category, task_type)
 
     # ==================== 标签 ====================
 
-    def get_all_tags(self, category) -> List[str]:
+    def get_all_tags(self, category: str) -> List[str]:
         return self.tag_orchestrator.get_all_tags(category)
 
-    def add_tag(self, tag, category) -> bool:
+    def add_tag(self, tag: str, category: str) -> bool:
         return self.tag_orchestrator.add_tag(tag, category)
 
-    def delete_tag(self, tag, category) -> bool:
+    def delete_tag(self, tag: str, category: str) -> bool:
         return self.tag_orchestrator.delete_tag(tag, category)
 
-    def get_or_create_tag(self, tag, category) -> bool:
+    def get_or_create_tag(self, tag: str, category: str) -> bool:
         return self.tag_orchestrator.get_or_create_tag(tag, category)
 
     def cleanup_unused_tags(self) -> Dict[str, int]:
@@ -358,15 +420,15 @@ class DataManager:
 
     # ==================== 每日重置（兼容旧调用） ====================
 
-    def check_daily_reset(self):
+    def check_daily_reset(self) -> None:
         self.daily_reset_service.check_and_reset()
 
-    def reset_daily_tasks(self):
+    def reset_daily_tasks(self) -> None:
         self.daily_reset_service._do_reset()
 
     # ==================== 全局搜索 ====================
 
-    def search_all_tasks(self, keyword) -> List[Dict[str, Any]]:
+    def search_all_tasks(self, keyword: str) -> List[Dict[str, Any]]:
         return self._get_search_service().search_all_tasks(keyword)
 
 

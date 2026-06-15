@@ -11,8 +11,21 @@
 - 数据库列保持 String(20)，不引入新枚举类型，老数据 100% 兼容
 """
 
+from typing import TypedDict, Dict, List
+
+
+class PriorityMetadata(TypedDict):
+    """单个优先级档位的元数据结构"""
+    key: str
+    label: str
+    rank: int
+    weight: float
+    bg: str
+    fg: str
+
+
 # 5 档优先级元数据（按 rank 从高到低排序）
-PRIORITY_LEVELS = [
+PRIORITY_LEVELS: List[PriorityMetadata] = [
     {
         'key': 'urgent',
         'label': '紧急',
@@ -59,27 +72,27 @@ PRIORITY_LEVELS = [
 # 下游模块统一从这些派生量取值，**不**再手写字典
 
 # UI 下拉框顺序（按 rank 从高到低）
-PRIORITY_KEYS = [p['key'] for p in PRIORITY_LEVELS]
-PRIORITY_LABELS = [p['label'] for p in PRIORITY_LEVELS]
+PRIORITY_KEYS: List[str] = [p['key'] for p in PRIORITY_LEVELS]
+PRIORITY_LABELS: List[str] = [p['label'] for p in PRIORITY_LEVELS]
 
 # 排序键：5 档下不能用字符串字典序（"high" < "idle" 字典序错乱）
-PRIORITY_RANK = {p['key']: p['rank'] for p in PRIORITY_LEVELS}
+PRIORITY_RANK: Dict[str, int] = {p['key']: p['rank'] for p in PRIORITY_LEVELS}
 
 # 随机抽取权重（idle = 0.0 自动排除）
-PRIORITY_WEIGHTS = {p['key']: p['weight'] for p in PRIORITY_LEVELS}
+PRIORITY_WEIGHTS: Dict[str, float] = {p['key']: p['weight'] for p in PRIORITY_LEVELS}
 
 # 行背景 / 文字色
-PRIORITY_BG_COLORS = {p['key']: p['bg'] for p in PRIORITY_LEVELS}
-PRIORITY_TEXT_COLORS = {p['key']: p['fg'] for p in PRIORITY_LEVELS}
+PRIORITY_BG_COLORS: Dict[str, str] = {p['key']: p['bg'] for p in PRIORITY_LEVELS}
+PRIORITY_TEXT_COLORS: Dict[str, str] = {p['key']: p['fg'] for p in PRIORITY_LEVELS}
 
 # key → 显示文本（重要 / 普通 / …）
-PRIORITY_DISPLAY_MAP = {p['key']: p['label'] for p in PRIORITY_LEVELS}
+PRIORITY_DISPLAY_MAP: Dict[str, str] = {p['key']: p['label'] for p in PRIORITY_LEVELS}
 
 # 显示文本 → key（用于 UI 提交时反向查）
-LABEL_TO_KEY = {p['label']: p['key'] for p in PRIORITY_LEVELS}
+LABEL_TO_KEY: Dict[str, str] = {p['label']: p['key'] for p in PRIORITY_LEVELS}
 
 # 默认值（兼容旧调用方的 priority='normal' 写法）
-DEFAULT_PRIORITY = 'normal'
+DEFAULT_PRIORITY: str = 'normal'
 
 
 # ==================== 工具函数 ====================

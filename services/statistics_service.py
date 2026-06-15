@@ -4,7 +4,10 @@ Statistics Service - 统计服务模块
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from managers.data_manager import DataManager
 
 logger = logging.getLogger(__name__)
 
@@ -12,12 +15,12 @@ logger = logging.getLogger(__name__)
 class StatisticsService:
     """任务统计服务"""
 
-    def __init__(self, data_manager):
+    def __init__(self, data_manager: "DataManager") -> None:
         """
         Args:
             data_manager: DataManager 实例，用于获取各类型任务数据
         """
-        self._dm = data_manager
+        self._dm: "DataManager" = data_manager
         logger.debug("StatisticsService 初始化完成")
 
     def get_statistics(self) -> Dict[str, Any]:
@@ -36,10 +39,17 @@ class StatisticsService:
         todo_expired = sum(1 for t in todo_tasks if self._dm.todo_manager.is_expired(t))
         entertainment_completed = sum(1 for t in entertainment_tasks if t.completed)
 
-        stats = {
+        stats: Dict[str, Any] = {
             "daily": {"total": len(daily_tasks), "completed": daily_completed},
-            "todo": {"total": len(todo_tasks), "completed": todo_completed, "expired": todo_expired},
-            "entertainment": {"total": len(entertainment_tasks), "completed": entertainment_completed}
+            "todo": {
+                "total": len(todo_tasks),
+                "completed": todo_completed,
+                "expired": todo_expired,
+            },
+            "entertainment": {
+                "total": len(entertainment_tasks),
+                "completed": entertainment_completed,
+            },
         }
 
         logger.info(f"统计完成: {stats}")

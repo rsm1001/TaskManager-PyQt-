@@ -6,7 +6,7 @@
 
 import logging
 import sqlite3
-from typing import Optional
+from typing import Optional, Any
 
 import config.config
 from models.model import init_db
@@ -23,7 +23,7 @@ class DataAccess:
         - 统一管理连接与 Session 的关闭
     """
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: Optional[str] = None) -> None:
         """初始化数据库连接
 
         Args:
@@ -31,8 +31,8 @@ class DataAccess:
         """
         if db_path is None:
             db_path = config.config.DATABASE_PATH
-        self.db_path = db_path
-        self.trash_db_path = config.config.TRASH_DATABASE_PATH
+        self.db_path: str = db_path
+        self.trash_db_path: str = config.config.TRASH_DATABASE_PATH
 
         # ORM 引擎与 Session 工厂
         self.engine, self.Session = init_db(db_path, run_migration=True)
@@ -52,25 +52,27 @@ class DataAccess:
 
     def get_main_connection(self) -> sqlite3.Connection:
         """获取主数据库的 sqlite3 原生连接"""
+        assert self._main_conn is not None
         return self._main_conn
 
     def get_trash_connection(self) -> sqlite3.Connection:
         """获取垃圾桶数据库的 sqlite3 原生连接"""
+        assert self._trash_conn is not None
         return self._trash_conn
 
-    def get_session(self):
+    def get_session(self) -> Any:
         """获取 ORM Session"""
         return self.session
 
-    def commit(self):
+    def commit(self) -> None:
         """提交当前事务"""
         self.session.commit()
 
-    def rollback(self):
+    def rollback(self) -> None:
         """回滚当前事务"""
         self.session.rollback()
 
-    def close(self):
+    def close(self) -> None:
         """统一关闭所有连接与 Session"""
         logger.info("DataAccess 开始关闭资源 | request_id=close")
         try:

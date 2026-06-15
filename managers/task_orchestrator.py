@@ -6,9 +6,15 @@
 """
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Callable, Any, TYPE_CHECKING
 
-from models.model import DailyTask, TodoTask, EntertainmentTask
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+    from models.model import DailyTask, TodoTask, EntertainmentTask
+    from managers.daily_task_manager import DailyTaskManager
+    from managers.todo_task_manager import TodoTaskManager
+    from managers.entertainment_task_manager import EntertainmentTaskManager
+    from managers.trash_manager import TrashManager
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +37,13 @@ class TaskOrchestrator:
 
     def __init__(
         self,
-        session,
-        daily_task_manager,
-        todo_task_manager,
-        entertainment_task_manager,
-        trash_manager,
-        task_limit_service_factory,
-    ):
+        session: "Session",
+        daily_task_manager: "DailyTaskManager",
+        todo_task_manager: "TodoTaskManager",
+        entertainment_task_manager: "EntertainmentTaskManager",
+        trash_manager: "TrashManager",
+        task_limit_service_factory: Callable[[], Any],
+    ) -> None:
         """初始化任务编排器
 
         Args:
@@ -48,12 +54,12 @@ class TaskOrchestrator:
             trash_manager: 垃圾桶仓储
             task_limit_service_factory: 返回任务上限服务的可调用对象
         """
-        self._session = session
-        self._daily = daily_task_manager
-        self._todo = todo_task_manager
-        self._entertainment = entertainment_task_manager
-        self._trash = trash_manager
-        self._limit_service_factory = task_limit_service_factory
+        self._session: "Session" = session
+        self._daily: "DailyTaskManager" = daily_task_manager
+        self._todo: "TodoTaskManager" = todo_task_manager
+        self._entertainment: "EntertainmentTaskManager" = entertainment_task_manager
+        self._trash: "TrashManager" = trash_manager
+        self._limit_service_factory: Callable[[], Any] = task_limit_service_factory
 
     # ==================== DailyTask ====================
 
@@ -62,12 +68,12 @@ class TaskOrchestrator:
         weekday: Optional[str] = None,
         status: Optional[str] = None,
         tag: Optional[str] = None,
-    ) -> List[DailyTask]:
+    ) -> List["DailyTask"]:
         """获取每日任务列表"""
-        return self._daily.get_tasks(weekday=weekday, status=status, tag=tag)
+        return self._daily.get_tasks(weekday=weekday, status=status, tag=tag)  # type: ignore[no-any-return]
 
-    def get_daily_task_by_id(self, task_id: str) -> Optional[DailyTask]:
-        return self._daily.get_by_id(task_id)
+    def get_daily_task_by_id(self, task_id: str) -> Optional["DailyTask"]:
+        return self._daily.get_by_id(task_id)  # type: ignore[no-any-return]
 
     def create_daily_task(
         self,
@@ -81,7 +87,7 @@ class TaskOrchestrator:
         category: str = "",
         priority: str = "normal",
         subtasks: str = "[]",
-    ) -> DailyTask:
+    ) -> "DailyTask":
         """创建每日任务，并校验数量上限"""
         logger.info(
             "创建每日任务 | request_id=create_daily | title=%s week_day=%s",
@@ -93,10 +99,10 @@ class TaskOrchestrator:
             tags, shortcut_path, category, priority, subtasks,
         )
         self._limit_service_factory().enforce_limit("daily", DailyTask)
-        return task
+        return task  # type: ignore[no-any-return]
 
-    def update_daily_task(self, task_id: str, **kwargs) -> bool:
-        return self._daily.update(task_id, **kwargs)
+    def update_daily_task(self, task_id: str, **kwargs: Any) -> bool:
+        return self._daily.update(task_id, **kwargs)  # type: ignore[no-any-return]
 
     def delete_daily_task(self, task_id: str) -> bool:
         """删除单个每日任务并移入垃圾桶"""
@@ -107,7 +113,7 @@ class TaskOrchestrator:
         self._trash.move_to_trash("daily", task_id, task_data)
         return True
 
-    def delete_daily_tasks_batch(self, task_ids: list) -> int:
+    def delete_daily_tasks_batch(self, task_ids: List[str]) -> int:
         """批量删除每日任务（单次事务）"""
         if not task_ids:
             return 0
@@ -122,7 +128,7 @@ class TaskOrchestrator:
         return len(entries)
 
     def toggle_daily_task_completion(self, task_id: str) -> bool:
-        return self._daily.toggle_completion(task_id)
+        return self._daily.toggle_completion(task_id)  # type: ignore[no-any-return]
 
     # ==================== TodoTask ====================
 
@@ -130,11 +136,11 @@ class TaskOrchestrator:
         self,
         status: Optional[str] = None,
         tag: Optional[str] = None,
-    ) -> List[TodoTask]:
-        return self._todo.get_tasks(status=status, tag=tag)
+    ) -> List["TodoTask"]:
+        return self._todo.get_tasks(status=status, tag=tag)  # type: ignore[no-any-return]
 
-    def get_todo_task_by_id(self, task_id: str) -> Optional[TodoTask]:
-        return self._todo.get_by_id(task_id)
+    def get_todo_task_by_id(self, task_id: str) -> Optional["TodoTask"]:
+        return self._todo.get_by_id(task_id)  # type: ignore[no-any-return]
 
     def create_todo_task(
         self,
@@ -148,7 +154,7 @@ class TaskOrchestrator:
         category: str = "",
         priority: str = "normal",
         subtasks: str = "[]",
-    ) -> TodoTask:
+    ) -> "TodoTask":
         logger.info(
             "创建待办任务 | request_id=create_todo | title=%s deadline=%s",
             title,
@@ -159,10 +165,10 @@ class TaskOrchestrator:
             tags, shortcut_path, category, priority, subtasks,
         )
         self._limit_service_factory().enforce_limit("todo", TodoTask)
-        return task
+        return task  # type: ignore[no-any-return]
 
-    def update_todo_task(self, task_id: str, **kwargs) -> bool:
-        return self._todo.update(task_id, **kwargs)
+    def update_todo_task(self, task_id: str, **kwargs: Any) -> bool:
+        return self._todo.update(task_id, **kwargs)  # type: ignore[no-any-return]
 
     def delete_todo_task(self, task_id: str) -> bool:
         """删除待办任务并移入垃圾桶"""
@@ -176,7 +182,7 @@ class TaskOrchestrator:
         self._session.commit()
         return True
 
-    def delete_todo_tasks_batch(self, task_ids: list) -> int:
+    def delete_todo_tasks_batch(self, task_ids: List[str]) -> int:
         if not task_ids:
             return 0
         entries = self._todo.delete_batch(task_ids)
@@ -190,7 +196,7 @@ class TaskOrchestrator:
         return len(entries)
 
     def toggle_todo_task_completion(self, task_id: str) -> bool:
-        return self._todo.toggle_completion(task_id)
+        return self._todo.toggle_completion(task_id)  # type: ignore[no-any-return]
 
     # ==================== EntertainmentTask ====================
 
@@ -198,11 +204,11 @@ class TaskOrchestrator:
         self,
         status: Optional[str] = None,
         tag: Optional[str] = None,
-    ) -> List[EntertainmentTask]:
-        return self._entertainment.get_tasks(status=status, tag=tag)
+    ) -> List["EntertainmentTask"]:
+        return self._entertainment.get_tasks(status=status, tag=tag)  # type: ignore[no-any-return]
 
-    def get_entertainment_task_by_id(self, task_id: str) -> Optional[EntertainmentTask]:
-        return self._entertainment.get_by_id(task_id)
+    def get_entertainment_task_by_id(self, task_id: str) -> Optional["EntertainmentTask"]:
+        return self._entertainment.get_by_id(task_id)  # type: ignore[no-any-return]
 
     def create_entertainment_task(
         self,
@@ -216,7 +222,7 @@ class TaskOrchestrator:
         category: str = "",
         priority: str = "normal",
         subtasks: str = "[]",
-    ) -> EntertainmentTask:
+    ) -> "EntertainmentTask":
         logger.info(
             "创建娱乐任务 | request_id=create_entertainment | title=%s fun_category=%s",
             title,
@@ -227,10 +233,10 @@ class TaskOrchestrator:
             tags, shortcut_path, category, priority, subtasks,
         )
         self._limit_service_factory().enforce_limit("entertainment", EntertainmentTask)
-        return task
+        return task  # type: ignore[no-any-return]
 
-    def update_entertainment_task(self, task_id: str, **kwargs) -> bool:
-        return self._entertainment.update(task_id, **kwargs)
+    def update_entertainment_task(self, task_id: str, **kwargs: Any) -> bool:
+        return self._entertainment.update(task_id, **kwargs)  # type: ignore[no-any-return]
 
     def delete_entertainment_task(self, task_id: str) -> bool:
         task = self._entertainment.get_by_id(task_id)
@@ -246,7 +252,7 @@ class TaskOrchestrator:
         self._session.commit()
         return True
 
-    def delete_entertainment_tasks_batch(self, task_ids: list) -> int:
+    def delete_entertainment_tasks_batch(self, task_ids: List[str]) -> int:
         if not task_ids:
             return 0
         entries = self._entertainment.delete_batch(task_ids)
@@ -260,14 +266,14 @@ class TaskOrchestrator:
         return len(entries)
 
     def toggle_entertainment_task_completion(self, task_id: str) -> bool:
-        return self._entertainment.toggle_completion(task_id)
+        return self._entertainment.toggle_completion(task_id)  # type: ignore[no-any-return]
 
     # ==================== 紧急度（TodoTask 专有） ====================
 
-    def calculate_urgency_for_task(self, task: TodoTask):
+    def calculate_urgency_for_task(self, task: "TodoTask") -> None:
         self._todo._calculate_urgency(task)
 
-    def recalculate_all_urgency(self):
+    def recalculate_all_urgency(self) -> None:
         self._todo.recalculate_all_urgency()
 
     # ==================== JSON 导入导出 ====================
@@ -279,7 +285,7 @@ class TaskOrchestrator:
         handler = JsonExportImportHandler(self._session)
         result = handler.export_to_json(filepath)
         logger.info("导出 JSON | request_id=export_json | path=%s ok=%s", filepath, result)
-        return result
+        return result  # type: ignore[no-any-return]
 
     def import_from_json(self, filepath: str = "tasks_export.json") -> bool:
         """从 JSON 文件导入任务"""
@@ -288,4 +294,4 @@ class TaskOrchestrator:
         handler = JsonExportImportHandler(self._session)
         result = handler.import_from_json(filepath)
         logger.info("导入 JSON | request_id=import_json | path=%s ok=%s", filepath, result)
-        return result
+        return result  # type: ignore[no-any-return]

@@ -62,6 +62,10 @@ def create_menu_bar(window):
     stats_action.triggered.connect(window.show_statistics)
     tools_menu.addAction(stats_action)
 
+    type_check_action = QAction('类型检查 (mypy)', window)
+    type_check_action.triggered.connect(window.run_type_check)
+    tools_menu.addAction(type_check_action)
+
     tools_menu.addSeparator()
 
     cleanup_action = QAction('清理未使用标签', window)

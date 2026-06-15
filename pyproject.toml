@@ -1,0 +1,100 @@
+[project]
+requires-python = ">=3.8"
+dependencies = [
+    "PyQt6>=6.4.0",
+    "PyQt6-Qt6>=6.4.0",
+    "PyQt6-sip>=13.4.0",
+    "SQLAlchemy>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.10",
+    "pytest>=8.0",
+    "pytest-mock>=3.14",
+]
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v"
+
+[tool.mypy]
+python_version = "3.8"
+show_error_codes = true
+pretty = true
+no_color_output = false
+warn_return_any = false
+warn_unused_ignores = true
+
+# 排除 UI / GUI / handlers / 未注解的遗留层
+exclude = [
+    "main.py",
+    "ui/",
+    "dialogs/",
+    "components/",
+    "widgets/",
+    "demos/",
+    "launch.py",
+    "handlers/",
+]
+
+# 逐文件精确配置
+[[tool.mypy.overrides]]
+# 已添加完整类型注解的核心文件：严格检查（不含 data_manager，因其依赖大量未注解模块）
+module = [
+    "models.model",
+    "managers.data_access",
+    "managers.task_orchestrator",
+    "managers.priority",
+    "managers.task_type",
+    "services.statistics_service",
+    "services.service_factory",
+]
+disallow_untyped_defs = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+# data_manager 包含大量未注解的 orchestrator 依赖，启用宽松检查
+module = ["managers.data_manager"]
+disallow_untyped_defs = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+# 未注解的遗留 manager / service 文件：跳过检查
+module = [
+    "managers.trash_manager",
+    "managers.daily_task_manager",
+    "managers.todo_task_manager",
+    "managers.entertainment_task_manager",
+    "managers.config_manager",
+    "managers.shortcut_manager",
+    "managers.tag_manager",
+    "managers.tag_orchestrator",
+    "managers.shortcut_orchestrator",
+    "managers.trash_orchestrator",
+    "managers.config_orchestrator",
+    "managers.orchestrator_factory",
+    "services.orchestrator_factory",
+    "services.trash_restoration_service",
+    "services.daily_reset_service",
+    "services.table_operations",
+    "services.window_task_operations",
+    "services.task_ops_todo",
+    "services.task_ops_entertainment",
+    "services.task_ops_shortcuts",
+    "services.data_loaders",
+    "services.pomodoro_service",
+    "services.search_service",
+    "services.task_limit_service",
+    "services.shortcut_operation_service",
+    "services.tag_cleanup_service",
+    "services.random_task_service",
+    "services.vacuum_service",
+    "services.search_coordinator",
+]

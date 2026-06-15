@@ -4,27 +4,51 @@ Task Manager - 数据库模型
 """
 
 import logging
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text, Float
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from typing import Any, Optional, Tuple
 from datetime import datetime
 import uuid
 
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text, Float
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy.engine import Engine
+from typing import Any
+
 logger = logging.getLogger(__name__)
 
-Base = declarative_base()
+# SQLAlchemy declarative_base() 的返回值 mypy 无法识别为类型，用 Any 绕过
+Base: Any = declarative_base()
+
 
 class BaseModel(Base):
-    """基础模型类"""
+    """基础模型类
+
+    Attributes:
+        id: UUID 主键
+        created_at: 创建时间戳
+        updated_at: 更新时间戳
+    """
     __abstract__ = True
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
 class DailyTask(BaseModel):
-    """每日任务模型"""
+    """每日任务模型
+
+    Attributes:
+        title: 任务标题
+        description: 任务描述
+        completed: 是否已完成
+        week_day: 星期几（如 "Monday"，空表示每天）
+        category: 用户分类标签
+        status: 状态（pending/completed/abandoned）
+        tags: 逗号分隔的标签字符串
+        shortcut_path: 快捷入口路径，非空表示快捷入口
+        priority: 优先级（urgent/high/normal/low/idle）
+        subtasks: 子任务 JSON 字符串
+    """
     __tablename__ = 'daily_tasks'
 
     title = Column(String(255), nullable=False)
@@ -40,7 +64,21 @@ class DailyTask(BaseModel):
 
 
 class TodoTask(BaseModel):
-    """待办事项模型"""
+    """待办事项模型
+
+    Attributes:
+        title: 任务标题
+        description: 任务描述
+        completed: 是否已完成
+        deadline: 截止日期（YYYY-MM-DD）
+        urgency_score: 紧急度评分
+        category: 用户分类标签
+        status: 状态（pending/completed/abandoned）
+        tags: 逗号分隔的标签字符串
+        shortcut_path: 快捷入口路径
+        priority: 优先级
+        subtasks: 子任务 JSON 字符串
+    """
     __tablename__ = 'todo_tasks'
 
     title = Column(String(255), nullable=False)
@@ -57,7 +95,20 @@ class TodoTask(BaseModel):
 
 
 class EntertainmentTask(BaseModel):
-    """娱乐任务模型"""
+    """娱乐任务模型
+
+    Attributes:
+        title: 任务标题
+        description: 任务描述
+        completed: 是否已完成
+        fun_category: 娱乐分类（如"游戏"）
+        category: 用户分类标签
+        status: 状态
+        tags: 逗号分隔的标签
+        shortcut_path: 快捷入口路径
+        priority: 优先级
+        subtasks: 子任务 JSON 字符串
+    """
     __tablename__ = 'entertainment_tasks'
 
     title = Column(String(255), nullable=False)
@@ -73,7 +124,12 @@ class EntertainmentTask(BaseModel):
 
 
 class Config(BaseModel):
-    """配置模型"""
+    """配置模型
+
+    Attributes:
+        key: 配置键（唯一）
+        value: 配置值
+    """
     __tablename__ = 'configs'
 
     key = Column(String(100), unique=True, nullable=False)
@@ -81,7 +137,15 @@ class Config(BaseModel):
 
 
 class ShortcutHistory(BaseModel):
-    """快捷入口历史记录模型"""
+    """快捷入口历史记录模型
+
+    Attributes:
+        shortcut_id: 关联的快捷入口 ID
+        shortcut_title: 快照标题
+        shortcut_path: 快照路径
+        action_type: 操作类型
+        is_pinned: 是否置顶
+    """
     __tablename__ = 'shortcut_history'
 
     shortcut_id = Column(String(100), nullable=False)  # 关联的快捷入口ID
@@ -91,8 +155,12 @@ class ShortcutHistory(BaseModel):
     is_pinned = Column(Integer, default=0)  # 是否置顶
 
 
-def migrate_db(engine):
-    """数据库迁移：添加新字段"""
+def migrate_db(engine: Engine) -> None:
+    """数据库迁移：添加新字段
+
+    Args:
+        engine: SQLAlchemy Engine 实例
+    """
     from sqlalchemy import inspect, text
     
     inspector = inspect(engine)
@@ -138,8 +206,8 @@ def migrate_db(engine):
         logger.info("已添加 todo_tasks.shortcut_path 字段")
 
     # 迁移 urgency_score 从 Integer 到 Float（SQLite 不支持 MODIFY，需重建列）
-    todo_columns = {col['name']: col for col in inspector.get_columns('todo_tasks')}
-    if 'urgency_score' in todo_columns and 'INTEGER' in str(todo_columns['urgency_score']['type']).upper():
+    todo_columns_dict = {col['name']: col for col in inspector.get_columns('todo_tasks')}
+    if 'urgency_score' in todo_columns_dict and 'INTEGER' in str(todo_columns_dict['urgency_score']['type']).upper():
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE todo_tasks ADD COLUMN urgency_score_new REAL DEFAULT 0.0"))
             conn.execute(text("UPDATE todo_tasks SET urgency_score_new = CAST(urgency_score AS REAL)"))
@@ -215,12 +283,18 @@ def migrate_db(engine):
 
 
 # 数据库连接和会话管理
-def init_db(db_path: str = "taskmanager.db", run_migration: bool = False):
+def init_db(
+    db_path: str = "taskmanager.db",
+    run_migration: bool = False,
+) -> Tuple[Engine, sessionmaker]:
     """初始化数据库
-    
+
     Args:
         db_path: 数据库文件路径，默认为 "taskmanager.db"
         run_migration: 是否执行数据库迁移，默认为 False
+
+    Returns:
+        Tuple[Engine, sessionmaker]: (SQLAlchemy引擎, Session工厂)
     """
     engine = create_engine(f"sqlite:///{db_path}", echo=False)
     Base.metadata.create_all(engine)

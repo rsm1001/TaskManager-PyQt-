@@ -438,6 +438,11 @@ class TaskManagerMainWindow(QMainWindow):
         stats = self.data_manager.get_statistics()
         show_statistics_dialog(stats)
 
+    def run_type_check(self):
+        """运行 mypy 类型检查"""
+        from utils.ui_messages import show_type_check_dialog
+        show_type_check_dialog(self)
+
     def show_pomodoro(self):
         """显示番茄钟工具栏"""
         if self._pomodoro_toolbar is None:
