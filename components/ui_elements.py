@@ -82,6 +82,12 @@ def create_menu_bar(window):
 
     tools_menu.addSeparator()
 
+    schulte_action = QAction('舒尔特方格训练', window)
+    schulte_action.triggered.connect(window.show_schulte_grid)
+    tools_menu.addAction(schulte_action)
+
+    tools_menu.addSeparator()
+
     trash_action = QAction('垃圾桶', window)
     trash_action.triggered.connect(window.open_trash_dialog)
     tools_menu.addAction(trash_action)
@@ -104,6 +110,7 @@ def create_toolbar(window):
 
     # 番茄钟
     toolbar.addAction('🍅 番茄钟', window.show_pomodoro)
+    toolbar.addAction('🎯 舒尔特', window.show_schulte_grid)
 
     toolbar.addSeparator()
 

@@ -459,6 +459,22 @@ class TaskManagerMainWindow(QMainWindow):
         else:
             self._pomodoro_toolbar.hide()
 
+    def show_schulte_grid(self):
+        """显示舒尔特方格训练"""
+        if not hasattr(self, 'schulte_grid'):
+            from components.schulte_grid import SchulteGridWidget
+            self.schulte_grid = SchulteGridWidget()
+        if not self.schulte_grid.isVisible():
+            # 首次显示时居中于屏幕
+            from PyQt6.QtGui import QScreen
+            from PyQt6.QtWidgets import QApplication
+            screen: QScreen = QApplication.primaryScreen()
+            screen_geo = screen.geometry()
+            x = screen_geo.center().x() - self.schulte_grid.width() // 2
+            y = screen_geo.center().y() - self.schulte_grid.height() // 2
+            self.schulte_grid.move(x, y)
+        self.schulte_grid.show()
+
     def show_pomodoro_config(self):
         """显示番茄钟配置对话框"""
         dialog = PomodoroConfigDialog(self, self.data_manager)
