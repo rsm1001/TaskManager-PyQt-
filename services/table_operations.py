@@ -73,26 +73,36 @@ def load_search_results_to_table(window):
         status_item.setData(Qt.ItemDataRole.UserRole, item.get('id', ''))
         window.search_results_table.setItem(row, 1, status_item)
 
+        # 星期列（仅每日任务显示星期几）
+        if task_type == 'daily':
+            week_day = item.get('week_day', '')
+            week_text = week_day if week_day else '每天'
+        else:
+            week_text = '-'
+        week_item = QTableWidgetItem(week_text)
+        week_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        window.search_results_table.setItem(row, 2, week_item)
+
         # 标题列
         title = item.get('title', '')
         title_item = QTableWidgetItem(title)
         title_item.setData(Qt.ItemDataRole.UserRole, item.get('id', ''))
-        window.search_results_table.setItem(row, 2, title_item)
+        window.search_results_table.setItem(row, 3, title_item)
 
         # 分类列
         category = item.get('category', '') or '-'
-        window.search_results_table.setItem(row, 3, QTableWidgetItem(category))
+        window.search_results_table.setItem(row, 4, QTableWidgetItem(category))
 
         # 标签列
         tags = item.get('tags', '') or '-'
-        window.search_results_table.setItem(row, 4, QTableWidgetItem(tags))
+        window.search_results_table.setItem(row, 5, QTableWidgetItem(tags))
 
         # 描述列
         description = item.get('description', '') or '-'
         desc_item = QTableWidgetItem(description)
         if len(description) > 50:
             desc_item.setToolTip(description)
-        window.search_results_table.setItem(row, 5, desc_item)
+        window.search_results_table.setItem(row, 6, desc_item)
 
         # 创建日期列
         created_at = item.get('created_at', '')
@@ -103,17 +113,17 @@ def load_search_results_to_table(window):
                 date_str = str(created_at)[:10]
         else:
             date_str = '-'
-        window.search_results_table.setItem(row, 6, QTableWidgetItem(date_str))
+        window.search_results_table.setItem(row, 7, QTableWidgetItem(date_str))
 
         # 优先级列
         priority = item.get('priority', 'normal')
         priority_display = PRIORITY_DISPLAY_MAP.get(priority, '普通')
-        window.search_results_table.setItem(row, 7, QTableWidgetItem(priority_display))
+        window.search_results_table.setItem(row, 8, QTableWidgetItem(priority_display))
 
         # 设置行背景色和文字颜色（基于优先级）
         bg_color = QColor(config.PRIORITY_BG_COLORS.get(priority, '#FFFFFF'))
         text_color = QColor(config.PRIORITY_TEXT_COLORS.get(priority, '#333333'))
-        for col in range(8):
+        for col in range(9):
             cell_item = window.search_results_table.item(row, col)
             if cell_item:
                 cell_item.setBackground(bg_color)
