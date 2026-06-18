@@ -444,9 +444,20 @@ class TaskManagerMainWindow(QMainWindow):
         show_type_check_dialog(self)
 
     def show_pomodoro(self):
-        """显示番茄钟工具栏"""
+        """显示/隐藏番茄钟工具栏"""
+        # 检查工具栏是否已被销毁
+        from PyQt6 import sip
+        if self._pomodoro_toolbar is not None and sip.isdeleted(self._pomodoro_toolbar):
+            self._pomodoro_toolbar = None
+            self._pomodoro_toolbar_positioned = False
+
         if self._pomodoro_toolbar is None:
             self._pomodoro_toolbar = PomodoroToolbarWidget(self._pomodoro_service, self)
+            self._pomodoro_toolbar.destroyed.connect(lambda: (
+                setattr(self, '_pomodoro_toolbar', None),
+                setattr(self, '_pomodoro_toolbar_positioned', False)
+            ))
+
         if not self._pomodoro_toolbar.isVisible():
             if not self._pomodoro_toolbar_positioned:
                 # 首次显示时，设置在主窗口右下角
@@ -460,19 +471,29 @@ class TaskManagerMainWindow(QMainWindow):
             self._pomodoro_toolbar.hide()
 
     def show_schulte_grid(self):
-        """显示舒尔特方格训练"""
-        if not hasattr(self, 'schulte_grid'):
-            from components.schulte_grid import SchulteGridWidget
-            self.schulte_grid = SchulteGridWidget()
-        if not self.schulte_grid.isVisible():
-            # 首次显示时居中于屏幕
-            from PyQt6.QtGui import QScreen
-            from PyQt6.QtWidgets import QApplication
-            screen: QScreen = QApplication.primaryScreen()
-            screen_geo = screen.geometry()
-            x = screen_geo.center().x() - self.schulte_grid.width() // 2
-            y = screen_geo.center().y() - self.schulte_grid.height() // 2
-            self.schulte_grid.move(x, y)
+        """显示/隐藏舒尔特方格训练"""
+        from PyQt6 import sip
+        # 检查窗口是否已被销毁
+        if hasattr(self, 'schulte_grid') and not sip.isdeleted(self.schulte_grid):
+            if self.schulte_grid.isVisible():
+                self.schulte_grid.hide()
+                return
+            else:
+                # 窗口存在但被隐藏，显示它
+                geo = self.geometry()
+                x = geo.center().x() - self.schulte_grid.width() // 2
+                y = geo.center().y() - self.schulte_grid.height() // 2
+                self.schulte_grid.move(x, y)
+                self.schulte_grid.show()
+                return
+
+        # 创建新窗口，相对主窗口居中
+        from components.schulte_grid import SchulteGridWidget
+        self.schulte_grid = SchulteGridWidget()
+        geo = self.geometry()
+        x = geo.center().x() - self.schulte_grid.width() // 2
+        y = geo.center().y() - self.schulte_grid.height() // 2
+        self.schulte_grid.move(x, y)
         self.schulte_grid.show()
 
     def show_pomodoro_config(self):

@@ -81,7 +81,7 @@ class PomodoroToolbarWidget(QWidget):
                 border-radius: 3px;
             }
         """)
-        self.close_btn.clicked.connect(self._on_close)
+        self.close_btn.clicked.connect(self.close)
         title_layout.addWidget(self.close_btn)
         layout.addLayout(title_layout)
 
@@ -309,9 +309,14 @@ class PomodoroToolbarWidget(QWidget):
         self._service.skip()
 
     def _on_close(self):
-        """关闭按钮点击"""
+        """关闭按钮点击（不再使用，保留以防其他地方调用）"""
+        pass
+
+    def closeEvent(self, event):
+        """窗口关闭事件"""
         self._service.stop()
-        self.hide()
+        event.accept()
+        self.deleteLater()
 
     def set_task(self, task_type, task_id, task_title):
         """设置当前任务"""

@@ -87,7 +87,7 @@ class SchulteGridWidget(QWidget):
                 border-radius: 3px;
             }
         """)
-        self.close_btn.clicked.connect(self._on_close)
+        self.close_btn.clicked.connect(self.deleteLater)
         title_layout.addWidget(self.close_btn)
         layout.addLayout(title_layout)
 
