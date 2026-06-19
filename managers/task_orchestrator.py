@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from managers.entertainment_task_manager import EntertainmentTaskManager
     from managers.trash_manager import TrashManager
 
-from models.model import DailyTask
+from models.model import DailyTask, TodoTask
 
 logger = logging.getLogger(__name__)
 
