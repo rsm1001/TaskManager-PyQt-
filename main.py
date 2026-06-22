@@ -517,7 +517,21 @@ class TaskManagerMainWindow(QMainWindow):
         logger = logging.getLogger(__name__)
         try:
             stats = self.data_manager.get_statistics()
+
+            # 格式化进行中任务耗时
+            pending_dur = stats['daily'].get('pending_duration', 0)
+            if pending_dur >= 60:
+                dur_text = f"{pending_dur // 60}小时{pending_dur % 60}分钟"
+            elif pending_dur > 0:
+                dur_text = f"{pending_dur}分钟"
+            else:
+                dur_text = ""
+
+            pending_count = stats['daily'].get('pending', 0)
+            pending_info = f"({dur_text})" if pending_count > 0 else ""
+
             msg = (f"每日: {stats['daily']['completed']}/{stats['daily']['total']} 完成 "
+                   f"{pending_info} "
                    f"({stats['daily']['paused']} 暂弃不统计) | "
                    f"待办: {stats['todo']['completed']}/{stats['todo']['total']} 完成 "
                    f"({stats['todo']['expired']} 过期, {stats['todo']['paused']} 暂弃不统计) | "

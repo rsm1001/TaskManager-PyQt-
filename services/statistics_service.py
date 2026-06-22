@@ -36,6 +36,8 @@ class StatisticsService:
 
         daily_completed = sum(1 for t in daily_tasks if t.completed)
         daily_paused = sum(1 for t in daily_tasks if t.status == "abandoned")
+        daily_pending = sum(1 for t in daily_tasks if t.status == "pending")
+        daily_pending_duration = sum(t.estimated_duration or 0 for t in daily_tasks if t.status == "pending")
         daily_total = len(daily_tasks) - daily_paused  # 总数不含暂弃
         todo_completed = sum(1 for t in todo_tasks if t.completed)
         todo_paused = sum(1 for t in todo_tasks if t.status == "abandoned")
@@ -46,7 +48,13 @@ class StatisticsService:
         entertainment_total = len(entertainment_tasks) - entertainment_paused  # 总数不含暂弃
 
         stats: Dict[str, Any] = {
-            "daily": {"total": daily_total, "completed": daily_completed, "paused": daily_paused},
+            "daily": {
+                "total": daily_total,
+                "completed": daily_completed,
+                "pending": daily_pending,
+                "pending_duration": daily_pending_duration,
+                "paused": daily_paused
+            },
             "todo": {
                 "total": todo_total,
                 "completed": todo_completed,
