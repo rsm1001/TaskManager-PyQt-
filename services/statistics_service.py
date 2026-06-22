@@ -35,20 +35,28 @@ class StatisticsService:
         entertainment_tasks = self._dm.get_entertainment_tasks()
 
         daily_completed = sum(1 for t in daily_tasks if t.completed)
+        daily_paused = sum(1 for t in daily_tasks if t.status == "abandoned")
+        daily_total = len(daily_tasks) - daily_paused  # 总数不含暂弃
         todo_completed = sum(1 for t in todo_tasks if t.completed)
+        todo_paused = sum(1 for t in todo_tasks if t.status == "abandoned")
         todo_expired = sum(1 for t in todo_tasks if self._dm.todo_manager.is_expired(t))
+        todo_total = len(todo_tasks) - todo_paused  # 总数不含暂弃
         entertainment_completed = sum(1 for t in entertainment_tasks if t.completed)
+        entertainment_paused = sum(1 for t in entertainment_tasks if t.status == "abandoned")
+        entertainment_total = len(entertainment_tasks) - entertainment_paused  # 总数不含暂弃
 
         stats: Dict[str, Any] = {
-            "daily": {"total": len(daily_tasks), "completed": daily_completed},
+            "daily": {"total": daily_total, "completed": daily_completed, "paused": daily_paused},
             "todo": {
-                "total": len(todo_tasks),
+                "total": todo_total,
                 "completed": todo_completed,
                 "expired": todo_expired,
+                "paused": todo_paused,
             },
             "entertainment": {
-                "total": len(entertainment_tasks),
+                "total": entertainment_total,
                 "completed": entertainment_completed,
+                "paused": entertainment_paused,
             },
         }
 

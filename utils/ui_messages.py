@@ -114,13 +114,14 @@ MESSAGES = config.MESSAGES
 def show_statistics_dialog(stats, parent=None):
     """显示统计信息对话框"""
     msg = f"""统计信息：
-    
-每日任务：{stats['daily']['total']} 个 ({stats['daily']['completed']} 已成)
-待办事项：{stats['todo']['total']} 个 ({stats['todo']['completed']} 已成, {stats['todo']['expired']} 已过期)
-娱乐任务：{stats['entertainment']['total']} 个 ({stats['entertainment']['completed']} 已成)
 
-总计：{stats['daily']['total'] + stats['todo']['total'] + stats['entertainment']['total']} 个任务
-已完成：{stats['daily']['completed'] + stats['todo']['completed'] + stats['entertainment']['completed']} 个"""
+每日任务：{stats['daily']['total']} 个 ({stats['daily']['completed']} 已成, {stats['daily']['paused']} 暂弃不统计)
+待办事项：{stats['todo']['total']} 个 ({stats['todo']['completed']} 已成, {stats['todo']['expired']} 过期, {stats['todo']['paused']} 暂弃不统计)
+娱乐任务：{stats['entertainment']['total']} 个 ({stats['entertainment']['completed']} 已成, {stats['entertainment']['paused']} 暂弃不统计)
+
+总计：{stats['daily']['total'] + stats['todo']['total'] + stats['entertainment']['total']} 个任务（暂弃不统计）
+已完成：{stats['daily']['completed'] + stats['todo']['completed'] + stats['entertainment']['completed']} 个
+已暂弃：{stats['daily']['paused'] + stats['todo']['paused'] + stats['entertainment']['paused']} 个"""
 
     QMessageBox.information(parent, '统计信息', msg)
 

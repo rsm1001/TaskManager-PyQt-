@@ -517,10 +517,12 @@ class TaskManagerMainWindow(QMainWindow):
         logger = logging.getLogger(__name__)
         try:
             stats = self.data_manager.get_statistics()
-            msg = (f"每日: {stats['daily']['completed']}/{stats['daily']['total']} 完成 | "
+            msg = (f"每日: {stats['daily']['completed']}/{stats['daily']['total']} 完成 "
+                   f"({stats['daily']['paused']} 暂弃不统计) | "
                    f"待办: {stats['todo']['completed']}/{stats['todo']['total']} 完成 "
-                   f"({stats['todo']['expired']} 过期) | "
-                   f"娱乐: {stats['entertainment']['completed']}/{stats['entertainment']['total']} 完成")
+                   f"({stats['todo']['expired']} 过期, {stats['todo']['paused']} 暂弃不统计) | "
+                   f"娱乐: {stats['entertainment']['completed']}/{stats['entertainment']['total']} 完成 "
+                   f"({stats['entertainment']['paused']} 暂弃不统计)")
             logger.info(f"设置状态栏: {msg}")
             self.status_bar.showMessage(msg, 0)  # 0 表示永久显示，不自动消失
         except Exception as e:
