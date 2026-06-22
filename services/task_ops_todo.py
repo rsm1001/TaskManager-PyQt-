@@ -51,6 +51,7 @@ class TodoTaskOperations:
         self._validate_and_refresh_filter('todo')
         show_task_added_confirmation('todo', self._w)
         self._w.status_bar.showMessage('待办事项添加成功')
+        self._w.update_status_bar()
 
     def edit_todo_task(self):
         """编辑选中的待办事项"""
@@ -86,6 +87,7 @@ class TodoTaskOperations:
         self._validate_and_refresh_filter('todo')
         show_task_updated_confirmation('todo', self._w)
         self._w.status_bar.showMessage('待办事项更新成功')
+        self._w.update_status_bar()
 
     def delete_todo_task(self):
         """删除选中的待办事项（支持批量）"""
@@ -111,6 +113,7 @@ class TodoTaskOperations:
         self._validate_and_refresh_filter('todo')
         show_task_deleted_confirmation('todo', self._w)
         self._w.status_bar.showMessage(f'待办事项删除成功 ({deleted}/{count})')
+        self._w.update_status_bar()
 
     def random_todo_task(self):
         """随机抽取待办事项（按权重）"""

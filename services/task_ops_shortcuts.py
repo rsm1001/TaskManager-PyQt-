@@ -46,6 +46,7 @@ class ShortcutOperations:
         self._validate_and_refresh_filter('shortcuts')
         show_task_added_confirmation('shortcut', self._w)
         self._w.status_bar.showMessage('快捷入口添加成功')
+        self._w.update_status_bar()
 
     def edit_shortcut(self):
         """编辑选中的快捷入口"""
@@ -90,6 +91,7 @@ class ShortcutOperations:
         self._validate_and_refresh_filter('shortcuts')
         show_task_updated_confirmation('shortcut', self._w)
         self._w.status_bar.showMessage('快捷入口更新成功')
+        self._w.update_status_bar()
 
     def delete_shortcut(self):
         """删除选中的快捷入口（支持批量，不经过垃圾桶）"""
@@ -113,6 +115,7 @@ class ShortcutOperations:
         self._validate_and_refresh_filter('shortcuts')
         show_task_deleted_confirmation('shortcut', self._w)
         self._w.status_bar.showMessage(f'快捷入口删除成功 ({deleted}/{count})')
+        self._w.update_status_bar()
 
     def on_shortcuts_cell_clicked(self, row, col):
         """快捷入口表格单击处理（列0时触发按钮点击）"""

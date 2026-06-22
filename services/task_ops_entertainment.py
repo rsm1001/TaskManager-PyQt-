@@ -51,6 +51,7 @@ class EntertainmentTaskOperations:
         self._validate_and_refresh_filter('entertainment')
         show_task_added_confirmation('entertainment', self._w)
         self._w.status_bar.showMessage('娱乐任务添加成功')
+        self._w.update_status_bar()
 
     def edit_entertainment_task(self):
         """编辑选中的娱乐任务"""
@@ -86,6 +87,7 @@ class EntertainmentTaskOperations:
         self._validate_and_refresh_filter('entertainment')
         show_task_updated_confirmation('entertainment', self._w)
         self._w.status_bar.showMessage('娱乐任务更新成功')
+        self._w.update_status_bar()
 
     def delete_entertainment_task(self):
         """删除选中的娱乐任务（支持批量）"""
@@ -111,6 +113,7 @@ class EntertainmentTaskOperations:
         self._validate_and_refresh_filter('entertainment')
         show_task_deleted_confirmation('entertainment', self._w)
         self._w.status_bar.showMessage(f'娱乐任务删除成功 ({deleted}/{count})')
+        self._w.update_status_bar()
 
     def random_entertainment_task(self):
         """随机抽取娱乐任务"""

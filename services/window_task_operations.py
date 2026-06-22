@@ -68,6 +68,7 @@ class TaskOperationHandler:
         self._validate_and_refresh_filter('daily')
         show_task_added_confirmation('daily', self._w)
         self._w.status_bar.showMessage('每日任务添加成功')
+        self._w.update_status_bar()
 
     def edit_daily_task(self):
         """编辑选中的每日任务"""
@@ -103,6 +104,7 @@ class TaskOperationHandler:
         self._validate_and_refresh_filter('daily')
         show_task_updated_confirmation('daily', self._w)
         self._w.status_bar.showMessage('每日任务更新成功')
+        self._w.update_status_bar()
 
     def _auto_cleanup_if_enabled(self):
         """检查是否启用了自动清理，若是则执行并刷新标签栏"""
@@ -176,6 +178,7 @@ class TaskOperationHandler:
         self._validate_and_refresh_filter('daily')
         show_task_deleted_confirmation('daily', self._w)
         self._w.status_bar.showMessage(f'每日任务删除成功 ({deleted}/{count})')
+        self._w.update_status_bar()
 
     def reset_today_daily_tasks(self):
         """手动重置今日已完成的每日任务"""
@@ -299,6 +302,7 @@ class TaskOperationHandler:
         self._validate_and_refresh_filter(task_type)
         show_task_updated_confirmation(task_type, self._w)
         self._w.status_bar.showMessage(f'{task_type} 状态批量更新成功 ({updated}/{len(task_ids)})' if updated > 0 else f'{task_type} 状态批量更新失败')
+        self._w.update_status_bar()
 
     def _show_batch_status_dialog(self, task_type: str, task_ids: list, table):
         """显示批量选择状态的对话框并执行"""
@@ -466,3 +470,4 @@ class TaskOperationHandler:
         self._validate_and_refresh_filter(task_type)
         show_task_updated_confirmation(task_type, self._w)
         self._w.status_bar.showMessage(f'{task_type} 标签批量更新成功 ({updated}/{len(task_ids)})' if updated > 0 else f'{task_type} 标签批量更新失败')
+        self._w.update_status_bar()
