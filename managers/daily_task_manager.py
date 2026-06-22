@@ -4,6 +4,8 @@
 """
 
 from models.model import DailyTask
+from managers.priority import PRIORITY_RANK
+from sqlalchemy import case
 from typing import List, Optional
 import uuid
 
@@ -50,7 +52,10 @@ class DailyTaskManager:
                 (DailyTask.category.ilike(kw))
             )
 
-        return query.order_by(DailyTask.week_day, DailyTask.title).all()
+        return query.order_by(
+            case(PRIORITY_RANK, value=DailyTask.priority, else_=3).desc(),
+            DailyTask.title
+        ).all()
 
     def get_by_id(self, task_id: str) -> Optional[DailyTask]:
         """根据ID获取每日任务"""

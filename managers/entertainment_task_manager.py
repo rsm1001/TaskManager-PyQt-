@@ -3,6 +3,8 @@
 """
 
 from models.model import EntertainmentTask
+from managers.priority import PRIORITY_RANK
+from sqlalchemy import case
 from typing import List, Optional
 
 
@@ -39,7 +41,10 @@ class EntertainmentTaskManager:
                 (EntertainmentTask.category.ilike(kw))
             )
 
-        return query.order_by(EntertainmentTask.fun_category, EntertainmentTask.title).all()
+        return query.order_by(
+            case(PRIORITY_RANK, value=EntertainmentTask.priority, else_=3).desc(),
+            EntertainmentTask.title
+        ).all()
 
     def get_by_id(self, task_id: str) -> Optional[EntertainmentTask]:
         """根据ID获取任务"""

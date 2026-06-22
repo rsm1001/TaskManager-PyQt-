@@ -4,6 +4,8 @@
 
 from datetime import datetime, date
 from models.model import TodoTask
+from managers.priority import PRIORITY_RANK
+from sqlalchemy import case
 from typing import List, Optional
 
 
@@ -51,7 +53,12 @@ class TodoTaskManager:
                 (TodoTask.category.ilike(kw))
             )
 
-        return query.order_by(TodoTask.deadline.desc(), TodoTask.urgency_score.desc()).all()
+        return query.order_by(
+            case(PRIORITY_RANK, value=TodoTask.priority, else_=3).desc(),
+            case((TodoTask.deadline == '') | (TodoTask.deadline.is_(None)), else_='9999-12-31'),
+            TodoTask.deadline,
+            TodoTask.title
+        ).all()
 
     def get_by_id(self, task_id: str) -> Optional[TodoTask]:
         """根据ID获取任务"""
