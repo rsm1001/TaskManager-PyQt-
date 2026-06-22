@@ -97,12 +97,17 @@ def load_search_results_to_table(window):
         tags = item.get('tags', '') or '-'
         window.search_results_table.setItem(row, 5, QTableWidgetItem(tags))
 
+        # 用时预估列
+        duration = item.get('estimated_duration', 0) or 0
+        duration_text = str(duration) if duration else '-'
+        window.search_results_table.setItem(row, 6, QTableWidgetItem(duration_text))
+
         # 描述列
         description = item.get('description', '') or '-'
         desc_item = QTableWidgetItem(description)
         if len(description) > 50:
             desc_item.setToolTip(description)
-        window.search_results_table.setItem(row, 6, desc_item)
+        window.search_results_table.setItem(row, 7, desc_item)
 
         # 创建日期列
         created_at = item.get('created_at', '')
@@ -113,17 +118,17 @@ def load_search_results_to_table(window):
                 date_str = str(created_at)[:10]
         else:
             date_str = '-'
-        window.search_results_table.setItem(row, 7, QTableWidgetItem(date_str))
+        window.search_results_table.setItem(row, 8, QTableWidgetItem(date_str))
 
         # 优先级列
         priority = item.get('priority', 'normal')
         priority_display = PRIORITY_DISPLAY_MAP.get(priority, '普通')
-        window.search_results_table.setItem(row, 8, QTableWidgetItem(priority_display))
+        window.search_results_table.setItem(row, 9, QTableWidgetItem(priority_display))
 
         # 设置行背景色和文字颜色（基于优先级）
         bg_color = QColor(config.PRIORITY_BG_COLORS.get(priority, '#FFFFFF'))
         text_color = QColor(config.PRIORITY_TEXT_COLORS.get(priority, '#333333'))
-        for col in range(9):
+        for col in range(10):
             cell_item = window.search_results_table.item(row, col)
             if cell_item:
                 cell_item.setBackground(bg_color)
@@ -209,14 +214,16 @@ def load_daily_tasks_to_table(window):
 
     window.daily_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
+        duration = getattr(task, 'estimated_duration', 0) or 0
         columns = [
             (1, task.title),
             (2, task.category if task.category else '-'),
             (3, task.week_day if task.week_day else '每天'),
             (4, task.tags if task.tags else '-'),
-            (5, task.description or '-'),
-            (6, task.created_at.strftime('%Y-%m-%d')),
-            (7, _get_priority_display(getattr(task, 'priority', 'normal')))
+            (5, str(duration) if duration else '-'),
+            (6, task.description or '-'),
+            (7, task.created_at.strftime('%Y-%m-%d')),
+            (8, _get_priority_display(getattr(task, 'priority', 'normal')))
         ]
         _set_task_row_data(window.daily_table, row, task, columns)
 
@@ -237,15 +244,17 @@ def load_todo_tasks_to_table(window):
 
     window.todo_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
+        duration = getattr(task, 'estimated_duration', 0) or 0
         columns = [
             (1, task.title),
             (2, task.deadline if task.deadline else '无'),
             (3, task.category if task.category else '-'),
             (4, f"{task.urgency_score:.2f}"),
             (5, task.tags if task.tags else '-'),
-            (6, task.description or '-'),
-            (7, task.created_at.strftime('%Y-%m-%d')),
-            (8, _get_priority_display(getattr(task, 'priority', 'normal')))
+            (6, str(duration) if duration else '-'),
+            (7, task.description or '-'),
+            (8, task.created_at.strftime('%Y-%m-%d')),
+            (9, _get_priority_display(getattr(task, 'priority', 'normal')))
         ]
         _set_task_row_data(window.todo_table, row, task, columns)
 
@@ -261,14 +270,16 @@ def load_entertainment_tasks_to_table(window):
 
     window.entertainment_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
+        duration = getattr(task, 'estimated_duration', 0) or 0
         columns = [
             (1, task.title),
             (2, task.fun_category),
             (3, task.category if task.category else '-'),
             (4, task.tags if task.tags else '-'),
-            (5, task.description or '-'),
-            (6, task.created_at.strftime('%Y-%m-%d')),
-            (7, _get_priority_display(getattr(task, 'priority', 'normal')))
+            (5, str(duration) if duration else '-'),
+            (6, task.description or '-'),
+            (7, task.created_at.strftime('%Y-%m-%d')),
+            (8, _get_priority_display(getattr(task, 'priority', 'normal')))
         ]
         _set_task_row_data(window.entertainment_table, row, task, columns, editable_cols={1, 2, 3, 4})
 
@@ -455,14 +466,16 @@ def sort_todo_table_by_column(window, column):
 
     window.todo_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
+        duration = getattr(task, 'estimated_duration', 0) or 0
         columns = [
             (1, task.title),
             (2, task.deadline if task.deadline else '无'),
             (3, task.category if task.category else '-'),
             (4, f"{task.urgency_score:.2f}"),
             (5, task.tags if task.tags else '-'),
-            (6, task.description or '-'),
-            (7, task.created_at.strftime('%Y-%m-%d')),
-            (8, _get_priority_display(getattr(task, 'priority', 'normal')))
+            (6, str(duration) if duration else '-'),
+            (7, task.description or '-'),
+            (8, task.created_at.strftime('%Y-%m-%d')),
+            (9, _get_priority_display(getattr(task, 'priority', 'normal')))
         ]
         _set_task_row_data(window.todo_table, row, task, columns)

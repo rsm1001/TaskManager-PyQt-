@@ -44,7 +44,8 @@ class TodoTaskOperations:
             tags=data.get('tags', ''),
             category=data.get('category', ''),
             priority=data.get('priority', 'normal'),
-            subtasks=data.get('subtasks', '[]')
+            subtasks=data.get('subtasks', '[]'),
+            estimated_duration=data.get('estimated_duration', 0)
         )
         self._w.load_todo_tasks()
         self._validate_and_refresh_filter('todo')
@@ -78,7 +79,8 @@ class TodoTaskOperations:
             tags=data.get('tags', ''),
             category=data.get('category', ''),
             priority=data.get('priority', 'normal'),
-            subtasks=data.get('subtasks', '[]')
+            subtasks=data.get('subtasks', '[]'),
+            estimated_duration=data.get('estimated_duration', 0)
         )
         self._w.load_todo_tasks()
         self._validate_and_refresh_filter('todo')

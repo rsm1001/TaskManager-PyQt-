@@ -48,6 +48,7 @@ class DailyTask(BaseModel):
         shortcut_path: 快捷入口路径，非空表示快捷入口
         priority: 优先级（urgent/high/normal/low/idle）
         subtasks: 子任务 JSON 字符串
+        estimated_duration: 用时预估（分钟）
     """
     __tablename__ = 'daily_tasks'
 
@@ -61,6 +62,7 @@ class DailyTask(BaseModel):
     shortcut_path = Column(String(1000), default="")  # 快捷入口路径，非空表示快捷入口
     priority = Column(String(20), default="normal")  # high, normal, low
     subtasks = Column(Text, default='[]')  # 子任务（检查项）JSON 字符串，list of {id, title, completed}
+    estimated_duration = Column(Integer, default=0)  # 用时预估（分钟）
 
 
 class TodoTask(BaseModel):
@@ -78,6 +80,7 @@ class TodoTask(BaseModel):
         shortcut_path: 快捷入口路径
         priority: 优先级
         subtasks: 子任务 JSON 字符串
+        estimated_duration: 用时预估（分钟）
     """
     __tablename__ = 'todo_tasks'
 
@@ -92,6 +95,7 @@ class TodoTask(BaseModel):
     shortcut_path = Column(String(1000), default="")  # 快捷入口路径，非空表示快捷入口
     priority = Column(String(20), default="normal")  # high, normal, low
     subtasks = Column(Text, default='[]')  # 子任务（检查项）JSON 字符串，list of {id, title, completed}
+    estimated_duration = Column(Integer, default=0)  # 用时预估（分钟）
 
 
 class EntertainmentTask(BaseModel):
@@ -108,6 +112,7 @@ class EntertainmentTask(BaseModel):
         shortcut_path: 快捷入口路径
         priority: 优先级
         subtasks: 子任务 JSON 字符串
+        estimated_duration: 用时预估（分钟）
     """
     __tablename__ = 'entertainment_tasks'
 
@@ -121,6 +126,7 @@ class EntertainmentTask(BaseModel):
     shortcut_path = Column(String(1000), default="")  # 快捷入口路径，非空表示快捷入口
     priority = Column(String(20), default="normal")  # high, normal, low
     subtasks = Column(Text, default='[]')  # 子任务（检查项）JSON 字符串，list of {id, title, completed}
+    estimated_duration = Column(Integer, default=0)  # 用时预估（分钟）
 
 
 class Config(BaseModel):
@@ -269,6 +275,28 @@ def migrate_db(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE entertainment_tasks ADD COLUMN subtasks TEXT DEFAULT '[]'"))
             conn.commit()
         logger.info("已添加 entertainment_tasks.subtasks 字段")
+
+    # 检查并添加 estimated_duration 字段（用时预估）
+    daily_columns = [col['name'] for col in inspector.get_columns('daily_tasks')]
+    if 'estimated_duration' not in daily_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE daily_tasks ADD COLUMN estimated_duration INTEGER DEFAULT 0"))
+            conn.commit()
+        logger.info("已添加 daily_tasks.estimated_duration 字段")
+
+    todo_columns = [col['name'] for col in inspector.get_columns('todo_tasks')]
+    if 'estimated_duration' not in todo_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE todo_tasks ADD COLUMN estimated_duration INTEGER DEFAULT 0"))
+            conn.commit()
+        logger.info("已添加 todo_tasks.estimated_duration 字段")
+
+    entertainment_columns = [col['name'] for col in inspector.get_columns('entertainment_tasks')]
+    if 'estimated_duration' not in entertainment_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE entertainment_tasks ADD COLUMN estimated_duration INTEGER DEFAULT 0"))
+            conn.commit()
+        logger.info("已添加 entertainment_tasks.estimated_duration 字段")
 
     # 清理 category 字段中的旧数据（之前用于存储任务类型，现改为用户分类）
     # 将值为 'daily', 'todo', 'entertainment' 的记录清空

@@ -93,6 +93,7 @@ class TaskOrchestrator:
         category: str = "",
         priority: str = "normal",
         subtasks: str = "[]",
+        estimated_duration: int = 0,
     ) -> "DailyTask":
         """创建每日任务，并校验数量上限"""
         logger.info(
@@ -103,6 +104,7 @@ class TaskOrchestrator:
         task = self._daily.create(
             title, description, week_day, completed, status,
             tags, shortcut_path, category, priority, subtasks,
+            estimated_duration,
         )
         self._limit_service_factory().enforce_limit("daily", DailyTask)
         return task  # type: ignore[no-any-return]
@@ -173,6 +175,7 @@ class TaskOrchestrator:
         category: str = "",
         priority: str = "normal",
         subtasks: str = "[]",
+        estimated_duration: int = 0,
     ) -> "TodoTask":
         logger.info(
             "创建待办任务 | request_id=create_todo | title=%s deadline=%s",
@@ -182,6 +185,7 @@ class TaskOrchestrator:
         task = self._todo.create(
             title, description, deadline, completed, status,
             tags, shortcut_path, category, priority, subtasks,
+            estimated_duration,
         )
         self._limit_service_factory().enforce_limit("todo", TodoTask)
         return task  # type: ignore[no-any-return]
@@ -274,6 +278,7 @@ class TaskOrchestrator:
         category: str = "",
         priority: str = "normal",
         subtasks: str = "[]",
+        estimated_duration: int = 0,
     ) -> "EntertainmentTask":
         logger.info(
             "创建娱乐任务 | request_id=create_entertainment | title=%s fun_category=%s",
@@ -283,6 +288,7 @@ class TaskOrchestrator:
         task = self._entertainment.create(
             title, description, fun_category, completed, status,
             tags, shortcut_path, category, priority, subtasks,
+            estimated_duration,
         )
         self._limit_service_factory().enforce_limit("entertainment", EntertainmentTask)
         return task  # type: ignore[no-any-return]

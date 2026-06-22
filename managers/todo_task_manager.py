@@ -62,12 +62,14 @@ class TodoTaskManager:
     def create(self, title: str, description: str = "", deadline: str = "",
                completed: bool = False, status: str = "pending", tags: str = "",
                shortcut_path: str = "", category: str = "",
-               priority: str = "normal", subtasks: str = "[]") -> TodoTask:
+               priority: str = "normal", subtasks: str = "[]",
+               estimated_duration: int = 0) -> TodoTask:
         """创建待办任务"""
         task = TodoTask(
             title=title, description=description, deadline=deadline,
             completed=completed, status=status, tags=tags, shortcut_path=shortcut_path,
-            category=category, priority=priority, subtasks=subtasks
+            category=category, priority=priority, subtasks=subtasks,
+            estimated_duration=estimated_duration
         )
         self.session.add(task)
         self.session.commit()
@@ -186,6 +188,7 @@ class TodoTaskManager:
             'category': task.category or '',
             'priority': task.priority or 'normal',
             'subtasks': task.subtasks or '[]',
+            'estimated_duration': task.estimated_duration or 0,
             'created_at': task.created_at.isoformat() if task.created_at else '',
             'updated_at': task.updated_at.isoformat() if task.updated_at else '',
         }

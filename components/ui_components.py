@@ -109,8 +109,8 @@ def create_daily_tab_ui(parent_window):
 
     # 任务表格
     parent_window.daily_table = QTableWidget()
-    parent_window.daily_table.setColumnCount(8)
-    parent_window.daily_table.setHorizontalHeaderLabels(['状态', '标题', '分类', '星期', '标签', '描述', '创建日期', '优先级'])
+    parent_window.daily_table.setColumnCount(9)
+    parent_window.daily_table.setHorizontalHeaderLabels(['状态', '标题', '分类', '星期', '标签', '用时(分钟)', '描述', '创建日期', '优先级'])
     parent_window.daily_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.daily_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     parent_window.daily_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -173,8 +173,8 @@ def create_todo_tab_ui(parent_window):
 
     # 任务表格
     parent_window.todo_table = QTableWidget()
-    parent_window.todo_table.setColumnCount(9)
-    parent_window.todo_table.setHorizontalHeaderLabels(['状态', '标题', '截止日期', '分类', '紧急程度', '标签', '描述', '创建日期', '优先级'])
+    parent_window.todo_table.setColumnCount(10)
+    parent_window.todo_table.setHorizontalHeaderLabels(['状态', '标题', '截止日期', '分类', '紧急程度', '标签', '用时(分钟)', '描述', '创建日期', '优先级'])
     parent_window.todo_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.todo_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     parent_window.todo_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -241,8 +241,8 @@ def create_entertainment_tab_ui(parent_window):
 
     # 任务表格
     parent_window.entertainment_table = QTableWidget()
-    parent_window.entertainment_table.setColumnCount(8)
-    parent_window.entertainment_table.setHorizontalHeaderLabels(['状态', '标题', '类别', '分类', '标签', '描述', '创建日期', '优先级'])
+    parent_window.entertainment_table.setColumnCount(9)
+    parent_window.entertainment_table.setHorizontalHeaderLabels(['状态', '标题', '类别', '分类', '标签', '用时(分钟)', '描述', '创建日期', '优先级'])
     parent_window.entertainment_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.entertainment_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     parent_window.entertainment_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -415,9 +415,9 @@ def create_search_tab_ui(parent_window):
 
     # 搜索结果表格
     parent_window.search_results_table = QTableWidget()
-    parent_window.search_results_table.setColumnCount(9)
+    parent_window.search_results_table.setColumnCount(10)
     parent_window.search_results_table.setHorizontalHeaderLabels(
-        ['类型', '状态', '星期', '标题', '分类', '标签', '描述', '创建日期', '优先级']
+        ['类型', '状态', '星期', '标题', '分类', '标签', '用时(分钟)', '描述', '创建日期', '优先级']
     )
     parent_window.search_results_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.search_results_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -430,11 +430,13 @@ def create_search_tab_ui(parent_window):
     parent_window.search_results_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
     parent_window.search_results_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
     parent_window.search_results_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-    parent_window.search_results_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)
-    parent_window.search_results_table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
-    parent_window.search_results_table.horizontalHeader().resizeSection(7, 100)
+    parent_window.search_results_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+    parent_window.search_results_table.horizontalHeader().resizeSection(6, 80)
+    parent_window.search_results_table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)
     parent_window.search_results_table.horizontalHeader().setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)
-    parent_window.search_results_table.horizontalHeader().resizeSection(8, 70)
+    parent_window.search_results_table.horizontalHeader().resizeSection(8, 100)
+    parent_window.search_results_table.horizontalHeader().setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)
+    parent_window.search_results_table.horizontalHeader().resizeSection(9, 70)
     parent_window.search_results_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     parent_window.search_results_table.cellDoubleClicked.connect(parent_window.on_search_result_double_click)
 

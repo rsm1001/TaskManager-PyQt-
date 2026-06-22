@@ -103,6 +103,10 @@ STATUS_FILTER_MAP = {
 # 标签筛选配置
 TAG_FILTER_MAX_DISPLAY = 10  # 标签栏默认显示上限
 
+# 用时预估快设置选项（分钟）
+ESTIMATED_DURATION_QUICK_OPTIONS = [5, 10]
+ESTIMATED_DURATION_CUSTOM_KEY = "estimated_duration_quick_options"  # 配置键名
+
 # 消息文本配置
 MESSAGES = {
     'task_added': {

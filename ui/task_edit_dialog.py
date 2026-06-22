@@ -5,12 +5,13 @@ Task Manager - 任务编辑对话框模块
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QTextEdit,
                              QLabel, QComboBox, QCheckBox, QDateEdit, QPushButton, QGridLayout,
-                             QGroupBox, QScrollArea, QWidget)
+                             QGroupBox, QScrollArea, QWidget, QSpinBox)
 from PyQt6.QtCore import QDate
 from PyQt6.QtWidgets import QMessageBox
 from managers.data_manager import TaskType
 from managers.priority import PRIORITY_LABELS, LABEL_TO_KEY, DEFAULT_PRIORITY, get_priority_label
 from widgets.tag_selector_widget import TagSelectorWidget
+from config.config import ESTIMATED_DURATION_QUICK_OPTIONS
 from datetime import timedelta
 import datetime
 import json
@@ -90,6 +91,24 @@ class TaskEditDialog(QDialog):
             priority_layout.addWidget(self.priority_combo)
             priority_layout.addStretch()
             layout.addLayout(priority_layout)
+
+            # 用时预估选择
+            duration_layout = QHBoxLayout()
+            duration_layout.addWidget(QLabel('用时预估:'))
+            self.duration_spin = QSpinBox()
+            self.duration_spin.setRange(0, 999)
+            self.duration_spin.setSuffix(" 分钟")
+            self.duration_spin.setValue(0)
+            duration_layout.addWidget(self.duration_spin)
+
+            # 快设置按钮
+            for mins in ESTIMATED_DURATION_QUICK_OPTIONS:
+                btn = QPushButton(f'{mins}分钟')
+                btn.setMinimumWidth(60)
+                btn.clicked.connect(lambda checked, m=mins: self.duration_spin.setValue(m))
+                duration_layout.addWidget(btn)
+            duration_layout.addStretch()
+            layout.addLayout(duration_layout)
         elif self.task_type == TaskType.TODO:
             deadline_layout = QHBoxLayout()
             deadline_layout.addWidget(QLabel('截止日期:'))
@@ -151,6 +170,24 @@ class TaskEditDialog(QDialog):
             priority_layout.addWidget(self.priority_combo)
             priority_layout.addStretch()
             layout.addLayout(priority_layout)
+
+            # 用时预估选择
+            duration_layout = QHBoxLayout()
+            duration_layout.addWidget(QLabel('用时预估:'))
+            self.duration_spin = QSpinBox()
+            self.duration_spin.setRange(0, 999)
+            self.duration_spin.setSuffix(" 分钟")
+            self.duration_spin.setValue(0)
+            duration_layout.addWidget(self.duration_spin)
+
+            # 快设置按钮
+            for mins in ESTIMATED_DURATION_QUICK_OPTIONS:
+                btn = QPushButton(f'{mins}分钟')
+                btn.setMinimumWidth(60)
+                btn.clicked.connect(lambda checked, m=mins: self.duration_spin.setValue(m))
+                duration_layout.addWidget(btn)
+            duration_layout.addStretch()
+            layout.addLayout(duration_layout)
         elif self.task_type == TaskType.ENTERTAINMENT:
             category_layout = QHBoxLayout()
             category_layout.addWidget(QLabel('类别:'))
@@ -181,6 +218,24 @@ class TaskEditDialog(QDialog):
             priority_layout.addWidget(self.priority_combo)
             priority_layout.addStretch()
             layout.addLayout(priority_layout)
+
+            # 用时预估选择
+            duration_layout = QHBoxLayout()
+            duration_layout.addWidget(QLabel('用时预估:'))
+            self.duration_spin = QSpinBox()
+            self.duration_spin.setRange(0, 999)
+            self.duration_spin.setSuffix(" 分钟")
+            self.duration_spin.setValue(0)
+            duration_layout.addWidget(self.duration_spin)
+
+            # 快设置按钮
+            for mins in ESTIMATED_DURATION_QUICK_OPTIONS:
+                btn = QPushButton(f'{mins}分钟')
+                btn.setMinimumWidth(60)
+                btn.clicked.connect(lambda checked, m=mins: self.duration_spin.setValue(m))
+                duration_layout.addWidget(btn)
+            duration_layout.addStretch()
+            layout.addLayout(duration_layout)
 
         # 子任务（检查项）区域——三类任务共用
         self._build_subtasks_section(layout)
@@ -456,6 +511,11 @@ class TaskEditDialog(QDialog):
                 if index >= 0:
                     self.priority_combo.setCurrentIndex(index)
 
+            # 加载用时预估
+            if hasattr(self, 'duration_spin'):
+                duration = getattr(self.task, 'estimated_duration', 0) or 0
+                self.duration_spin.setValue(duration)
+
     def get_data(self):
         """获取表单数据"""
         # 状态映射
@@ -494,5 +554,9 @@ class TaskEditDialog(QDialog):
         # 优先级
         if hasattr(self, 'priority_combo'):
             data['priority'] = LABEL_TO_KEY.get(self.priority_combo.currentText(), DEFAULT_PRIORITY)
+
+        # 用时预估
+        if hasattr(self, 'duration_spin'):
+            data['estimated_duration'] = self.duration_spin.value()
 
         return data
