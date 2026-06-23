@@ -213,12 +213,14 @@ class DataManager:
         category: str = "",
         priority: str = "normal",
         subtasks: str = "[]",
+        estimated_duration: int = 0,
     ) -> "TodoTask":
         return self.task_orchestrator.create_todo_task(
             title=title, description=description, deadline=deadline,
             completed=completed, status=status, tags=tags,
             shortcut_path=shortcut_path, category=category,
             priority=priority, subtasks=subtasks,
+            estimated_duration=estimated_duration,
         )
 
     def update_todo_task(self, task_id: str, **kwargs: Any) -> bool:
