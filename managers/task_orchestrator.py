@@ -47,17 +47,6 @@ class TaskOrchestrator:
         task_limit_service_factory: Callable[[], Any],
         shortcut_manager: Any = None,
     ) -> None:
-        """初始化任务编排器
-
-        Args:
-            session: SQLAlchemy Session
-            daily_task_manager: 每日任务仓储
-            todo_task_manager: 待办任务仓储
-            entertainment_task_manager: 娱乐任务仓储
-            trash_manager: 垃圾桶仓储
-            task_limit_service_factory: 返回任务上限服务的可调用对象
-            shortcut_manager: 快捷入口管理器（用于 JSON 导入导出），可为空
-        """
         self._session: "Session" = session
         self._daily: "DailyTaskManager" = daily_task_manager
         self._todo: "TodoTaskManager" = todo_task_manager
@@ -74,9 +63,16 @@ class TaskOrchestrator:
         status: Optional[str] = None,
         tag: Optional[str] = None,
         keyword: Optional[str] = None,
+        time_period_id: Optional[str] = None,
     ) -> List["DailyTask"]:
         """获取每日任务列表"""
-        return self._daily.get_tasks(weekday=weekday, status=status, tag=tag, keyword=keyword)  # type: ignore[no-any-return]
+        return self._daily.get_tasks(
+            weekday=weekday,
+            status=status,
+            tag=tag,
+            keyword=keyword,
+            time_period_id=time_period_id,
+        )  # type: ignore[no-any-return]
 
     def get_daily_task_by_id(self, task_id: str) -> Optional["DailyTask"]:
         return self._daily.get_by_id(task_id)  # type: ignore[no-any-return]
@@ -94,17 +90,17 @@ class TaskOrchestrator:
         priority: str = "normal",
         subtasks: str = "[]",
         estimated_duration: int = 0,
+        time_period_id: Optional[str] = None,
     ) -> "DailyTask":
         """创建每日任务，并校验数量上限"""
         logger.info(
-            "创建每日任务 | request_id=create_daily | title=%s week_day=%s",
-            title,
-            week_day,
+            "创建每日任务 | request_id=create_daily | title=%s week_day=%s time_period_id=%s",
+            title, week_day, time_period_id,
         )
         task = self._daily.create(
             title, description, week_day, completed, status,
             tags, shortcut_path, category, priority, subtasks,
-            estimated_duration,
+            estimated_duration, time_period_id,
         )
         self._limit_service_factory().enforce_limit("daily", DailyTask)
         return task  # type: ignore[no-any-return]
@@ -113,11 +109,7 @@ class TaskOrchestrator:
         return self._daily.update(task_id, **kwargs)  # type: ignore[no-any-return]
 
     def delete_daily_task(self, task_id: str) -> bool:
-        """删除单个每日任务并移入垃圾桶
-
-        注意：_daily.delete() 会先 commit 主库，move_to_trash 使用独立连接。
-        若 trash 操作失败，主库已提交无法回滚，仅记录错误日志。
-        """
+        """删除单个每日任务并移入垃圾桶"""
         task_data = self._daily.delete(task_id)
         if task_data is None:
             return False
@@ -128,8 +120,7 @@ class TaskOrchestrator:
             logger.error(
                 "垃圾桶操作失败（主库已提交），每日任务已删除但未入垃圾箱 | "
                 "request_id=delete_daily | task_id=%s",
-                task_id,
-                exc_info=True,
+                task_id, exc_info=True,
             )
         return True
 
@@ -157,8 +148,12 @@ class TaskOrchestrator:
         status: Optional[str] = None,
         tag: Optional[str] = None,
         keyword: Optional[str] = None,
+        time_period_id: Optional[str] = None,
     ) -> List["TodoTask"]:
-        return self._todo.get_tasks(status=status, tag=tag, keyword=keyword)  # type: ignore[no-any-return]
+        return self._todo.get_tasks(
+            status=status, tag=tag, keyword=keyword,
+            time_period_id=time_period_id,
+        )  # type: ignore[no-any-return]
 
     def get_todo_task_by_id(self, task_id: str) -> Optional["TodoTask"]:
         return self._todo.get_by_id(task_id)  # type: ignore[no-any-return]
@@ -176,16 +171,16 @@ class TaskOrchestrator:
         priority: str = "normal",
         subtasks: str = "[]",
         estimated_duration: int = 0,
+        time_period_id: Optional[str] = None,
     ) -> "TodoTask":
         logger.info(
-            "创建待办任务 | request_id=create_todo | title=%s deadline=%s",
-            title,
-            deadline,
+            "创建待办任务 | request_id=create_todo | title=%s deadline=%s time_period_id=%s",
+            title, deadline, time_period_id,
         )
         task = self._todo.create(
             title, description, deadline, completed, status,
             tags, shortcut_path, category, priority, subtasks,
-            estimated_duration,
+            estimated_duration, time_period_id,
         )
         self._limit_service_factory().enforce_limit("todo", TodoTask)
         return task  # type: ignore[no-any-return]
@@ -194,12 +189,7 @@ class TaskOrchestrator:
         return self._todo.update(task_id, **kwargs)  # type: ignore[no-any-return]
 
     def delete_todo_task(self, task_id: str) -> bool:
-        """删除待办任务并移入垃圾桶
-
-        两步跨独立连接，仅保证最终一致性：
-        - trash 成功则最终一致
-        - trash 失败则主库不变
-        """
+        """删除待办任务并移入垃圾桶"""
         task = self._todo.get_by_id(task_id)
         if not task:
             return False
@@ -210,19 +200,16 @@ class TaskOrchestrator:
         except Exception:
             logger.error(
                 "垃圾桶操作失败，放弃删除 | request_id=delete_todo | task_id=%s",
-                task_id,
-                exc_info=True,
+                task_id, exc_info=True,
             )
             return False
         self._session.delete(task)
         try:
             self._session.commit()
         except Exception:
-            # 主库提交失败，补偿：移除已入 trash 的记录
             logger.error(
                 "主库提交失败，补偿移除垃圾桶记录 | request_id=delete_todo | task_id=%s",
-                task_id,
-                exc_info=True,
+                task_id, exc_info=True,
             )
             self._session.rollback()
             try:
@@ -230,9 +217,7 @@ class TaskOrchestrator:
             except Exception:
                 logger.error(
                     "补偿失败，垃圾桶与主库状态不一致 | request_id=delete_todo | task_id=%s | trash_id=%s",
-                    task_id,
-                    trash_id,
-                    exc_info=True,
+                    task_id, trash_id, exc_info=True,
                 )
             return False
         return True
@@ -260,8 +245,12 @@ class TaskOrchestrator:
         status: Optional[str] = None,
         tag: Optional[str] = None,
         keyword: Optional[str] = None,
+        time_period_id: Optional[str] = None,
     ) -> List["EntertainmentTask"]:
-        return self._entertainment.get_tasks(status=status, tag=tag, keyword=keyword)  # type: ignore[no-any-return]
+        return self._entertainment.get_tasks(
+            status=status, tag=tag, keyword=keyword,
+            time_period_id=time_period_id,
+        )  # type: ignore[no-any-return]
 
     def get_entertainment_task_by_id(self, task_id: str) -> Optional["EntertainmentTask"]:
         return self._entertainment.get_by_id(task_id)  # type: ignore[no-any-return]
@@ -279,16 +268,16 @@ class TaskOrchestrator:
         priority: str = "normal",
         subtasks: str = "[]",
         estimated_duration: int = 0,
+        time_period_id: Optional[str] = None,
     ) -> "EntertainmentTask":
         logger.info(
-            "创建娱乐任务 | request_id=create_entertainment | title=%s fun_category=%s",
-            title,
-            fun_category,
+            "创建娱乐任务 | request_id=create_entertainment | title=%s fun_category=%s time_period_id=%s",
+            title, fun_category, time_period_id,
         )
         task = self._entertainment.create(
             title, description, fun_category, completed, status,
             tags, shortcut_path, category, priority, subtasks,
-            estimated_duration,
+            estimated_duration, time_period_id,
         )
         self._limit_service_factory().enforce_limit("entertainment", EntertainmentTask)
         return task  # type: ignore[no-any-return]
@@ -297,7 +286,7 @@ class TaskOrchestrator:
         return self._entertainment.update(task_id, **kwargs)  # type: ignore[no-any-return]
 
     def delete_entertainment_task(self, task_id: str) -> bool:
-        """删除娱乐任务并移入垃圾桶（事务保护：trash 失败则放弃，trash 成功但主库失败则补偿）"""
+        """删除娱乐任务并移入垃圾桶"""
         task = self._entertainment.get_by_id(task_id)
         if not task:
             return False
@@ -311,8 +300,7 @@ class TaskOrchestrator:
         except Exception:
             logger.error(
                 "垃圾桶操作失败，放弃删除 | request_id=delete_entertainment | task_id=%s",
-                task_id,
-                exc_info=True,
+                task_id, exc_info=True,
             )
             return False
         self._session.delete(task)
@@ -321,8 +309,7 @@ class TaskOrchestrator:
         except Exception:
             logger.error(
                 "主库提交失败，补偿移除垃圾桶记录 | request_id=delete_entertainment | task_id=%s",
-                task_id,
-                exc_info=True,
+                task_id, exc_info=True,
             )
             self._session.rollback()
             try:
@@ -330,9 +317,7 @@ class TaskOrchestrator:
             except Exception:
                 logger.error(
                     "补偿失败，垃圾桶与主库状态不一致 | request_id=delete_entertainment | task_id=%s | trash_id=%s",
-                    task_id,
-                    trash_id,
-                    exc_info=True,
+                    task_id, trash_id, exc_info=True,
                 )
             return False
         return True
@@ -364,18 +349,14 @@ class TaskOrchestrator:
     # ==================== JSON 导入导出 ====================
 
     def export_to_json(self, filepath: str = "tasks_export.json") -> bool:
-        """导出全部任务到 JSON 文件"""
         from handlers.json_handler import JsonExportImportHandler
-
         handler = JsonExportImportHandler(self._session, self._shortcut)
         result = handler.export_to_json(filepath)
         logger.info("导出 JSON | request_id=export_json | path=%s ok=%s", filepath, result)
         return result  # type: ignore[no-any-return]
 
     def import_from_json(self, filepath: str = "tasks_export.json") -> bool:
-        """从 JSON 文件导入任务"""
         from handlers.json_handler import JsonExportImportHandler
-
         handler = JsonExportImportHandler(self._session, self._shortcut)
         result = handler.import_from_json(filepath)
         logger.info("导入 JSON | request_id=import_json | path=%s ok=%s", filepath, result)

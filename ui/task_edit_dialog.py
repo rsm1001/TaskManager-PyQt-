@@ -27,6 +27,7 @@ class TaskEditDialog(QDialog):
         self.task = task
         self.data_manager = data_manager
         self._subtasks = []  # 仅 TODO 类型使用：list of {id, title, completed}
+        self._period_userdata_map = {}  # 显示文本 -> period_id（None 表示未设）
         self.init_ui()
         if task:
             self.load_task_data()
@@ -109,6 +110,17 @@ class TaskEditDialog(QDialog):
                 duration_layout.addWidget(btn)
             duration_layout.addStretch()
             layout.addLayout(duration_layout)
+
+            # 时段选择（三类任务共用，三选一位于各自底部，故此处也加）
+            period_layout = QHBoxLayout()
+            period_layout.addWidget(QLabel('时段:'))
+            self.period_combo = QComboBox()
+            self._populate_period_combo()
+            period_layout.addWidget(self.period_combo, 1)
+            refresh_btn = QPushButton("刷新")
+            refresh_btn.clicked.connect(self._populate_period_combo)
+            period_layout.addWidget(refresh_btn)
+            layout.addLayout(period_layout)
         elif self.task_type == TaskType.TODO:
             deadline_layout = QHBoxLayout()
             deadline_layout.addWidget(QLabel('截止日期:'))
@@ -188,6 +200,17 @@ class TaskEditDialog(QDialog):
                 duration_layout.addWidget(btn)
             duration_layout.addStretch()
             layout.addLayout(duration_layout)
+
+            # 时段选择
+            period_layout = QHBoxLayout()
+            period_layout.addWidget(QLabel('时段:'))
+            self.period_combo = QComboBox()
+            self._populate_period_combo()
+            period_layout.addWidget(self.period_combo, 1)
+            refresh_btn = QPushButton("刷新")
+            refresh_btn.clicked.connect(self._populate_period_combo)
+            period_layout.addWidget(refresh_btn)
+            layout.addLayout(period_layout)
         elif self.task_type == TaskType.ENTERTAINMENT:
             category_layout = QHBoxLayout()
             category_layout.addWidget(QLabel('类别:'))
@@ -236,6 +259,17 @@ class TaskEditDialog(QDialog):
                 duration_layout.addWidget(btn)
             duration_layout.addStretch()
             layout.addLayout(duration_layout)
+
+            # 时段选择
+            period_layout = QHBoxLayout()
+            period_layout.addWidget(QLabel('时段:'))
+            self.period_combo = QComboBox()
+            self._populate_period_combo()
+            period_layout.addWidget(self.period_combo, 1)
+            refresh_btn = QPushButton("刷新")
+            refresh_btn.clicked.connect(self._populate_period_combo)
+            period_layout.addWidget(refresh_btn)
+            layout.addLayout(period_layout)
 
         # 子任务（检查项）区域——三类任务共用
         self._build_subtasks_section(layout)
@@ -449,6 +483,37 @@ class TaskEditDialog(QDialog):
                 index = self.folder_combo.count() - 1
             self.folder_combo.setCurrentIndex(index)
 
+    def _populate_period_combo(self):
+        """刷新时段下拉框的选项：未设时段 + 所有时段。"""
+        if not hasattr(self, "period_combo"):
+            return
+        # 记录当前值
+        current_id = self._period_userdata_map.get(self.period_combo.currentText())
+        self.period_combo.blockSignals(True)
+        self.period_combo.clear()
+        self._period_userdata_map = {}
+        # 第一个固定为"未设时段"
+        self.period_combo.addItem("未设时段", "")
+        self._period_userdata_map["未设时段"] = ""
+        if self.data_manager:
+            try:
+                periods = self.data_manager.get_all_time_periods()
+                for p in periods:
+                    display = p.name
+                    self.period_combo.addItem(display, p.id)
+                    self._period_userdata_map[display] = p.id
+            except Exception:
+                # 时段管理器异常时保持单一选项，不阻断编辑
+                pass
+        # 恢复选中
+        target_index = 0
+        for i in range(self.period_combo.count()):
+            if self.period_combo.itemData(i) == current_id:
+                target_index = i
+                break
+        self.period_combo.setCurrentIndex(target_index)
+        self.period_combo.blockSignals(False)
+
     def load_task_data(self):
         """加载任务数据到表单"""
         if self.task:
@@ -516,6 +581,15 @@ class TaskEditDialog(QDialog):
                 duration = getattr(self.task, 'estimated_duration', 0) or 0
                 self.duration_spin.setValue(duration)
 
+            # 加载时段
+            if hasattr(self, 'period_combo'):
+                self._populate_period_combo()
+                cur_id = getattr(self.task, 'time_period_id', None) or ""
+                for i in range(self.period_combo.count()):
+                    if self.period_combo.itemData(i) == cur_id:
+                        self.period_combo.setCurrentIndex(i)
+                        break
+
     def get_data(self):
         """获取表单数据"""
         # 状态映射
@@ -558,5 +632,9 @@ class TaskEditDialog(QDialog):
         # 用时预估
         if hasattr(self, 'duration_spin'):
             data['estimated_duration'] = self.duration_spin.value()
+
+        # 时段：根据下拉框当前选项还原 period_id（空串表示未设）
+        if hasattr(self, 'period_combo'):
+            data['time_period_id'] = self.period_combo.itemData(self.period_combo.currentIndex()) or ""
 
         return data

@@ -17,7 +17,9 @@ class TodoTaskManager:
 
     # ==================== 查询 ====================
 
-    def get_tasks(self, status: Optional[str] = None, tag: Optional[str] = None, keyword: Optional[str] = None) -> List[TodoTask]:
+    def get_tasks(self, status: Optional[str] = None, tag: Optional[str] = None,
+                  keyword: Optional[str] = None,
+                  time_period_id: Optional[str] = None) -> List[TodoTask]:
         """获取待办任务列表
 
         Args:
@@ -25,6 +27,7 @@ class TodoTaskManager:
                     其他值（pending/completed/abandoned）精确匹配 status 字段
             tag: 标签过滤（模糊包含）
             keyword: 关键词筛选（模糊匹配 title/description/tags/category）
+            time_period_id: 时段筛选；None 不过滤；"" 仅查未设；其它精确匹配
         """
         query = self.session.query(TodoTask)
 
@@ -53,6 +56,8 @@ class TodoTaskManager:
                 (TodoTask.category.ilike(kw))
             )
 
+        query = self._apply_time_period_filter(query, time_period_id)
+
         return query.order_by(
             case(PRIORITY_RANK, value=TodoTask.priority, else_=3).desc(),
             case((TodoTask.deadline == '') | (TodoTask.deadline.is_(None)), else_='9999-12-31'),
@@ -64,19 +69,39 @@ class TodoTaskManager:
         """根据ID获取任务"""
         return self.session.query(TodoTask).filter(TodoTask.id == task_id).first()
 
+    def _apply_time_period_filter(self, query, time_period_id):
+        """通用时段筛选：返回过滤后的 query（必须回传，因 chain 返回新对象）"""
+        if time_period_id is None:
+            return query
+        if time_period_id == "":
+            return query.filter(
+                (TodoTask.time_period_id.is_(None)) | (TodoTask.time_period_id == "")
+            )
+        return query.filter(TodoTask.time_period_id == time_period_id)
+
+    def clear_time_period_refs(self, period_id: str) -> int:
+        """把所有 time_period_id 等于 period_id 的记录的时段引用清空（保留任务）。"""
+        count = self.session.query(TodoTask).filter(
+            TodoTask.time_period_id == period_id
+        ).update({"time_period_id": None})
+        self.session.commit()
+        return count
+
     # ==================== 增删改 ====================
 
     def create(self, title: str, description: str = "", deadline: str = "",
                completed: bool = False, status: str = "pending", tags: str = "",
                shortcut_path: str = "", category: str = "",
                priority: str = "normal", subtasks: str = "[]",
-               estimated_duration: int = 0) -> TodoTask:
+               estimated_duration: int = 0,
+               time_period_id: Optional[str] = None) -> TodoTask:
         """创建待办任务"""
         task = TodoTask(
             title=title, description=description, deadline=deadline,
             completed=completed, status=status, tags=tags, shortcut_path=shortcut_path,
             category=category, priority=priority, subtasks=subtasks,
-            estimated_duration=estimated_duration
+            estimated_duration=estimated_duration,
+            time_period_id=time_period_id,
         )
         self.session.add(task)
         self.session.commit()
@@ -196,6 +221,7 @@ class TodoTaskManager:
             'priority': task.priority or 'normal',
             'subtasks': task.subtasks or '[]',
             'estimated_duration': task.estimated_duration or 0,
+            'time_period_id': task.time_period_id or '',
             'created_at': task.created_at.isoformat() if task.created_at else '',
             'updated_at': task.updated_at.isoformat() if task.updated_at else '',
         }

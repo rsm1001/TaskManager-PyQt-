@@ -501,6 +501,17 @@ class TaskManagerMainWindow(QMainWindow):
         dialog = PomodoroConfigDialog(self, self.data_manager)
         dialog.exec()
 
+    def show_time_period_settings(self):
+        """打开时段设置对话框；任何变更后刷新 UI。"""
+        from dialogs.time_period_dialog import TimePeriodDialog
+        from components.ui_components import refresh_all_time_period_combos
+        dialog = TimePeriodDialog(self, self.data_manager)
+        # 任一时段变更后，让筛选下拉框与表格时段列都同步
+        dialog.updated.connect(
+            lambda: refresh_all_time_period_combos(self)
+        )
+        dialog.exec()
+
     def show_json_examples(self):
         """显示JSON导入示例"""
         dialog = JsonExamplesDialog(self)

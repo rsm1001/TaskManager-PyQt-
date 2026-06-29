@@ -16,13 +16,16 @@ class EntertainmentTaskManager:
 
     # ==================== 查询 ====================
 
-    def get_tasks(self, status: Optional[str] = None, tag: Optional[str] = None, keyword: Optional[str] = None) -> List[EntertainmentTask]:
+    def get_tasks(self, status: Optional[str] = None, tag: Optional[str] = None,
+                  keyword: Optional[str] = None,
+                  time_period_id: Optional[str] = None) -> List[EntertainmentTask]:
         """获取娱乐任务列表
 
         Args:
             status: 状态筛选，None/'all' 不过滤
             tag: 标签筛选（模糊包含），None 不过滤
             keyword: 关键词筛选（模糊匹配 title/description/tags/category）
+            time_period_id: 时段筛选；None 不过滤；"" 仅查未设；其它精确匹配
         """
         query = self.session.query(EntertainmentTask)
 
@@ -41,6 +44,8 @@ class EntertainmentTaskManager:
                 (EntertainmentTask.category.ilike(kw))
             )
 
+        query = self._apply_time_period_filter(query, time_period_id)
+
         return query.order_by(
             case(PRIORITY_RANK, value=EntertainmentTask.priority, else_=3).desc(),
             EntertainmentTask.title
@@ -50,19 +55,39 @@ class EntertainmentTaskManager:
         """根据ID获取任务"""
         return self.session.query(EntertainmentTask).filter(EntertainmentTask.id == task_id).first()
 
+    def _apply_time_period_filter(self, query, time_period_id):
+        """通用时段筛选：返回过滤后的 query（必须回传，因 chain 返回新对象）"""
+        if time_period_id is None:
+            return query
+        if time_period_id == "":
+            return query.filter(
+                (EntertainmentTask.time_period_id.is_(None)) | (EntertainmentTask.time_period_id == "")
+            )
+        return query.filter(EntertainmentTask.time_period_id == time_period_id)
+
+    def clear_time_period_refs(self, period_id: str) -> int:
+        """把所有 time_period_id 等于 period_id 的记录的时段引用清空（保留任务）。"""
+        count = self.session.query(EntertainmentTask).filter(
+            EntertainmentTask.time_period_id == period_id
+        ).update({"time_period_id": None})
+        self.session.commit()
+        return count
+
     # ==================== 增删改 ====================
 
     def create(self, title: str, description: str = "", fun_category: str = "general",
                completed: bool = False, status: str = "pending", tags: str = "",
                shortcut_path: str = "", category: str = "",
                priority: str = "normal", subtasks: str = "[]",
-               estimated_duration: int = 0) -> EntertainmentTask:
+               estimated_duration: int = 0,
+               time_period_id: Optional[str] = None) -> EntertainmentTask:
         """创建娱乐任务"""
         task = EntertainmentTask(
             title=title, description=description, fun_category=fun_category,
             completed=completed, status=status, tags=tags, shortcut_path=shortcut_path,
             category=category, priority=priority, subtasks=subtasks,
-            estimated_duration=estimated_duration
+            estimated_duration=estimated_duration,
+            time_period_id=time_period_id,
         )
         self.session.add(task)
         self.session.commit()
@@ -142,6 +167,7 @@ class EntertainmentTaskManager:
             'priority': task.priority or 'normal',
             'subtasks': task.subtasks or '[]',
             'estimated_duration': task.estimated_duration or 0,
+            'time_period_id': task.time_period_id or '',
             'created_at': task.created_at.isoformat() if task.created_at else '',
             'updated_at': task.updated_at.isoformat() if task.updated_at else '',
         }

@@ -34,6 +34,29 @@ class BaseModel(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
+class TimePeriod(BaseModel):
+    """时段模型
+
+    一个时段描述"某段时间归属"（如 早晨 / 上午 / 下午 / 晚上 / 深夜 等）。
+    任务通过 time_period_id 外键引用本表，因此重命名一个时段后，
+    全部任务的显示文本会跟随更新。
+
+    Attributes:
+        name: 时段名称（界面显示文本）
+        start_time: 起始时间（HH:MM 字符串，可空）
+        end_time: 结束时间（HH:MM 字符串，可空）
+        order_index: 列表排序权重，越小越靠前
+        color: 单元格底色（可空）
+    """
+    __tablename__ = 'time_periods'
+
+    name = Column(String(50), nullable=False, unique=True)
+    start_time = Column(String(10), default='')
+    end_time = Column(String(10), default='')
+    order_index = Column(Integer, default=0)
+    color = Column(String(20), default='')
+
+
 class DailyTask(BaseModel):
     """每日任务模型
 
@@ -63,6 +86,7 @@ class DailyTask(BaseModel):
     priority = Column(String(20), default="normal")  # high, normal, low
     subtasks = Column(Text, default='[]')  # 子任务（检查项）JSON 字符串，list of {id, title, completed}
     estimated_duration = Column(Integer, default=0)  # 用时预估（分钟）
+    time_period_id = Column(String(50))  # 时段 ID（外键引用 time_periods.id）
 
 
 class TodoTask(BaseModel):
@@ -96,6 +120,7 @@ class TodoTask(BaseModel):
     priority = Column(String(20), default="normal")  # high, normal, low
     subtasks = Column(Text, default='[]')  # 子任务（检查项）JSON 字符串，list of {id, title, completed}
     estimated_duration = Column(Integer, default=0)  # 用时预估（分钟）
+    time_period_id = Column(String(50))  # 时段 ID（外键引用 time_periods.id）
 
 
 class EntertainmentTask(BaseModel):
@@ -127,6 +152,7 @@ class EntertainmentTask(BaseModel):
     priority = Column(String(20), default="normal")  # high, normal, low
     subtasks = Column(Text, default='[]')  # 子任务（检查项）JSON 字符串，list of {id, title, completed}
     estimated_duration = Column(Integer, default=0)  # 用时预估（分钟）
+    time_period_id = Column(String(50))  # 时段 ID（外键引用 time_periods.id）
 
 
 class Config(BaseModel):
@@ -297,6 +323,28 @@ def migrate_db(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE entertainment_tasks ADD COLUMN estimated_duration INTEGER DEFAULT 0"))
             conn.commit()
         logger.info("已添加 entertainment_tasks.estimated_duration 字段")
+
+    # 检查并添加 time_period_id 字段（三类任务引用 time_periods.id）
+    daily_columns = [col['name'] for col in inspector.get_columns('daily_tasks')]
+    if 'time_period_id' not in daily_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE daily_tasks ADD COLUMN time_period_id VARCHAR(50)"))
+            conn.commit()
+        logger.info("已添加 daily_tasks.time_period_id 字段")
+
+    todo_columns = [col['name'] for col in inspector.get_columns('todo_tasks')]
+    if 'time_period_id' not in todo_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE todo_tasks ADD COLUMN time_period_id VARCHAR(50)"))
+            conn.commit()
+        logger.info("已添加 todo_tasks.time_period_id 字段")
+
+    entertainment_columns = [col['name'] for col in inspector.get_columns('entertainment_tasks')]
+    if 'time_period_id' not in entertainment_columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE entertainment_tasks ADD COLUMN time_period_id VARCHAR(50)"))
+            conn.commit()
+        logger.info("已添加 entertainment_tasks.time_period_id 字段")
 
     # 清理 category 字段中的旧数据（之前用于存储任务类型，现改为用户分类）
     # 将值为 'daily', 'todo', 'entertainment' 的记录清空

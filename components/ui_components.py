@@ -31,6 +31,48 @@ def on_tag_filter_clicked(parent_window, tag: str, task_type: str):
         parent_window.load_entertainment_tasks()
 
 
+def _init_time_period_combo(parent_window, task_type: str):
+    """初始化表格上方的"时段筛选"下拉框
+
+    - 第一个固定为"全部时段"（哨兵 __ALL__ → 不过滤）
+    - 然后是已存在的时段（按名字升序，绑定真实 id）
+    - 最后是"未设时段"（哨兵 __NONE__ → time_period_id 为空）
+
+    使用字符串哨兵而非 None，能避免与任意合法 id 冲突，也让过滤逻辑更稳。
+    """
+    from services.table_operations import _SENTINEL_ALL, _SENTINEL_NONE
+    combo = getattr(parent_window, f'{task_type}_time_period_combo', None)
+    if combo is None:
+        return
+    combo.blockSignals(True)
+    combo.clear()
+    combo.addItem('全部时段', _SENTINEL_ALL)
+    periods = []
+    try:
+        if hasattr(parent_window, 'data_manager') and parent_window.data_manager:
+            periods = parent_window.data_manager.get_all_time_periods()
+    except Exception:
+        periods = []
+    for p in periods:
+        combo.addItem(p.name, p.id)
+    combo.addItem('未设时段', _SENTINEL_NONE)
+    combo.setCurrentIndex(0)
+    combo.blockSignals(False)
+
+
+def refresh_all_time_period_combos(parent_window):
+    """时段集合变更后（如增删/重命名），刷新所有筛选下拉框并触发重新加载"""
+    for task_type in ('daily', 'todo', 'entertainment'):
+        _init_time_period_combo(parent_window, task_type)
+    # 重载表格让"时段"列显示同步更新
+    if hasattr(parent_window, 'load_daily_tasks'):
+        parent_window.load_daily_tasks()
+    if hasattr(parent_window, 'load_todo_tasks'):
+        parent_window.load_todo_tasks()
+    if hasattr(parent_window, 'load_entertainment_tasks'):
+        parent_window.load_entertainment_tasks()
+
+
 def _wrap_edit_handler(handler):
     """包装编辑事件处理器，拦截对状态栏(列0)的双击"""
     def wrapper(row, col):
@@ -105,12 +147,19 @@ def create_daily_tab_ui(parent_window):
     parent_window.daily_status_combo.currentTextChanged.connect(parent_window.load_daily_tasks)
     daily_control_layout.addWidget(parent_window.daily_status_combo)
 
+    # 时段筛选
+    daily_control_layout.addWidget(QLabel('时段:'))
+    parent_window.daily_time_period_combo = QComboBox()
+    _init_time_period_combo(parent_window, 'daily')
+    parent_window.daily_time_period_combo.currentTextChanged.connect(parent_window.load_daily_tasks)
+    daily_control_layout.addWidget(parent_window.daily_time_period_combo)
+
     daily_layout.addLayout(daily_control_layout)
 
     # 任务表格
     parent_window.daily_table = QTableWidget()
-    parent_window.daily_table.setColumnCount(9)
-    parent_window.daily_table.setHorizontalHeaderLabels(['状态', '标题', '分类', '星期', '标签', '用时(分钟)', '描述', '创建日期', '优先级'])
+    parent_window.daily_table.setColumnCount(10)
+    parent_window.daily_table.setHorizontalHeaderLabels(['状态', '标题', '分类', '星期', '标签', '用时(分钟)', '描述', '创建日期', '优先级', '时段'])
     parent_window.daily_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.daily_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     parent_window.daily_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -169,12 +218,19 @@ def create_todo_tab_ui(parent_window):
     parent_window.todo_status_combo.currentTextChanged.connect(parent_window.load_todo_tasks)
     todo_control_layout.addWidget(parent_window.todo_status_combo)
 
+    # 时段筛选
+    todo_control_layout.addWidget(QLabel('时段:'))
+    parent_window.todo_time_period_combo = QComboBox()
+    _init_time_period_combo(parent_window, 'todo')
+    parent_window.todo_time_period_combo.currentTextChanged.connect(parent_window.load_todo_tasks)
+    todo_control_layout.addWidget(parent_window.todo_time_period_combo)
+
     todo_layout.addLayout(todo_control_layout)
 
     # 任务表格
     parent_window.todo_table = QTableWidget()
-    parent_window.todo_table.setColumnCount(10)
-    parent_window.todo_table.setHorizontalHeaderLabels(['状态', '标题', '截止日期', '分类', '紧急程度', '标签', '用时(分钟)', '描述', '创建日期', '优先级'])
+    parent_window.todo_table.setColumnCount(11)
+    parent_window.todo_table.setHorizontalHeaderLabels(['状态', '标题', '截止日期', '分类', '紧急程度', '标签', '用时(分钟)', '描述', '创建日期', '优先级', '时段'])
     parent_window.todo_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.todo_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     parent_window.todo_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -237,12 +293,19 @@ def create_entertainment_tab_ui(parent_window):
     parent_window.entertainment_status_combo.currentTextChanged.connect(parent_window.load_entertainment_tasks)
     entertainment_control_layout.addWidget(parent_window.entertainment_status_combo)
 
+    # 时段筛选
+    entertainment_control_layout.addWidget(QLabel('时段:'))
+    parent_window.entertainment_time_period_combo = QComboBox()
+    _init_time_period_combo(parent_window, 'entertainment')
+    parent_window.entertainment_time_period_combo.currentTextChanged.connect(parent_window.load_entertainment_tasks)
+    entertainment_control_layout.addWidget(parent_window.entertainment_time_period_combo)
+
     entertainment_layout.addLayout(entertainment_control_layout)
 
     # 任务表格
     parent_window.entertainment_table = QTableWidget()
-    parent_window.entertainment_table.setColumnCount(9)
-    parent_window.entertainment_table.setHorizontalHeaderLabels(['状态', '标题', '类别', '分类', '标签', '用时(分钟)', '描述', '创建日期', '优先级'])
+    parent_window.entertainment_table.setColumnCount(10)
+    parent_window.entertainment_table.setHorizontalHeaderLabels(['状态', '标题', '类别', '分类', '标签', '用时(分钟)', '描述', '创建日期', '优先级', '时段'])
     parent_window.entertainment_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     parent_window.entertainment_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     parent_window.entertainment_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)

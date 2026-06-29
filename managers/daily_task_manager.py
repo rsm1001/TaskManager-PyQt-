@@ -16,7 +16,8 @@ class DailyTaskManager:
     def __init__(self, session):
         self.session = session
 
-    def get_tasks(self, weekday: str = None, status: str = None, tag: str = None, keyword: str = None) -> List[DailyTask]:
+    def get_tasks(self, weekday: str = None, status: str = None, tag: str = None, keyword: str = None,
+                  time_period_id: str = None) -> List[DailyTask]:
         """获取每日任务列表
 
         Args:
@@ -24,6 +25,7 @@ class DailyTaskManager:
             status: 状态筛选，None/'all' 不过滤
             tag: 标签筛选（模糊包含），None 不过滤
             keyword: 关键词筛选（模糊匹配 title/description/tags/category），None 不过滤
+            time_period_id: 时段筛选；None 不过滤；空串 "" 表示仅查未设时段；其它值精确匹配
         """
         query = self.session.query(DailyTask)
 
@@ -52,6 +54,8 @@ class DailyTaskManager:
                 (DailyTask.category.ilike(kw))
             )
 
+        query = self._apply_time_period_filter(query, time_period_id)
+
         return query.order_by(
             case(PRIORITY_RANK, value=DailyTask.priority, else_=3).desc(),
             DailyTask.title
@@ -61,17 +65,45 @@ class DailyTaskManager:
         """根据ID获取每日任务"""
         return self.session.query(DailyTask).filter(DailyTask.id == task_id).first()
 
+    def _apply_time_period_filter(self, query, time_period_id):
+        """通用时段筛选：返回过滤后的 query
+
+        - time_period_id 为 None → 不过滤
+        - time_period_id 为空串 → 仅查未设时段（time_period_id IS NULL OR == ''）
+        - 其它值              → 精确匹配对应 id
+
+        一定要把结果回传：query.filter() 链是返回新 query 对象的，
+        本地重赋值不会影响调用方的 query 变量。
+        """
+        if time_period_id is None:
+            return query
+        if time_period_id == "":
+            return query.filter(
+                (DailyTask.time_period_id.is_(None)) | (DailyTask.time_period_id == "")
+            )
+        return query.filter(DailyTask.time_period_id == time_period_id)
+
+    def clear_time_period_refs(self, period_id: str) -> int:
+        """把所有 time_period_id 等于 period_id 的记录的时段引用清空（保留任务）。"""
+        count = self.session.query(DailyTask).filter(
+            DailyTask.time_period_id == period_id
+        ).update({"time_period_id": None})
+        self.session.commit()
+        return count
+
     def create(self, title: str, description: str = "", week_day: str = "",
                completed: bool = False, status: str = "pending",
                tags: str = "", shortcut_path: str = "", category: str = "",
                priority: str = "normal", subtasks: str = "[]",
-               estimated_duration: int = 0) -> DailyTask:
+               estimated_duration: int = 0,
+               time_period_id: str = None) -> DailyTask:
         """创建每日任务"""
         task = DailyTask(
             title=title, description=description, week_day=week_day,
             completed=completed, status=status, tags=tags, shortcut_path=shortcut_path,
             category=category, priority=priority, subtasks=subtasks,
-            estimated_duration=estimated_duration
+            estimated_duration=estimated_duration,
+            time_period_id=time_period_id,
         )
         self.session.add(task)
         self.session.commit()
@@ -109,6 +141,7 @@ class DailyTaskManager:
             'priority': task.priority or 'normal',
             'subtasks': task.subtasks or '[]',
             'estimated_duration': task.estimated_duration or 0,
+            'time_period_id': task.time_period_id or '',
             'created_at': task.created_at.isoformat() if task.created_at else '',
             'updated_at': task.updated_at.isoformat() if task.updated_at else '',
         }

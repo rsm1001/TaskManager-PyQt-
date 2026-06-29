@@ -6,7 +6,7 @@ import json
 import uuid
 import logging
 from datetime import datetime, date
-from models.model import DailyTask, TodoTask, EntertainmentTask, Config
+from models.model import DailyTask, TodoTask, EntertainmentTask, Config, TimePeriod
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +27,23 @@ class JsonExportImportHandler:
                 "entertainment": [],
                 "shortcuts": [],
                 "history": [],
-                "config": {}
+                "config": {},
+                "time_periods": [],
             }
-            
+
+            # 导出时段
+            for period in self.session.query(TimePeriod).all():
+                data["time_periods"].append({
+                    "id": period.id,
+                    "name": period.name,
+                    "start_time": period.start_time or "",
+                    "end_time": period.end_time or "",
+                    "order_index": period.order_index or 0,
+                    "color": period.color or "",
+                    "created_at": period.created_at.strftime("%Y-%m-%d") if period.created_at else "",
+                    "updated_at": period.updated_at.strftime("%Y-%m-%d") if period.updated_at else "",
+                })
+
             # 导出每日任务
             for task in self.session.query(DailyTask).all():
                 data["daily"].append({
@@ -43,7 +57,9 @@ class JsonExportImportHandler:
                     "status": task.status or "pending",
                     "tags": task.tags or "",
                     "priority": getattr(task, 'priority', 'normal'),
-                    "subtasks": getattr(task, 'subtasks', '[]') or '[]'
+                    "subtasks": getattr(task, 'subtasks', '[]') or '[]',
+                    "estimated_duration": getattr(task, 'estimated_duration', 0) or 0,
+                    "time_period_id": getattr(task, 'time_period_id', None) or "",
                 })
 
             # 导出待办事项
@@ -60,7 +76,9 @@ class JsonExportImportHandler:
                     "status": task.status or "pending",
                     "tags": task.tags or "",
                     "priority": getattr(task, 'priority', 'normal'),
-                    "subtasks": getattr(task, 'subtasks', '[]') or '[]'
+                    "subtasks": getattr(task, 'subtasks', '[]') or '[]',
+                    "estimated_duration": getattr(task, 'estimated_duration', 0) or 0,
+                    "time_period_id": getattr(task, 'time_period_id', None) or "",
                 })
 
             # 导出娱乐任务
@@ -76,7 +94,9 @@ class JsonExportImportHandler:
                     "status": task.status or "pending",
                     "tags": task.tags or "",
                     "priority": getattr(task, 'priority', 'normal'),
-                    "subtasks": getattr(task, 'subtasks', '[]') or '[]'
+                    "subtasks": getattr(task, 'subtasks', '[]') or '[]',
+                    "estimated_duration": getattr(task, 'estimated_duration', 0) or 0,
+                    "time_period_id": getattr(task, 'time_period_id', None) or "",
                 })
 
             # 导出快捷入口
@@ -128,11 +148,12 @@ class JsonExportImportHandler:
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            
+
             # 清空现有数据
             self.session.query(DailyTask).delete()
             self.session.query(TodoTask).delete()
             self.session.query(EntertainmentTask).delete()
+            self.session.query(TimePeriod).delete()
             self.session.query(Config).delete()
 
             # 清空快捷入口和历史记录（使用原生连接）
@@ -140,19 +161,45 @@ class JsonExportImportHandler:
                 self.shortcut_manager._conn.execute("DELETE FROM shortcut_entries")
                 self.shortcut_manager._conn.execute("DELETE FROM shortcut_history")
                 self.shortcut_manager._conn.commit()
-            
+
+            # 1. 先导入时段，构建旧 id -> 新 id 的映射（保持任务引用一致）
+            old_period_id_to_new = {}
+            for period_data in data.get("time_periods", []):
+                created_at_str = period_data.get("created_at", "")
+                try:
+                    created_at = datetime.strptime(created_at_str, "%Y-%m-%d") if created_at_str else datetime.now()
+                except ValueError:
+                    created_at = datetime.now()
+                period = TimePeriod(
+                    id=period_data.get("id") or str(uuid.uuid4()),
+                    name=period_data.get("name", ""),
+                    start_time=period_data.get("start_time", "") or "",
+                    end_time=period_data.get("end_time", "") or "",
+                    order_index=int(period_data.get("order_index", 0) or 0),
+                    color=period_data.get("color", "") or "",
+                    created_at=created_at,
+                )
+                self.session.add(period)
+                old_period_id_to_new[period.id] = period.id
+            self.session.flush()
+
+            def _resolve_period_id(value):
+                """根据导入数据还原 time_period_id；旧 id 找不到则置空"""
+                if not value:
+                    return None
+                return old_period_id_to_new.get(value, None)
+
             # 导入每日任务
             if "daily" in data:
                 for task_data in data["daily"]:
-                    # 使用合理的默认值
                     created_at_str = task_data.get("created_at", date.today().strftime("%Y-%m-%d"))
                     try:
                         created_at = datetime.strptime(created_at_str, "%Y-%m-%d")
                     except ValueError:
                         created_at = datetime.now()
-                        
+
                     task = DailyTask(
-                        id=task_data.get("id", str(uuid.uuid4())),  # 生成新ID以防冲突
+                        id=task_data.get("id", str(uuid.uuid4())),
                         title=task_data.get("title", ""),
                         description=task_data.get("description", ""),
                         completed=task_data.get("completed", False),
@@ -161,14 +208,15 @@ class JsonExportImportHandler:
                         status=task_data.get("status", "pending"),
                         tags=task_data.get("tags", ""),
                         priority=task_data.get("priority", "normal"),
-                        subtasks=task_data.get("subtasks", "[]")
+                        subtasks=task_data.get("subtasks", "[]"),
+                        estimated_duration=task_data.get("estimated_duration", 0) or 0,
+                        time_period_id=_resolve_period_id(task_data.get("time_period_id")),
                     )
                     self.session.add(task)
 
             # 导入待办事项
             if "todo" in data:
                 for task_data in data["todo"]:
-                    # 使用合理的默认值
                     created_at_str = task_data.get("created_at", date.today().strftime("%Y-%m-%d"))
                     try:
                         created_at = datetime.strptime(created_at_str, "%Y-%m-%d")
@@ -176,7 +224,7 @@ class JsonExportImportHandler:
                         created_at = datetime.now()
 
                     task = TodoTask(
-                        id=task_data.get("id", str(uuid.uuid4())),  # 生成新ID以防冲突
+                        id=task_data.get("id", str(uuid.uuid4())),
                         title=task_data.get("title", ""),
                         description=task_data.get("description", ""),
                         completed=task_data.get("completed", False),
@@ -186,14 +234,15 @@ class JsonExportImportHandler:
                         status=task_data.get("status", "pending"),
                         tags=task_data.get("tags", ""),
                         priority=task_data.get("priority", "normal"),
-                        subtasks=task_data.get("subtasks", "[]")
+                        subtasks=task_data.get("subtasks", "[]"),
+                        estimated_duration=task_data.get("estimated_duration", 0) or 0,
+                        time_period_id=_resolve_period_id(task_data.get("time_period_id")),
                     )
                     self.session.add(task)
 
             # 导入娱乐任务
             if "entertainment" in data:
                 for task_data in data["entertainment"]:
-                    # 使用合理的默认值
                     created_at_str = task_data.get("created_at", date.today().strftime("%Y-%m-%d"))
                     try:
                         created_at = datetime.strptime(created_at_str, "%Y-%m-%d")
@@ -201,7 +250,7 @@ class JsonExportImportHandler:
                         created_at = datetime.now()
 
                     task = EntertainmentTask(
-                        id=task_data.get("id", str(uuid.uuid4())),  # 生成新ID以防冲突
+                        id=task_data.get("id", str(uuid.uuid4())),
                         title=task_data.get("title", ""),
                         description=task_data.get("description", ""),
                         completed=task_data.get("completed", False),
@@ -210,7 +259,9 @@ class JsonExportImportHandler:
                         status=task_data.get("status", "pending"),
                         tags=task_data.get("tags", ""),
                         priority=task_data.get("priority", "normal"),
-                        subtasks=task_data.get("subtasks", "[]")
+                        subtasks=task_data.get("subtasks", "[]"),
+                        estimated_duration=task_data.get("estimated_duration", 0) or 0,
+                        time_period_id=_resolve_period_id(task_data.get("time_period_id")),
                     )
                     self.session.add(task)
 

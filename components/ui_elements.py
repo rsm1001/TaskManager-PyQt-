@@ -55,6 +55,13 @@ def create_menu_bar(window):
     pomodoro_config_action.triggered.connect(window.show_pomodoro_config)
     pomodoro_menu.addAction(pomodoro_config_action)
 
+    pomodoro_menu.addSeparator()
+
+    # 时段设置：与番茄钟同菜单（任务类工具在此聚类）
+    time_period_action = QAction('时段设置...', window)
+    time_period_action.triggered.connect(window.show_time_period_settings)
+    pomodoro_menu.addAction(time_period_action)
+
     # 工具菜单
     tools_menu = menubar.addMenu('工具')
 
@@ -108,8 +115,9 @@ def create_toolbar(window):
     """创建工具栏"""
     toolbar = window.addToolBar('工具栏')
 
-    # 番茄钟
+    # 番茄钟 + 任务分类辅助（与番茄钟菜单同聚类）
     toolbar.addAction('🍅 番茄钟', window.show_pomodoro)
+    toolbar.addAction('⏰ 时段设置', window.show_time_period_settings)
     toolbar.addAction('🎯 舒尔特', window.show_schulte_grid)
 
     toolbar.addSeparator()

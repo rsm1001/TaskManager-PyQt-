@@ -37,6 +37,43 @@ def _get_status_filter(status_text):
     return config.STATUS_FILTER_MAP.get(status_text, 'all')
 
 
+# 时段筛选下拉的特殊值（与 _init_time_period_combo / TimePeriodDialog 保持一致）
+_SENTINEL_ALL = "__ALL__"        # "全部时段"
+_SENTINEL_NONE = "__NONE__"      # "未设时段"
+
+
+def _get_time_period_filter(combo):
+    """从时段筛选下拉框读取筛选值（使用字符串哨兵避免与合法 id 冲突）
+
+    返回：
+        - None               → 不过滤
+        - ''                 → 只看未设时段（time_period_id 为 NULL 或空串）
+        - 字符串 id           → 精确匹配对应 id
+    """
+    if combo is None:
+        return None
+    data = combo.currentData()
+    text = combo.currentText()
+    if data is None:
+        # 旧版本可能用了 addItem('全部时段', None)；靠文本兜底
+        if text == '未设时段':
+            return ''
+        return None
+    if data == _SENTINEL_ALL:
+        return None
+    if data == _SENTINEL_NONE:
+        return ''
+    return data  # type: ignore[no-any-return]    # ===== 时段列渲染辅助 =====
+
+
+def _render_time_period(window, task) -> str:
+    """时段列渲染：使用「名称 起止」的复合显示串"""
+    pid = getattr(task, 'time_period_id', None)
+    if not window or not getattr(window, 'data_manager', None):
+        return ""
+    return window.data_manager.resolve_time_period_display(pid)
+
+
 def load_search_results_to_table(window):
     """加载全局搜索结果到搜索结果表格"""
     keyword = getattr(window, 'search_input', None)
@@ -209,8 +246,12 @@ def load_daily_tasks_to_table(window):
 
     status_filter = _get_status_filter(window.daily_status_combo.currentText())
     tag_filter = getattr(window, 'daily_tag_filter_value', '')
+    period_filter = _get_time_period_filter(getattr(window, 'daily_time_period_combo', None))
 
-    tasks = window.data_manager.get_daily_tasks(weekday=weekday_filter, status=status_filter, tag=tag_filter)
+    tasks = window.data_manager.get_daily_tasks(
+        weekday=weekday_filter, status=status_filter, tag=tag_filter,
+        time_period_id=period_filter,
+    )
 
     window.daily_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
@@ -223,7 +264,8 @@ def load_daily_tasks_to_table(window):
             (5, str(duration) if duration else '-'),
             (6, task.description or '-'),
             (7, task.created_at.strftime('%Y-%m-%d')),
-            (8, _get_priority_display(getattr(task, 'priority', 'normal')))
+            (8, _get_priority_display(getattr(task, 'priority', 'normal'))),
+            (9, _render_time_period(window, task)),
         ]
         _set_task_row_data(window.daily_table, row, task, columns)
 
@@ -239,8 +281,12 @@ def load_todo_tasks_to_table(window):
         status_filter = _get_status_filter(status_text)
 
     tag_filter = getattr(window, 'todo_tag_filter_value', '')
+    period_filter = _get_time_period_filter(getattr(window, 'todo_time_period_combo', None))
 
-    tasks = window.data_manager.get_todo_tasks(status=status_filter, tag=tag_filter)
+    tasks = window.data_manager.get_todo_tasks(
+        status=status_filter, tag=tag_filter,
+        time_period_id=period_filter,
+    )
 
     window.todo_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
@@ -254,7 +300,8 @@ def load_todo_tasks_to_table(window):
             (6, str(duration) if duration else '-'),
             (7, task.description or '-'),
             (8, task.created_at.strftime('%Y-%m-%d')),
-            (9, _get_priority_display(getattr(task, 'priority', 'normal')))
+            (9, _get_priority_display(getattr(task, 'priority', 'normal'))),
+            (10, _render_time_period(window, task)),
         ]
         _set_task_row_data(window.todo_table, row, task, columns)
 
@@ -265,8 +312,12 @@ def load_entertainment_tasks_to_table(window):
     """加载娱乐任务到表格"""
     status_filter = _get_status_filter(window.entertainment_status_combo.currentText())
     tag_filter = getattr(window, 'entertainment_tag_filter_value', '')
+    period_filter = _get_time_period_filter(getattr(window, 'entertainment_time_period_combo', None))
 
-    tasks = window.data_manager.get_entertainment_tasks(status=status_filter, tag=tag_filter)
+    tasks = window.data_manager.get_entertainment_tasks(
+        status=status_filter, tag=tag_filter,
+        time_period_id=period_filter,
+    )
 
     window.entertainment_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
@@ -279,7 +330,8 @@ def load_entertainment_tasks_to_table(window):
             (5, str(duration) if duration else '-'),
             (6, task.description or '-'),
             (7, task.created_at.strftime('%Y-%m-%d')),
-            (8, _get_priority_display(getattr(task, 'priority', 'normal')))
+            (8, _get_priority_display(getattr(task, 'priority', 'normal'))),
+            (9, _render_time_period(window, task)),
         ]
         _set_task_row_data(window.entertainment_table, row, task, columns, editable_cols={1, 2, 3, 4})
 
@@ -439,7 +491,9 @@ def sort_todo_table_by_column(window, column):
     else:
         status_filter = _get_status_filter(status_text)
 
-    tasks = window.data_manager.get_todo_tasks(status=status_filter)
+    period_filter = _get_time_period_filter(getattr(window, 'todo_time_period_combo', None))
+
+    tasks = window.data_manager.get_todo_tasks(status=status_filter, time_period_id=period_filter)
 
     if column == 0:
         tasks.sort(key=lambda x: x.status, reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
@@ -458,9 +512,15 @@ def sort_todo_table_by_column(window, column):
     elif column == 7:
         tasks.sort(key=lambda x: x.created_at, reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder))
     elif column == 8:
-        # 用 rank 字典排序，5 档下不能字符串字典序（"high" < "idle" 字典序错乱）
         tasks.sort(
             key=lambda x: get_priority_rank(getattr(x, 'priority', 'normal')),
+            reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder)
+        )
+    # column 9 为时段列，按"名称 起止"字符串序排
+    elif column == 10:
+        # 按时段字符串排（中文排序够用）
+        tasks.sort(
+            key=lambda x: _render_time_period(window, x),
             reverse=(window.todo_sort_order == Qt.SortOrder.DescendingOrder)
         )
 
@@ -476,6 +536,7 @@ def sort_todo_table_by_column(window, column):
             (6, str(duration) if duration else '-'),
             (7, task.description or '-'),
             (8, task.created_at.strftime('%Y-%m-%d')),
-            (9, _get_priority_display(getattr(task, 'priority', 'normal')))
+            (9, _get_priority_display(getattr(task, 'priority', 'normal'))),
+            (10, _render_time_period(window, task)),
         ]
         _set_task_row_data(window.todo_table, row, task, columns)

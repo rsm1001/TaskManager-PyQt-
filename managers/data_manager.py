@@ -17,6 +17,8 @@ from managers.trash_manager import TrashManager
 from managers.shortcut_manager import ShortcutManager
 from managers.daily_task_manager import DailyTaskManager
 from managers.tag_manager import TagManager
+from managers.time_period_manager import TimePeriodManager
+from managers.time_period_orchestrator import TimePeriodOrchestrator
 from services.service_factory import ServiceFactory
 
 if TYPE_CHECKING:
@@ -59,6 +61,13 @@ class DataManager:
         self.shortcut_manager: "ShortcutManager" = ShortcutManager(connection=self._main_conn)
         self.daily_task_manager: "DailyTaskManager" = DailyTaskManager(self.session)
         self.tag_manager: "TagManager" = TagManager(self.config_manager)
+        self.time_period_manager: "TimePeriodManager" = TimePeriodManager(self.session)
+        self.time_period_orchestrator: "TimePeriodOrchestrator" = TimePeriodOrchestrator(
+            self.time_period_manager,
+            self.daily_task_manager,
+            self.todo_manager,
+            self.entertainment_manager,
+        )
 
         # 服务层
         self.daily_reset_service = self._make_daily_reset_service()
@@ -155,8 +164,13 @@ class DataManager:
 
     # ==================== DailyTask 委托 ====================
 
-    def get_daily_tasks(self, weekday: Optional[str] = None, status: Optional[str] = None, tag: Optional[str] = None, keyword: Optional[str] = None) -> List["DailyTask"]:
-        return self.task_orchestrator.get_daily_tasks(weekday=weekday, status=status, tag=tag, keyword=keyword)
+    def get_daily_tasks(self, weekday: Optional[str] = None, status: Optional[str] = None,
+                        tag: Optional[str] = None, keyword: Optional[str] = None,
+                        time_period_id: Optional[str] = None) -> List["DailyTask"]:
+        return self.task_orchestrator.get_daily_tasks(
+            weekday=weekday, status=status, tag=tag, keyword=keyword,
+            time_period_id=time_period_id,
+        )
 
     def get_daily_task_by_id(self, task_id: str) -> Optional["DailyTask"]:
         return self.task_orchestrator.get_daily_task_by_id(task_id)
@@ -174,6 +188,7 @@ class DataManager:
         priority: str = "normal",
         subtasks: str = "[]",
         estimated_duration: int = 0,
+        time_period_id: Optional[str] = None,
     ) -> "DailyTask":
         return self.task_orchestrator.create_daily_task(
             title=title, description=description, week_day=week_day,
@@ -181,6 +196,7 @@ class DataManager:
             shortcut_path=shortcut_path, category=category,
             priority=priority, subtasks=subtasks,
             estimated_duration=estimated_duration,
+            time_period_id=time_period_id,
         )
 
     def update_daily_task(self, task_id: str, **kwargs: Any) -> bool:
@@ -197,8 +213,13 @@ class DataManager:
 
     # ==================== TodoTask 委托 ====================
 
-    def get_todo_tasks(self, status: Optional[str] = None, tag: Optional[str] = None, keyword: Optional[str] = None) -> List["TodoTask"]:
-        return self.task_orchestrator.get_todo_tasks(status=status, tag=tag, keyword=keyword)
+    def get_todo_tasks(self, status: Optional[str] = None, tag: Optional[str] = None,
+                       keyword: Optional[str] = None,
+                       time_period_id: Optional[str] = None) -> List["TodoTask"]:
+        return self.task_orchestrator.get_todo_tasks(
+            status=status, tag=tag, keyword=keyword,
+            time_period_id=time_period_id,
+        )
 
     def get_todo_task_by_id(self, task_id: str) -> Optional["TodoTask"]:
         return self.task_orchestrator.get_todo_task_by_id(task_id)
@@ -216,6 +237,7 @@ class DataManager:
         priority: str = "normal",
         subtasks: str = "[]",
         estimated_duration: int = 0,
+        time_period_id: Optional[str] = None,
     ) -> "TodoTask":
         return self.task_orchestrator.create_todo_task(
             title=title, description=description, deadline=deadline,
@@ -223,6 +245,7 @@ class DataManager:
             shortcut_path=shortcut_path, category=category,
             priority=priority, subtasks=subtasks,
             estimated_duration=estimated_duration,
+            time_period_id=time_period_id,
         )
 
     def update_todo_task(self, task_id: str, **kwargs: Any) -> bool:
@@ -239,8 +262,13 @@ class DataManager:
 
     # ==================== EntertainmentTask 委托 ====================
 
-    def get_entertainment_tasks(self, status: Optional[str] = None, tag: Optional[str] = None, keyword: Optional[str] = None) -> List["EntertainmentTask"]:
-        return self.task_orchestrator.get_entertainment_tasks(status=status, tag=tag, keyword=keyword)
+    def get_entertainment_tasks(self, status: Optional[str] = None, tag: Optional[str] = None,
+                                keyword: Optional[str] = None,
+                                time_period_id: Optional[str] = None) -> List["EntertainmentTask"]:
+        return self.task_orchestrator.get_entertainment_tasks(
+            status=status, tag=tag, keyword=keyword,
+            time_period_id=time_period_id,
+        )
 
     def get_entertainment_task_by_id(self, task_id: str) -> Optional["EntertainmentTask"]:
         return self.task_orchestrator.get_entertainment_task_by_id(task_id)
@@ -258,6 +286,7 @@ class DataManager:
         priority: str = "normal",
         subtasks: str = "[]",
         estimated_duration: int = 0,
+        time_period_id: Optional[str] = None,
     ) -> "EntertainmentTask":
         return self.task_orchestrator.create_entertainment_task(
             title=title, description=description, fun_category=fun_category,
@@ -265,7 +294,47 @@ class DataManager:
             shortcut_path=shortcut_path, category=category,
             priority=priority, subtasks=subtasks,
             estimated_duration=estimated_duration,
+            time_period_id=time_period_id,
         )
+
+    # ==================== 时段 ====================
+
+    def get_all_time_periods(self) -> List[Any]:
+        """获取所有时段（按排序与名称）"""
+        return self.time_period_orchestrator.get_all()
+
+    def get_time_period_by_id(self, period_id: Optional[str]) -> Any:
+        return self.time_period_orchestrator.get_by_id(period_id)
+
+    def create_time_period(self, name: str, start_time: str = "",
+                           end_time: str = "", order_index: int = 0,
+                           color: str = "") -> Any:
+        return self.time_period_orchestrator.create(
+            name=name, start_time=start_time, end_time=end_time,
+            order_index=order_index, color=color,
+        )
+
+    def update_time_period(self, period_id: str, **kwargs: Any) -> bool:
+        return self.time_period_orchestrator.update(period_id, **kwargs)
+
+    def delete_time_period(self, period_id: str) -> bool:
+        return self.time_period_orchestrator.delete(period_id)
+
+    def get_time_period_id_to_name_map(self) -> dict:
+        """{id: name} 字典，供渲染层批量反查"""
+        return self.time_period_orchestrator.get_id_to_name_map()
+
+    def resolve_time_period_label(self, period_id: Optional[str]) -> str:
+        """反查展示文本，未设/已删除有专用文案"""
+        return self.time_period_orchestrator.resolve_period_label(period_id)
+
+    def resolve_time_period_display(self, period_id: Optional[str]) -> str:
+        """反查「名称 起止」复合显示串，供表格时段列使用"""
+        return self.time_period_orchestrator.resolve_period_display(period_id)
+
+    def get_time_period_filter_options(self) -> list:
+        """[(显示文本, 对应id/None), ...]，供筛选下拉框"""
+        return self.time_period_orchestrator.get_filter_options()
 
     def update_entertainment_task(self, task_id: str, **kwargs: Any) -> bool:
         return self.task_orchestrator.update_entertainment_task(task_id, **kwargs)
