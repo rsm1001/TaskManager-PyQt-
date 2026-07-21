@@ -19,6 +19,7 @@ from managers.daily_task_manager import DailyTaskManager
 from managers.tag_manager import TagManager
 from managers.time_period_manager import TimePeriodManager
 from managers.time_period_orchestrator import TimePeriodOrchestrator
+from managers.itinerary_manager import ItineraryManager
 from services.service_factory import ServiceFactory
 
 if TYPE_CHECKING:
@@ -68,6 +69,8 @@ class DataManager:
             self.todo_manager,
             self.entertainment_manager,
         )
+
+        self.itinerary_manager: "ItineraryManager" = ItineraryManager(self.session)
 
         # 服务层
         self.daily_reset_service = self._make_daily_reset_service()
@@ -500,6 +503,46 @@ class DataManager:
 
     def reset_daily_tasks(self) -> None:
         self.daily_reset_service._do_reset()
+
+    # ==================== 行程任务 ====================
+
+    def get_itinerary_task_refs(self, task_type: Optional[str] = None) -> set[tuple[str, str]]:
+        return self.itinerary_manager.get_task_refs(task_type=task_type)
+
+    def has_itinerary_task_ref(self, task_id: str, task_type: str) -> bool:
+        return self.itinerary_manager.has_task_ref(task_id, task_type)
+
+    def get_itinerary_tasks(self, day_of_week: Optional[int] = None) -> List[Any]:
+        return self.itinerary_manager.get_all(day_of_week=day_of_week)
+
+    def create_itinerary_task(
+        self,
+        title: str,
+        day_of_week: int = 1,
+        hour: int = 0,
+        task_id: str = "",
+        task_type: str = "",
+        description: str = "",
+        color: str = "#3498DB",
+    ) -> Any:
+        return self.itinerary_manager.create(
+            title=title,
+            day_of_week=day_of_week,
+            hour=hour,
+            task_id=task_id,
+            task_type=task_type,
+            description=description,
+            color=color,
+        )
+
+    def update_itinerary_task(self, task_id: str, **kwargs: Any) -> bool:
+        return self.itinerary_manager.update(task_id, **kwargs)
+
+    def delete_itinerary_task(self, task_id: str) -> bool:
+        return self.itinerary_manager.delete(task_id)
+
+    def delete_itinerary_by_task_ref(self, task_id: str, task_type: str) -> int:
+        return self.itinerary_manager.delete_by_task_ref(task_id, task_type)
 
     # ==================== 全局搜索 ====================
 

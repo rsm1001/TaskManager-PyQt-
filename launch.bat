@@ -1,35 +1,32 @@
 @echo off
-chcp 65001 > nul
-setlocal
+chcp 65001 > nul 2>&1
 
 echo.
 echo Task Manager - PyQt Version
 echo ===========================
 echo.
 
-rem Check if Python is installed
-python --version > nul 2>&1
-if errorlevel 1 (
- echo Error: Python not found, please install Python first
- pause
- exit /b 1
+set PYTHON_EXE=C:\Users\27185\AppData\Roaming\LobsterAI\runtimes\python-win\python.exe
+
+if not exist "%PYTHON_EXE%" (
+    echo Error: Python not found
+    pause
+    exit /b 1
 )
 
-rem Check dependencies
 echo Checking dependencies...
-python -c "import sys; import PyQt6; import sqlalchemy; print('Dependencies check passed')" > nul 2>&1
+"%PYTHON_EXE%" -c "import PyQt6; import sqlalchemy; print('OK')" > nul 2>&1
 if errorlevel 1 (
- echo Dependencies not found, installing...
- pip install -r requirements.txt
- if errorlevel 1 (
- echo Dependency installation failed
- pause
- exit /b 1
- )
+    echo Dependencies not found, installing...
+    "%PYTHON_EXE%" -m pip install -r requirements.txt
+    if errorlevel 1 (
+        echo Dependency installation failed
+        pause
+        exit /b 1
+    )
 )
 
-rem Run main program
 echo Starting Task Manager...
-python main.py
+"%PYTHON_EXE%" main.py
 
 pause

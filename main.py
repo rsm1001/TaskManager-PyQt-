@@ -23,6 +23,7 @@ from components.ui_components import (
 )
 from components.ui_elements import create_menu_bar, create_toolbar
 from components.pomodoro_toolbar import PomodoroToolbarWidget
+from components.itinerary_widget import ItineraryWidget
 from services.table_operations import (
     load_daily_tasks_to_table,
     load_todo_tasks_to_table,
@@ -73,6 +74,11 @@ class TaskManagerMainWindow(QMainWindow):
         self._pomodoro_service = self.data_manager._get_pomodoro_service()
         self._pomodoro_toolbar = None
         self._pomodoro_toolbar_positioned = False
+        # 行程面板
+        self._itinerary_widget = None
+        self._itinerary_positioned = False
+        self.filter_arranged_tasks = False
+        self._arranged_task_refs: set = set()  # {(task_type, task_id), ...}  已安排行程的任务缓存
         # 初始化搜索协调器
         self._search_coordinator = SearchCoordinator(self)
         self.init_ui()
@@ -442,6 +448,58 @@ class TaskManagerMainWindow(QMainWindow):
         """运行 mypy 类型检查"""
         from utils.ui_messages import show_type_check_dialog
         show_type_check_dialog(self)
+
+    def _refresh_arranged_cache(self):
+        """从行程数据刷新已安排任务缓存。"""
+        self._arranged_task_refs = self.data_manager.get_itinerary_task_refs()
+
+    def _get_arranged_task_refs(self) -> set:
+        """获取已安排行程引用集合，优先用缓存。"""
+        return self._arranged_task_refs
+
+    def show_itinerary(self):
+        """显示/隐藏行程面板"""
+        from PyQt6 import sip
+        # 检查窗口是否已被销毁
+        if self._itinerary_widget is not None and sip.isdeleted(self._itinerary_widget):
+            self._itinerary_widget = None
+            self._itinerary_positioned = False
+
+        if self._itinerary_widget is None:
+            self._itinerary_widget = ItineraryWidget(self.data_manager, self)
+            self._itinerary_widget.destroyed.connect(lambda: (
+                setattr(self, '_itinerary_widget', None),
+                setattr(self, '_itinerary_positioned', False)
+            ))
+            # 首次创建时刷新缓存
+            self._refresh_arranged_cache()
+
+        if self._itinerary_widget.isVisible():
+            self._itinerary_widget.hide()
+            return
+
+        if not self._itinerary_positioned and not self._itinerary_widget.has_saved_position():
+            geo = self.geometry()
+            x = geo.center().x() - self._itinerary_widget.width() // 2
+            y = geo.center().y() - self._itinerary_widget.height() // 2
+            self._itinerary_widget.move(x, y)
+        self._itinerary_positioned = True
+        self._itinerary_widget.show()
+        self._itinerary_widget.raise_()
+        # 每次打开行程面板时刷新缓存（可能有变动）
+        self._refresh_arranged_cache()
+
+    def refresh_arranged_cache(self):
+        """刷新已安排任务缓存（供外部调用）。"""
+        self._refresh_arranged_cache()
+
+    def toggle_arranged_tasks_filter(self, checked: bool):
+        """切换已安排任务过滤（仅显示已安排到行程的任务）"""
+        self.filter_arranged_tasks = checked
+        self._refresh_arranged_cache()
+        self.load_daily_tasks()
+        self.load_todo_tasks()
+        self.load_entertainment_tasks()
 
     def show_pomodoro(self):
         """显示/隐藏番茄钟工具栏"""

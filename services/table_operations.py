@@ -253,6 +253,11 @@ def load_daily_tasks_to_table(window):
         time_period_id=period_filter,
     )
 
+    # 行程过滤：仅当 filter_arranged_tasks=True 时，仅显示已在行程中安排的任务
+    if getattr(window, 'filter_arranged_tasks', False):
+        arranged = getattr(window, '_arranged_task_refs', set())
+        tasks = [t for t in tasks if ('daily', t.id) not in arranged]
+
     window.daily_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
         duration = getattr(task, 'estimated_duration', 0) or 0
@@ -288,6 +293,11 @@ def load_todo_tasks_to_table(window):
         time_period_id=period_filter,
     )
 
+    # 行程过滤
+    if getattr(window, 'filter_arranged_tasks', False):
+        arranged = getattr(window, '_arranged_task_refs', set())
+        tasks = [t for t in tasks if ('todo', t.id) not in arranged]
+
     window.todo_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):
         duration = getattr(task, 'estimated_duration', 0) or 0
@@ -318,6 +328,11 @@ def load_entertainment_tasks_to_table(window):
         status=status_filter, tag=tag_filter,
         time_period_id=period_filter,
     )
+
+    # 行程过滤
+    if getattr(window, 'filter_arranged_tasks', False):
+        arranged = getattr(window, '_arranged_task_refs', set())
+        tasks = [t for t in tasks if ('entertainment', t.id) not in arranged]
 
     window.entertainment_table.setRowCount(len(tasks))
     for row, task in enumerate(tasks):

@@ -28,6 +28,8 @@ from components.tab_filters import (
     wrap_edit_handler,
 )
 
+from components.draggable_table import DraggableTaskTable
+
 logger = logging.getLogger(__name__)
 
 
@@ -144,7 +146,8 @@ class BaseTabBuilder:
 
     def make_table(self, attr_name: str, headers: list,
                    column_count: int = None,
-                   edit_handler=None, click_handler=None) -> QTableWidget:
+                   edit_handler=None, click_handler=None,
+                   task_type: str = "") -> QTableWidget:
         """构造并配置一个标准 QTableWidget
 
         Args:
@@ -153,11 +156,13 @@ class BaseTabBuilder:
             column_count: 列数；None 则使用 len(headers)
             edit_handler: 双击编辑处理函数（自动包成"非状态列才生效"）
             click_handler: 单击单元格处理函数（如切状态）
+            task_type: 任务类型标识，用于拖拽时携带 MIME 数据
 
         Returns:
             配置好的表格实例
         """
-        table = QTableWidget()
+        table = DraggableTaskTable()
+        table.task_type = task_type
         table.setColumnCount(column_count if column_count else len(headers))
         table.setHorizontalHeaderLabels(headers)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)

@@ -46,6 +46,7 @@ class EntertainmentTabBuilder(BaseTabBuilder):
             column_count=10,
             edit_handler=win.edit_entertainment_task,
             click_handler=win.toggle_entertainment_task_status,
+            task_type='entertainment',
         )
         layout.addWidget(table)
 

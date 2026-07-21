@@ -155,6 +155,32 @@ class EntertainmentTask(BaseModel):
     time_period_id = Column(String(50))  # 时段 ID（外键引用 time_periods.id）
 
 
+class ItineraryTask(BaseModel):
+    """行程任务模型
+
+    用于在主界面的行程面板中按星期和时间规划任务。
+    支持从主任务拖拽关联。
+
+    Attributes:
+        task_id: 关联的原任务ID（可为空，表示手动创建的行程）
+        task_type: 关联的任务类型（daily/todo/entertainment/空）
+        day_of_week: 星期几（1-7，1=周一）
+        hour: 小时（0-23）
+        title: 行程标题
+        description: 行程描述
+        color: 显示颜色
+    """
+    __tablename__ = 'itinerary_tasks'
+
+    task_id = Column(String(100), default="")
+    task_type = Column(String(20), default="")
+    day_of_week = Column(Integer, default=1)
+    hour = Column(Integer, default=0)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    color = Column(String(20), default="#3498DB")
+
+
 class Config(BaseModel):
     """配置模型
 

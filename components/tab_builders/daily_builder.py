@@ -46,6 +46,7 @@ class DailyTabBuilder(BaseTabBuilder):
             column_count=10,
             edit_handler=win.edit_daily_task,
             click_handler=win.toggle_daily_task_status,
+            task_type='daily',
         )
         layout.addWidget(table)
 

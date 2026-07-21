@@ -119,6 +119,12 @@ def create_toolbar(window):
     toolbar.addAction('🍅 番茄钟', window.show_pomodoro)
     toolbar.addAction('⏰ 时段设置', window.show_time_period_settings)
     toolbar.addAction('🎯 舒尔特', window.show_schulte_grid)
+    toolbar.addAction('📅 行程', window.show_itinerary)
+    arranged_action = QAction('过滤已安排', window)
+    arranged_action.setCheckable(True)
+    arranged_action.setChecked(False)
+    arranged_action.toggled.connect(window.toggle_arranged_tasks_filter)
+    toolbar.addAction(arranged_action)
 
     toolbar.addSeparator()
 

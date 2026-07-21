@@ -47,6 +47,7 @@ class TodoTabBuilder(BaseTabBuilder):
             column_count=11,
             edit_handler=win.edit_todo_task,
             click_handler=win.toggle_todo_task_status,
+            task_type='todo',
         )
         # 待办表支持表头点击排序
         table.horizontalHeader().sectionClicked.connect(win.sort_todo_table_by_column)
