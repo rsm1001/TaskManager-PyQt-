@@ -5,6 +5,8 @@ Task Manager - 数据管理外观（Facade）
 通过 OrchestratorFactory 工厂模式解耦编排器的创建
 """
 
+from __future__ import annotations
+
 import logging
 from typing import List, Dict, Any, Optional, TYPE_CHECKING
 
@@ -506,8 +508,15 @@ class DataManager:
 
     # ==================== 行程任务 ====================
 
-    def get_itinerary_task_refs(self, task_type: Optional[str] = None) -> set[tuple[str, str]]:
-        return self.itinerary_manager.get_task_refs(task_type=task_type)
+    def get_itinerary_task_refs(
+        self,
+        task_type: Optional[str] = None,
+        day_of_week: Optional[int] = None,
+    ) -> set[tuple[str, str]]:
+        return self.itinerary_manager.get_task_refs(
+            task_type=task_type,
+            day_of_week=day_of_week,
+        )
 
     def has_itinerary_task_ref(self, task_id: str, task_type: str) -> bool:
         return self.itinerary_manager.has_task_ref(task_id, task_type)

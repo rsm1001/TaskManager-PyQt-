@@ -159,6 +159,14 @@ class TaskManagerMainWindow(QMainWindow):
         """加载每日任务"""
         load_daily_tasks_to_table(self)
 
+    def load_tasks_for_selected_weekday(self):
+        """星期变化时刷新行程缓存及受影响的任务表。"""
+        if self.filter_arranged_tasks:
+            self._refresh_arranged_cache()
+            self.load_todo_tasks()
+            self.load_entertainment_tasks()
+        self.load_daily_tasks()
+
     def toggle_daily_task_status(self, row, column):
         """切换每日任务状态"""
         toggle_daily_task_status(self, row, column)
@@ -450,8 +458,14 @@ class TaskManagerMainWindow(QMainWindow):
         show_type_check_dialog(self)
 
     def _refresh_arranged_cache(self):
-        """从行程数据刷新已安排任务缓存。"""
-        self._arranged_task_refs = self.data_manager.get_itinerary_task_refs()
+        """按主界面所选星期刷新已安排任务缓存。"""
+        weekday = self.daily_weekday_combo.currentText()
+        day_of_week = None
+        if weekday in config.config.WEEKDAY_NAMES:
+            day_of_week = config.config.WEEKDAY_NAMES.index(weekday) + 1
+        self._arranged_task_refs = self.data_manager.get_itinerary_task_refs(
+            day_of_week=day_of_week,
+        )
 
     def _get_arranged_task_refs(self) -> set:
         """获取已安排行程引用集合，优先用缓存。"""
@@ -494,9 +508,10 @@ class TaskManagerMainWindow(QMainWindow):
         self._refresh_arranged_cache()
 
     def toggle_arranged_tasks_filter(self, checked: bool):
-        """切换已安排任务过滤（仅显示已安排到行程的任务）"""
+        """切换已安排任务过滤（仅显示未安排到当前星期行程的任务）"""
         self.filter_arranged_tasks = checked
-        self._refresh_arranged_cache()
+        if checked:
+            self._refresh_arranged_cache()
         self.load_daily_tasks()
         self.load_todo_tasks()
         self.load_entertainment_tasks()

@@ -75,7 +75,7 @@ class DailyTabBuilder(BaseTabBuilder):
         # 弹性间距把筛选推到右侧
         row.addStretch()
         # 右侧筛选下拉框（顺序：星期 → 状态 → 时段）
-        self.build_weekday_filter(row, 'daily_weekday_combo', win.load_daily_tasks)
+        self.build_weekday_filter(row, 'daily_weekday_combo', win.load_tasks_for_selected_weekday)
         self.build_status_filter(
             row, 'daily_status_combo',
             ['全部', '进行中', '已完成', '暂弃'], default_text='进行中',

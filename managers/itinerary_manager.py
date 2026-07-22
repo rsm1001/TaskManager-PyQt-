@@ -3,6 +3,8 @@
 负责 itinerary_tasks 表的 CRUD 操作
 """
 
+from __future__ import annotations
+
 import logging
 from typing import List, Optional
 
@@ -24,16 +26,22 @@ class ItineraryManager:
             query = query.filter(ItineraryTask.day_of_week == day_of_week)
         return query.order_by(ItineraryTask.day_of_week, ItineraryTask.hour).all()
 
-    def get_task_refs(self, task_type: Optional[str] = None) -> set[tuple[str, str]]:
-        """获取已安排任务引用集合，元素为 (task_type, task_id)。"""
+    def get_task_refs(
+        self,
+        task_type: Optional[str] = None,
+        day_of_week: Optional[int] = None,
+    ) -> set[tuple[str, str]]:
+        """获取已安排任务引用集合，可按任务类型和星期筛选。"""
         query = self.session.query(ItineraryTask.task_type, ItineraryTask.task_id)
         if task_type is not None:
             query = query.filter(ItineraryTask.task_type == task_type)
-        return {
-            (row.task_type, row.task_id)
-            for row in query.all()
-            if row.task_type and row.task_id
-        }
+        if day_of_week is not None:
+            query = query.filter(ItineraryTask.day_of_week == day_of_week)
+        query = query.filter(
+            ItineraryTask.task_type != '',
+            ItineraryTask.task_id != '',
+        ).distinct()
+        return {(row.task_type, row.task_id) for row in query}
 
     def has_task_ref(self, task_id: str, task_type: str) -> bool:
         """判断某个任务是否已安排到行程（全局，不限星期）。"""
