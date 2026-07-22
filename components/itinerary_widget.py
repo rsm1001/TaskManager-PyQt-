@@ -458,14 +458,40 @@ class HourBlockWidget(QFrame):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
 
+        # 头部容器：QPushButton 承载背景色，空白区域点击也能折叠
+        base_color = BLOCK_COLORS.get(self.block_name, '#3498DB')
+        header_container = QPushButton()
+        header_container.setFixedHeight(BLOCK_HEADER_HEIGHT)
+        header_container.clicked.connect(self._toggle_collapse)
+        header_container.setStyleSheet(f"""
+            QPushButton {{ background-color: {base_color}; border: none; border-radius: 4px; }}
+            QPushButton:hover {{ background-color: {base_color}DD; }}
+        """)
+        header_layout = QHBoxLayout(header_container)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(0)
+
         self.header = QPushButton()
-        self.header.setFixedHeight(BLOCK_HEADER_HEIGHT)
         self.header.clicked.connect(self._toggle_collapse)
         self.header.setStyleSheet(f"""
-            QPushButton {{ background-color: {BLOCK_COLORS.get(self.block_name, '#3498DB')}; color: white; border: none; border-radius: 4px; font-size: 13px; font-weight: bold; text-align: left; padding-left: 10px; }}
-            QPushButton:hover {{ background-color: {BLOCK_COLORS.get(self.block_name, '#3498DB')}DD; }}
+            QPushButton {{ background-color: transparent; color: white; border: none; font-size: 13px; font-weight: bold; text-align: left; padding-left: 10px; padding-right: 4px; }}
+            QPushButton:hover {{ background-color: {base_color}DD; }}
         """)
-        self.main_layout.addWidget(self.header)
+        header_layout.addWidget(self.header)
+
+        self.clear_unfinished_btn = QPushButton('🧹')
+        self.clear_unfinished_btn.setFixedSize(28, BLOCK_HEADER_HEIGHT)
+        self.clear_unfinished_btn.setToolTip('一键移除本时段内所有未完成（○）的任务')
+        self.clear_unfinished_btn.clicked.connect(self._remove_unfinished)
+        self.clear_unfinished_btn.setStyleSheet(f"""
+            QPushButton {{ background-color: transparent; color: white; border: none; font-size: 14px; }}
+            QPushButton:hover {{ background-color: #E74C3C; border-radius: 4px; }}
+        """)
+        header_layout.addWidget(self.clear_unfinished_btn)
+
+        header_layout.addStretch(1)
+
+        self.main_layout.addWidget(header_container)
 
         self.slots_container = QWidget()
         slots_layout = QVBoxLayout(self.slots_container)
@@ -493,6 +519,13 @@ class HourBlockWidget(QFrame):
     def _update_header(self):
         arrow = '▶' if self.collapsed else '▼'
         self.header.setText(f"{arrow} {self.block_name} ({self.start_hour:02d}:00-{(self.start_hour + 4):02d}:00)")
+
+    def _remove_unfinished(self):
+        """移除本时段内所有未完成（状态为 ○）的行程任务。"""
+        for slot in self.hour_slots:
+            for row in list(slot.task_rows):
+                if row.task_data.get('status') == '○':
+                    slot._delete_task_row(row)
 
     def get_slot(self, hour: int):
         """获取指定小时的槽位。"""
