@@ -512,6 +512,10 @@ class DataManager:
     def has_itinerary_task_ref(self, task_id: str, task_type: str) -> bool:
         return self.itinerary_manager.has_task_ref(task_id, task_type)
 
+    def has_itinerary_task_ref_for_day(self, task_id: str, task_type: str, day_of_week: int) -> bool:
+        """判断某个任务是否已安排到指定星期的行程。每个周几独立去重。"""
+        return self.itinerary_manager.has_task_ref_for_day(task_id, task_type, day_of_week)
+
     def get_itinerary_tasks(self, day_of_week: Optional[int] = None) -> List[Any]:
         return self.itinerary_manager.get_all(day_of_week=day_of_week)
 

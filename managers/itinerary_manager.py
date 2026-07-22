@@ -36,12 +36,22 @@ class ItineraryManager:
         }
 
     def has_task_ref(self, task_id: str, task_type: str) -> bool:
-        """判断某个任务是否已安排到行程。"""
+        """判断某个任务是否已安排到行程（全局，不限星期）。"""
         if not task_id or not task_type:
             return False
         return self.session.query(ItineraryTask).filter(
             ItineraryTask.task_id == task_id,
             ItineraryTask.task_type == task_type,
+        ).first() is not None
+
+    def has_task_ref_for_day(self, task_id: str, task_type: str, day_of_week: int) -> bool:
+        """判断某个任务是否已安排到指定星期。每个周几独立去重。"""
+        if not task_id or not task_type:
+            return False
+        return self.session.query(ItineraryTask).filter(
+            ItineraryTask.task_id == task_id,
+            ItineraryTask.task_type == task_type,
+            ItineraryTask.day_of_week == day_of_week,
         ).first() is not None
 
     def get_by_id(self, itinerary_id: str) -> Optional[ItineraryTask]:

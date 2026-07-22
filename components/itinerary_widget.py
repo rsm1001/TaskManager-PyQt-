@@ -401,8 +401,11 @@ class HourSlotWidget(QFrame):
             return
 
         # 情况2：外部任务（主界面任务）添加到行程
-        if self.data_manager and self.data_manager.has_itinerary_task_ref(task_id, task_type):
-            QMessageBox.information(self, '提示', '该任务已安排到行程')
+        # 每个周几独立去重：同一任务可在不同星期各安排一次，但不能在同一星期重复安排
+        if self.data_manager and self.data_manager.has_itinerary_task_ref_for_day(
+            task_id, task_type, self.day_index + 1
+        ):
+            QMessageBox.information(self, '提示', '该任务已安排到本周的行程')
             event.acceptProposedAction()
             return
         self.add_task(task_data)
