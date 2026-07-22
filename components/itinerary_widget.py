@@ -5,6 +5,7 @@
 
 import json
 import logging
+from datetime import datetime
 
 from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QMimeData, QByteArray, QSettings
 from PyQt6.QtGui import QColor, QDrag, QPainter, QPixmap
@@ -122,35 +123,58 @@ class ItineraryTaskRow(QFrame):
         self._render()
 
     def mousePressEvent(self, event):
-        """支持行程内任务继续拖拽。"""
+        """记录按下位置，不立即触发拖拽。"""
         if event.button() == Qt.MouseButton.LeftButton:
-            source_slot = self.parent()
-            self.drag_started.emit(self.task_data, source_slot)
-            drag = QDrag(self)
-            mime_data = QMimeData()
-            payload = json.dumps(self.task_data, ensure_ascii=False)
-            mime_data.setData('application/task-data', QByteArray(payload.encode('utf-8')))
-            drag.setMimeData(mime_data)
-            pixmap = QPixmap(140, 28)
-            bg_color = PRIORITY_BG_COLORS.get(
-                self.task_data.get('priority_key'), '#E3F2FD'
-            )
-            fg_color = PRIORITY_TEXT_COLORS.get(
-                self.task_data.get('priority_key'), '#0D47A1'
-            )
-            pixmap.fill(QColor(bg_color))
-            painter = QPainter(pixmap)
-            painter.setPen(QColor(fg_color))
-            painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, self.task_data.get('title', '')[:12])
-            painter.end()
-            drag.setPixmap(pixmap)
-            drag.exec(Qt.DropAction.CopyAction)
-            # drag.exec 结束后：放置成功则源槽位的 _pending_restore 已由 dropEvent 清除
-            # 放置失败（或取消）则恢复源槽位的任务行
-            if isinstance(source_slot, HourSlotWidget):
-                source_slot._restore_pending()
+            self._drag_start_pos = event.position().toPoint()
+            self._dragging = False
+            event.accept()
         else:
             super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        """鼠标移动超过阈值后启动拖拽。"""
+        if not hasattr(self, '_drag_start_pos') or self._drag_start_pos is None:
+            super().mouseMoveEvent(event)
+            return
+        if self._dragging:
+            return
+        delta = event.position().toPoint() - self._drag_start_pos
+        if delta.manhattanLength() < 10:
+            return
+        self._dragging = True
+        source_slot = self.parent()
+        self.drag_started.emit(self.task_data, source_slot)
+        drag = QDrag(self)
+        mime_data = QMimeData()
+        payload = json.dumps(self.task_data, ensure_ascii=False)
+        mime_data.setData('application/task-data', QByteArray(payload.encode('utf-8')))
+        drag.setMimeData(mime_data)
+        pixmap = QPixmap(140, 28)
+        bg_color = PRIORITY_BG_COLORS.get(
+            self.task_data.get('priority_key'), '#E3F2FD'
+        )
+        fg_color = PRIORITY_TEXT_COLORS.get(
+            self.task_data.get('priority_key'), '#0D47A1'
+        )
+        pixmap.fill(QColor(bg_color))
+        painter = QPainter(pixmap)
+        painter.setPen(QColor(fg_color))
+        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, self.task_data.get('title', '')[:12])
+        painter.end()
+        drag.setPixmap(pixmap)
+        drag.exec(Qt.DropAction.CopyAction)
+        # drag.exec 结束后：放置成功则源槽位的 _pending_restore 已由 dropEvent 清除
+        # 放置失败（或取消）则恢复源槽位的任务行
+        if isinstance(source_slot, HourSlotWidget):
+            source_slot._restore_pending()
+        self._drag_start_pos = None
+        self._dragging = False
+
+    def mouseReleaseEvent(self, event):
+        """释放鼠标，清理拖拽状态。"""
+        self._drag_start_pos = None
+        self._dragging = False
+        super().mouseReleaseEvent(event)
 
 
 class HourSlotWidget(QFrame):
@@ -179,14 +203,42 @@ class HourSlotWidget(QFrame):
         layout.setContentsMargins(4, 3, 4, 3)
         layout.setSpacing(3)
 
+        # 头部容器：折叠按钮 + 清除按钮
+        header_container = QWidget()
+        header_container.setFixedHeight(HOUR_HEADER_HEIGHT)
+        header_layout = QHBoxLayout(header_container)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(2)
+
         self.header = QPushButton()
-        self.header.setFixedHeight(HOUR_HEADER_HEIGHT)
         self.header.clicked.connect(self._toggle_collapse)
         self.header.setStyleSheet("""
             QPushButton { background-color: #ECF0F1; color: #2C3E50; border: none; border-radius: 4px; font-size: 12px; text-align: left; padding-left: 8px; }
             QPushButton:hover { background-color: #D5DBDB; }
         """)
-        layout.addWidget(self.header)
+        header_layout.addWidget(self.header, 1)
+
+        self.clear_unfinished_btn = QPushButton('🧹')
+        self.clear_unfinished_btn.setFixedSize(24, HOUR_HEADER_HEIGHT)
+        self.clear_unfinished_btn.setToolTip('移除本小时未完成（○）的任务')
+        self.clear_unfinished_btn.clicked.connect(self._remove_unfinished)
+        self.clear_unfinished_btn.setStyleSheet("""
+            QPushButton { background-color: transparent; color: #7F8C8D; border: none; font-size: 12px; }
+            QPushButton:hover { background-color: #E74C3C; color: white; border-radius: 3px; }
+        """)
+        header_layout.addWidget(self.clear_unfinished_btn)
+
+        self.clear_all_btn = QPushButton('🗑')
+        self.clear_all_btn.setFixedSize(24, HOUR_HEADER_HEIGHT)
+        self.clear_all_btn.setToolTip('移除本小时所有任务（含已完成和已放弃）')
+        self.clear_all_btn.clicked.connect(self._remove_all)
+        self.clear_all_btn.setStyleSheet("""
+            QPushButton { background-color: transparent; color: #7F8C8D; border: none; font-size: 12px; }
+            QPushButton:hover { background-color: #C0392B; color: white; border-radius: 3px; }
+        """)
+        header_layout.addWidget(self.clear_all_btn)
+
+        layout.addWidget(header_container)
 
         self.task_container = QWidget()
         self.task_layout = QVBoxLayout(self.task_container)
@@ -431,6 +483,17 @@ class HourSlotWidget(QFrame):
             parent = parent.parent()
         return parent
 
+    def _remove_unfinished(self):
+        """移除本小时内所有未完成（状态为 ○）的行程任务。"""
+        for row in list(self.task_rows):
+            if row.task_data.get('status') == '○':
+                self._delete_task_row(row)
+
+    def _remove_all(self):
+        """移除本小时内所有行程任务（含已完成、未完成和已放弃）。"""
+        for row in list(self.task_rows):
+            self._delete_task_row(row)
+
     def clear_all(self):
         """清除本小时所有任务。"""
         for row in list(self.task_rows):
@@ -489,6 +552,16 @@ class HourBlockWidget(QFrame):
         """)
         header_layout.addWidget(self.clear_unfinished_btn)
 
+        self.clear_all_btn = QPushButton('🗑')
+        self.clear_all_btn.setFixedSize(28, BLOCK_HEADER_HEIGHT)
+        self.clear_all_btn.setToolTip('一键移除本时段内所有任务（含已完成和已放弃）')
+        self.clear_all_btn.clicked.connect(self._remove_all)
+        self.clear_all_btn.setStyleSheet(f"""
+            QPushButton {{ background-color: transparent; color: white; border: none; font-size: 14px; }}
+            QPushButton:hover {{ background-color: #C0392B; border-radius: 4px; }}
+        """)
+        header_layout.addWidget(self.clear_all_btn)
+
         header_layout.addStretch(1)
 
         self.main_layout.addWidget(header_container)
@@ -526,6 +599,12 @@ class HourBlockWidget(QFrame):
             for row in list(slot.task_rows):
                 if row.task_data.get('status') == '○':
                     slot._delete_task_row(row)
+
+    def _remove_all(self):
+        """移除本时段内所有行程任务（含已完成、未完成和已放弃）。"""
+        for slot in self.hour_slots:
+            for row in list(slot.task_rows):
+                slot._delete_task_row(row)
 
     def get_slot(self, hour: int):
         """获取指定小时的槽位。"""
@@ -768,6 +847,54 @@ class ItineraryWidget(QWidget):
             slot = self._day_views[day_index].get_slot(hour)
             if slot:
                 slot.add_task(self._build_task_data(record), persist=False)
+        # 首次加载完成后自动定位到当前时间
+        self.auto_navigate_to_current_time()
+
+    def auto_navigate_to_current_time(self):
+        """根据当前时间自动定位：切换星期、展开对应4小时块和小时槽，其余全部折叠。"""
+        now = datetime.now()
+        target_day = now.weekday()  # 0=周一, 6=周日
+        target_hour = now.hour
+
+        # 全部折叠
+        self._collapse_all()
+
+        # 切换到目标星期
+        self._current_day = target_day
+        for i, view in enumerate(self._day_views):
+            view.setVisible(i == target_day)
+        for i, btn in enumerate(self.day_buttons):
+            btn.setChecked(i == target_day)
+
+        # 找到并展开目标4小时块及小时槽
+        day_view = self._day_views[target_day]
+        for block in day_view.blocks:
+            if block.start_hour <= target_hour < block.start_hour + 4:
+                # 展开目标4小时块
+                block.collapsed = False
+                block.slots_container.setVisible(True)
+                block._update_header()
+                # 展开目标小时槽
+                for slot in block.hour_slots:
+                    if slot.hour == target_hour:
+                        slot.collapsed = False
+                        slot.task_container.setVisible(True)
+                    else:
+                        slot.collapsed = True
+                        slot.task_container.setVisible(False)
+                    slot._update_header()
+
+    def _collapse_all(self):
+        """折叠所有4小时块和小时槽。"""
+        for day_view in self._day_views:
+            for block in day_view.blocks:
+                block.collapsed = True
+                block.slots_container.setVisible(False)
+                block._update_header()
+                for slot in block.hour_slots:
+                    slot.collapsed = True
+                    slot.task_container.setVisible(False)
+                    slot._update_header()
 
     def _build_task_data(self, record) -> dict:
         """从行程记录构建显示数据，优先使用原任务最新数据。"""
