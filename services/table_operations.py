@@ -386,7 +386,8 @@ def load_shortcut_history_to_table(window):
             on_open_callback=partial(_on_history_open, window),
             on_pin_callback=partial(_on_history_pin, window),
             on_delete_callback=partial(_on_history_delete, window),
-            on_terminal_callback=partial(_on_history_terminal, window)
+            on_terminal_callback=partial(_on_history_terminal, window),
+            on_codex_callback=partial(_on_history_codex, window)
         )
 
 
@@ -400,6 +401,12 @@ def _on_history_terminal(window, history_item):
     """在终端中打开历史记录对应的路径"""
     from services.shortcut_table_service import _open_in_terminal
     _open_in_terminal(history_item.get('shortcut_path', ''))
+
+
+def _on_history_codex(window, history_item):
+    """在终端中打开历史记录对应的路径（Codex）"""
+    from services.shortcut_table_service import _open_codex_in_terminal
+    _open_codex_in_terminal(history_item.get('shortcut_path', ''))
 
 
 def _on_history_pin(window, history_id):

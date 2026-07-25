@@ -61,6 +61,11 @@ CLAUDE_DANGEROUS_SKIP_PERMISSIONS_KEY = "claude_dangerously_skip_permissions"
 CLAUDE_DANGEROUS_SKIP_PERMISSIONS_DEFAULT = False  # 默认不放权
 CLAUDE_DANGEROUS_SKIP_PERMISSIONS_FLAG = "--dangerously-skip-permissions"
 
+# Codex 启动选项配置（持久化键 + 默认值）
+CODEX_DANGEROUS_SKIP_PERMISSIONS_KEY = "codex_dangerously_skip_permissions"
+CODEX_DANGEROUS_SKIP_PERMISSIONS_DEFAULT = False  # 默认不放权
+CODEX_DANGEROUS_SKIP_PERMISSIONS_FLAG = "--dangerously-bypass-approvals-and-sandbox"
+
 # 算法配置
 DEFAULT_BASE_COEFFICIENT = 1.5
 

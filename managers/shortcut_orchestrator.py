@@ -80,6 +80,12 @@ class ShortcutOrchestrator:
     def set_dangerously_skip_permissions(self, enabled: bool) -> bool:
         return self._shortcut.set_dangerously_skip_permissions(enabled)
 
+    def get_codex_dangerously_skip_permissions(self) -> bool:
+        return self._shortcut.get_codex_dangerously_skip_permissions()
+
+    def set_codex_dangerously_skip_permissions(self, enabled: bool) -> bool:
+        return self._shortcut.set_codex_dangerously_skip_permissions(enabled)
+
     def get_all_history(self) -> list:
         return self._shortcut.get_all_history()
 

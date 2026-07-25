@@ -85,6 +85,18 @@ class ShortcutsTabBuilder:
             win.on_claude_skip_permission_toggled
         )
         control.addWidget(win.claude_skip_perm_checkbox)
+
+        # Codex 启动放权开关
+        win.codex_skip_perm_checkbox = QCheckBox('放权启动 Codex')
+        win.codex_skip_perm_checkbox.setToolTip(
+            '勾选后，通过"快捷入口"和"历史记录"中的 Codex 按钮启动 Codex 时，\n'
+            '会自动带上 --dangerously-skip-permissions 参数（放权所有工具调用）。\n'
+            '状态会持久化保存，下次启动仍然生效。'
+        )
+        win.codex_skip_perm_checkbox.stateChanged.connect(
+            win.on_codex_skip_permission_toggled
+        )
+        control.addWidget(win.codex_skip_perm_checkbox)
         layout.addLayout(control)
 
         # 快捷入口表格（自定义列宽）
@@ -95,19 +107,22 @@ class ShortcutsTabBuilder:
     def _make_shortcuts_table(self) -> QTableWidget:
         win = self.parent_window
         table = QTableWidget()
-        table.setColumnCount(6)
-        table.setHorizontalHeaderLabels(['名称', 'Terminal', '类型', '标签', '路径', '创建日期'])
+        table.setColumnCount(7)
+        table.setHorizontalHeaderLabels(['名称', 'claude', 'Codex', '类型', '标签', '路径', '创建日期'])
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         header = table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(1, 45)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(2, 80)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(5, 130)
+        header.resizeSection(2, 45)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(3, 80)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(6, 130)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         table.cellDoubleClicked.connect(win.edit_shortcut)
         table.cellClicked.connect(win.on_shortcuts_cell_clicked)
@@ -137,8 +152,8 @@ class ShortcutsTabBuilder:
 
     def _make_history_table(self) -> QTableWidget:
         table = QTableWidget()
-        table.setColumnCount(6)
-        table.setHorizontalHeaderLabels(['名称', 'Terminal', '★', '路径', '最后打开', '操作'])
+        table.setColumnCount(7)
+        table.setHorizontalHeaderLabels(['名称', 'claude', 'Codex', '★', '路径', '最后打开', '操作'])
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         header = table.horizontalHeader()
@@ -146,12 +161,14 @@ class ShortcutsTabBuilder:
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(1, 45)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(2, 35)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(4, 130)
+        header.resizeSection(2, 45)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(3, 35)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(5, 100)
+        header.resizeSection(5, 130)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(6, 100)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         return table
 

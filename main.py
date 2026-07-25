@@ -151,6 +151,7 @@ class TaskManagerMainWindow(QMainWindow):
         self.load_shortcuts()
         self.load_shortcuts_history()
         self._load_claude_skip_permission_state()
+        self._load_codex_skip_permission_state()
         self.update_status_bar()
 
     # ==================== 加载与切换 ====================
@@ -409,6 +410,39 @@ class TaskManagerMainWindow(QMainWindow):
             self.claude_skip_perm_checkbox.blockSignals(True)
             self.claude_skip_perm_checkbox.setChecked(not enabled)
             self.claude_skip_perm_checkbox.blockSignals(False)
+
+    def _load_codex_skip_permission_state(self):
+        """启动时从持久化层恢复 Codex 放权开关状态。"""
+        if not hasattr(self, 'codex_skip_perm_checkbox'):
+            return
+        try:
+            shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
+            enabled = shortcut_service.get_codex_dangerously_skip_permissions()
+        except Exception as e:
+            logger.warning(f"加载 Codex 放权状态失败，使用默认: {e}")
+            enabled = config.config.CODEX_DANGEROUS_SKIP_PERMISSIONS_DEFAULT
+        self.codex_skip_perm_checkbox.blockSignals(True)
+        self.codex_skip_perm_checkbox.setChecked(enabled)
+        self.codex_skip_perm_checkbox.blockSignals(False)
+
+    def on_codex_skip_permission_toggled(self, state):
+        """勾选/取消"放权启动 Codex"时持久化最新值。"""
+        enabled = bool(state)
+        try:
+            shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
+            shortcut_service.set_codex_dangerously_skip_permissions(enabled)
+            if enabled:
+                self.status_bar.showMessage('已开启 Codex 放权启动（--dangerously-skip-permissions）', 3000)
+            else:
+                self.status_bar.showMessage('已关闭 Codex 放权启动，恢复默认行为', 3000)
+        except Exception as e:
+            logger.error(f"保存 Codex 放权状态失败: {e}", exc_info=True)
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, '保存失败', f'无法保存放权设置: {e}')
+            # 回滚 UI 状态
+            self.codex_skip_perm_checkbox.blockSignals(True)
+            self.codex_skip_perm_checkbox.setChecked(not enabled)
+            self.codex_skip_perm_checkbox.blockSignals(False)
 
     # ==================== 数据导入导出 ====================
 

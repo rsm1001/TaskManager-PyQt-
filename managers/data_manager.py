@@ -418,6 +418,12 @@ class DataManager:
     def set_dangerously_skip_permissions(self, enabled: bool) -> bool:
         return self.shortcut_orchestrator.set_dangerously_skip_permissions(enabled)
 
+    def get_codex_dangerously_skip_permissions(self) -> bool:
+        return self.shortcut_orchestrator.get_codex_dangerously_skip_permissions()
+
+    def set_codex_dangerously_skip_permissions(self, enabled: bool) -> bool:
+        return self.shortcut_orchestrator.set_codex_dangerously_skip_permissions(enabled)
+
     def get_all_history(self) -> List[Any]:
         return self.shortcut_orchestrator.get_all_history()
 

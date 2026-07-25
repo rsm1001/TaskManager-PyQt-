@@ -127,6 +127,17 @@ class ShortcutOperationService:
             logger.info(f"Claude 启动放权设置已更新为: {enabled}")
         return result
 
+    def get_codex_dangerously_skip_permissions(self) -> bool:
+        """获取 Codex 启动时是否放权"""
+        return self._data_manager.get_codex_dangerously_skip_permissions()
+
+    def set_codex_dangerously_skip_permissions(self, enabled: bool) -> bool:
+        """设置 Codex 启动时是否放权"""
+        result = self._data_manager.set_codex_dangerously_skip_permissions(enabled)
+        if result:
+            logger.info(f"Codex 启动放权设置已更新为: {enabled}")
+        return result
+
     def clear_history(self) -> int:
         """清空所有非置顶历史记录，返回删除数量"""
         count = self._data_manager.clear_all_unpinned_history()

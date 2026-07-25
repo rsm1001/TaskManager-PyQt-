@@ -6,6 +6,7 @@ Shortcut Table Service - 快捷入口表格服务模块
 import os
 import logging
 import sqlite3
+import subprocess
 import config.config as _config
 from PyQt6.QtWidgets import QPushButton, QWidget, QHBoxLayout
 from PyQt6.QtCore import Qt, QProcess, QUrl
@@ -37,6 +38,19 @@ def _get_claude_path():
     return 'claude'  # fallback
 
 
+def _get_codex_path():
+    """动态查找codex可执行文件路径"""
+    import shutil
+    path = shutil.which('codex')
+    if path:
+        return path
+    # 尝试常见的用户安装路径
+    user_bin = os.path.join(os.path.expanduser('~'), '.local', 'bin', 'codex.exe')
+    if os.path.exists(user_bin):
+        return user_bin
+    return 'codex'  # fallback
+
+
 def _is_dangerously_skip_permissions_enabled():
     """读取持久化的"放权启动"开关，失败时回落到默认值。
 
@@ -62,11 +76,60 @@ def _is_dangerously_skip_permissions_enabled():
 
 
 def _build_claude_command():
-    """根据"放权启动"开关构造 claude 启动命令字符串。"""
-    cmd = _get_claude_path()
+    """根据放权开关构造 Claude 命令参数。"""
+    command = [_get_claude_path()]
     if _is_dangerously_skip_permissions_enabled():
-        cmd = f"{cmd} {_config.CLAUDE_DANGEROUS_SKIP_PERMISSIONS_FLAG}"
-    return cmd
+        command.append(_config.CLAUDE_DANGEROUS_SKIP_PERMISSIONS_FLAG)
+    return command
+
+
+def _is_codex_skip_permissions_enabled():
+    """读取持久化的"Codex 放权启动"开关，失败时回落到默认值。"""
+    try:
+        conn = sqlite3.connect(_config.DATABASE_PATH)
+        try:
+            cursor = conn.execute(
+                "SELECT value FROM configs WHERE key = ?",
+                (_config.CODEX_DANGEROUS_SKIP_PERMISSIONS_KEY,),
+            )
+            row = cursor.fetchone()
+        finally:
+            conn.close()
+        if not row or row[0] is None:
+            return _config.CODEX_DANGEROUS_SKIP_PERMISSIONS_DEFAULT
+        return str(row[0]).strip().lower() in ('1', 'true', 'yes', 'on')
+    except Exception as e:
+        logger.warning(f"读取 Codex 放权设置失败，回落默认: {e}")
+        return _config.CODEX_DANGEROUS_SKIP_PERMISSIONS_DEFAULT
+
+
+def _build_codex_command():
+    """根据放权开关构造 Codex 命令参数。"""
+    command = [_get_codex_path()]
+    if _is_codex_skip_permissions_enabled():
+        command.append(_config.CODEX_DANGEROUS_SKIP_PERMISSIONS_FLAG)
+    return command
+
+
+def _launch_terminal(target_dir, command):
+    """在目标目录的新终端中执行命令，目录不参与 CMD 文本解析。"""
+    logger.info("启动终端 command=%s working_directory=%s", command, target_dir)
+    if os.name == "nt":
+        subprocess.Popen(
+            ["cmd.exe", "/k", *command],
+            cwd=target_dir,
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
+        return
+    subprocess.Popen(command, cwd=target_dir)
+
+
+def _open_codex_in_terminal(path):
+    """在文件/文件夹所在目录启动cmd执行codex"""
+    if not path:
+        return
+    target_dir = os.path.dirname(os.path.abspath(path)) if os.path.isfile(path) else os.path.abspath(path)
+    _launch_terminal(target_dir, _build_codex_command())
 
 
 def _open_in_terminal(path):
@@ -74,9 +137,7 @@ def _open_in_terminal(path):
     if not path:
         return
     target_dir = os.path.dirname(os.path.abspath(path)) if os.path.isfile(path) else os.path.abspath(path)
-    claude_cmd = _build_claude_command()
-    logger.info(f"在终端中打开路径: {target_dir}, 命令: {claude_cmd}")
-    os.system(f'start cmd /k "cd /d {target_dir} && {claude_cmd}"')
+    _launch_terminal(target_dir, _build_claude_command())
 
 
 def _open_shortcut_path(path, action_type='open'):
@@ -95,11 +156,7 @@ def _open_shortcut_path(path, action_type='open'):
     if action_type == 'script':
         # 执行脚本：在文件所在目录启动cmd执行claude
         script_dir = os.path.dirname(os.path.abspath(path)) if path else ''
-        claude_cmd = _build_claude_command()
-        QProcess.startDetached(
-            'cmd.exe', ['/c', 'start', 'cmd', '/k', f'cd /d "{script_dir}" && {claude_cmd}'],
-            script_dir,
-        )
+        _launch_terminal(script_dir, _build_claude_command())
     elif os.path.isfile(path) and path.lower().endswith(('.bat', '.cmd')):
         # bat/cmd 文件：用 QProcess 执行，设置正确的工作目录
         working_dir = os.path.dirname(os.path.abspath(path))
@@ -184,26 +241,52 @@ def render_shortcut_row(table, row, shortcut_item, on_open_callback=None):
     claude_btn.clicked.connect(on_claude_clicked)
     table.setCellWidget(row, 1, claude_btn)
 
-    # 类型列：显示文件/文件夹
+    # Codex Terminal按钮列（列2）
+    codex_btn = QPushButton('>_ ')
+    codex_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    codex_btn.setToolTip(f'在 "{shortcut_path}" 所在目录启动Codex')
+    codex_btn.setStyleSheet("""
+        QPushButton {
+            background-color: #e8f5e9;
+            border: 1px solid #2e7d32;
+            border-radius: 4px;
+            padding: 4px 8px;
+            color: #1b5e20;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        QPushButton:hover {
+            background-color: #c8e6c9;
+        }
+        QPushButton:pressed {
+            background-color: #a5d6a7;
+        }
+    """)
+    def on_codex_clicked(checked, p=shortcut_path):
+        _open_codex_in_terminal(p)
+    codex_btn.clicked.connect(on_codex_clicked)
+    table.setCellWidget(row, 2, codex_btn)
+
+    # 类型列（列2 → 列3）
     if os.path.isfile(shortcut_path):
         type_display = '文件'
     elif os.path.isdir(shortcut_path):
         type_display = '文件夹'
     else:
         type_display = '未知'
-    table.setItem(row, 2, QTableWidgetItem(type_display))
+    table.setItem(row, 3, QTableWidgetItem(type_display))
 
-    # 标签列
+    # 标签列（列3 → 列4）
     tags_display = tags if tags else '-'
-    table.setItem(row, 3, QTableWidgetItem(tags_display))
+    table.setItem(row, 4, QTableWidgetItem(tags_display))
 
-    # 路径列
+    # 路径列（列4 → 列5）
     path_text = shortcut_path if shortcut_path else '-'
     path_item = QTableWidgetItem(path_text)
     path_item.setToolTip(path_text)
-    table.setItem(row, 4, path_item)
+    table.setItem(row, 5, path_item)
 
-    # 创建日期列
+    # 创建日期列（列5 → 列6）
     from datetime import datetime
     raw_date = shortcut_item.get('created_at', '-')
     if raw_date and raw_date != '-':
@@ -214,7 +297,7 @@ def render_shortcut_row(table, row, shortcut_item, on_open_callback=None):
             date_display = raw_date
     else:
         date_display = '-'
-    table.setItem(row, 5, QTableWidgetItem(date_display))
+    table.setItem(row, 6, QTableWidgetItem(date_display))
 
     # 将 id 存在按钮属性中，方便查找
     btn.setProperty("task_id", shortcut_item['id'])
@@ -222,7 +305,7 @@ def render_shortcut_row(table, row, shortcut_item, on_open_callback=None):
     logger.debug(f"渲染快捷入口行: {title}")
 
 
-def render_history_row(table, row, history_item, on_open_callback, on_pin_callback, on_delete_callback, on_terminal_callback):
+def render_history_row(table, row, history_item, on_open_callback, on_pin_callback, on_delete_callback, on_terminal_callback, on_codex_callback=None):
     """渲染历史记录表格的一行
 
     Args:
@@ -232,7 +315,8 @@ def render_history_row(table, row, history_item, on_open_callback, on_pin_callba
         on_open_callback: 打开历史记录的回调函数，接收 (history_item)
         on_pin_callback: 切换置顶的回调函数，接收 (history_id)
         on_delete_callback: 删除历史记录的回调函数，接收 (history_id)
-        on_terminal_callback: 终端打开的回调函数，接收 (history_item)
+        on_terminal_callback: 终端打开的回调函数，接收 (history_item) —— Claude
+        on_codex_callback: 终端打开的回调函数，接收 (history_item) —— Codex（可选）
     """
     from PyQt6.QtWidgets import QPushButton, QTableWidgetItem, QWidget, QHBoxLayout
     from PyQt6.QtCore import Qt
@@ -292,7 +376,34 @@ def render_history_row(table, row, history_item, on_open_callback, on_pin_callba
     terminal_btn.clicked.connect(on_terminal_clicked)
     table.setCellWidget(row, 1, terminal_btn)
 
-    # 置顶标记列
+    # Codex Terminal按钮列
+    if on_codex_callback:
+        codex_btn = QPushButton('>_ ')
+        codex_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        codex_btn.setToolTip(f'在 "{path}" 所在目录启动Codex')
+        codex_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e8f5e9;
+                border: 1px solid #2e7d32;
+                border-radius: 4px;
+                padding: 4px 8px;
+                color: #1b5e20;
+                font-size: 13px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #c8e6c9;
+            }
+            QPushButton:pressed {
+                background-color: #a5d6a7;
+            }
+        """)
+        def on_codex_clicked(checked, h=history_item):
+            on_codex_callback(h)
+        codex_btn.clicked.connect(on_codex_clicked)
+        table.setCellWidget(row, 2, codex_btn)
+
+    # 置顶标记列（列2 → 列3）
     from PyQt6.QtGui import QColor
     pin_display = '★' if is_pinned else '☆'
     pin_item = QTableWidgetItem(pin_display)
@@ -301,15 +412,15 @@ def render_history_row(table, row, history_item, on_open_callback, on_pin_callba
         pin_item.setForeground(QColor('#e65100'))  # 橙色
     else:
         pin_item.setForeground(QColor('#9e9e9e'))  # 灰色
-    table.setItem(row, 2, pin_item)
+    table.setItem(row, 3, pin_item)
 
-    # 路径列
+    # 路径列（列3 → 列4）
     path_text = path if path else '-'
     path_item = QTableWidgetItem(path_text)
     path_item.setToolTip(path_text)
-    table.setItem(row, 3, path_item)
+    table.setItem(row, 4, path_item)
 
-    # 最后打开时间列
+    # 最后打开时间列（列4 → 列5）
     from datetime import datetime
     raw_date = history_item.get('opened_at', '-')
     if raw_date and raw_date != '-':
@@ -320,9 +431,9 @@ def render_history_row(table, row, history_item, on_open_callback, on_pin_callba
             date_display = raw_date
     else:
         date_display = '-'
-    table.setItem(row, 4, QTableWidgetItem(date_display))
+    table.setItem(row, 5, QTableWidgetItem(date_display))
 
-    # 操作列：置顶/取消置顶按钮
+    # 操作列（列5 → 列6）：置顶/取消置顶按钮
     pin_btn = QPushButton('★' if not is_pinned else '☆')
     pin_btn.setCursor(Qt.CursorShape.PointingHandCursor)
     pin_btn.setToolTip('置顶' if not is_pinned else '取消置顶')
@@ -377,7 +488,7 @@ def render_history_row(table, row, history_item, on_open_callback, on_pin_callba
     op_layout.addWidget(pin_btn)
     op_layout.addWidget(delete_btn)
     op_layout.addStretch()
-    table.setCellWidget(row, 5, op_widget)
+    table.setCellWidget(row, 6, op_widget)
 
     # 将 id 存在按钮属性中，方便查找
     btn.setProperty("history_id", history_item['id'])
