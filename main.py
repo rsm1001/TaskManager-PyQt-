@@ -1,708 +1,102 @@
-"""
-Task Manager - PyQt6 主界面
-现代化的任务管理器界面
-"""
+"""任务管理器主窗口入口与界面组装。"""
 
-import sys
 import os
+import sys
 
-# 添加项目根目录到路径
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QTabWidget, QDialog, QMessageBox, QStatusBar
-from dialogs.json_examples_dialog import JsonExamplesDialog
-from dialogs.trash_dialog import TrashDialog
-from dialogs.pomodoro_config_dialog import PomodoroConfigDialog
-from managers.data_manager import DataManager, TaskType
-from components.ui_components import (
-    create_daily_tab_ui,
-    create_todo_tab_ui,
-    create_entertainment_tab_ui,
-    create_shortcuts_tab_ui,
-    create_search_tab_ui,
-)
-from components.ui_elements import create_menu_bar, create_toolbar
-from components.pomodoro_toolbar import PomodoroToolbarWidget
-from components.itinerary_widget import ItineraryWidget
-from services.table_operations import (
-    load_daily_tasks_to_table,
-    load_todo_tasks_to_table,
-    load_entertainment_tasks_to_table,
-    toggle_daily_task_status,
-    toggle_todo_task_status,
-    toggle_entertainment_task_status,
-    sort_todo_table_by_column,
-    load_shortcuts_to_table,
-    load_shortcut_history_to_table,
-    load_search_results_to_table,
-)
-from services.window_task_operations import TaskOperationHandler
-from utils.ui_messages import show_statistics_dialog, show_about_dialog
-from utils.ui_messages import show_export_success, show_export_failure
-from utils.ui_messages import show_import_success, show_import_failure, confirm_data_import
-from utils.logging_config import setup_logging, get_logger
-from services.search_coordinator import SearchCoordinator
-from services.shortcut_operation_service import ShortcutOperationService
+from PyQt6.QtWidgets import QApplication, QMainWindow, QStatusBar, QTabWidget, QVBoxLayout, QWidget
 
 import config.config
+from components.ui_components import (
+    create_daily_tab_ui,
+    create_entertainment_tab_ui,
+    create_search_tab_ui,
+    create_shortcuts_tab_ui,
+    create_todo_tab_ui,
+)
+from components.ui_elements import create_menu_bar, create_toolbar
+from managers.data_manager import DataManager
+from services.search_coordinator import SearchCoordinator
+from services.window_task_operations import TaskOperationHandler
+from ui.main_window_table_actions import MainWindowTableActionsMixin
+from ui.main_window_task_actions import MainWindowTaskActionsMixin
+from ui.main_window_tools import MainWindowToolsMixin
+from utils.logging_config import setup_logging
 
-# 初始化日志系统（尽早初始化）
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 setup_logging(log_level=config.config.LOG_LEVEL)
-logger = get_logger(__name__)
 
 
-class TaskManagerMainWindow(QMainWindow):
-    """任务管理器主窗口"""
+class TaskManagerMainWindow(
+    MainWindowTableActionsMixin,
+    MainWindowTaskActionsMixin,
+    MainWindowToolsMixin,
+    QMainWindow,
+):
+    """只负责组合依赖和界面，业务行为由职责模块提供。"""
 
     def __init__(self):
         super().__init__()
-        # 延迟初始化目录（避免导入时副作用）
         config.config.ensure_directories()
         self.data_manager = DataManager()
-        # 初始化任务操作处理器
         self._task_handler = TaskOperationHandler(self)
-        # 各 tab 独立的标签筛选条件字符串（解决全局共享导致的跨 tab 干扰问题）
-        # 注意：Tab 创建时会创建 daily_tag_filter 等名字的 TagFilterBar 实例，
-        #       所以这里用 _value 后缀区分，load 函数里读取时也用这个后缀
-        self.daily_tag_filter_value = ""
-        self.todo_tag_filter_value = ""
-        self.entertainment_tag_filter_value = ""
-        # 状态切换防双击/防抖
-        self._status_switching_row = -1   # 当前正在处理状态切换的行（-1表示无）
-        self._status_switch_timestamps = {}  # task_id -> 上次切换时间戳(ms)
-        # 初始化番茄钟服务
+        self.daily_tag_filter_value = ''
+        self.todo_tag_filter_value = ''
+        self.entertainment_tag_filter_value = ''
+        self._status_switching_row = -1
+        self._status_switch_timestamps = {}
         self._pomodoro_service = self.data_manager._get_pomodoro_service()
         self._pomodoro_toolbar = None
         self._pomodoro_toolbar_positioned = False
-        # 行程面板
         self._itinerary_widget = None
         self._itinerary_positioned = False
         self.filter_arranged_tasks = False
-        self._arranged_task_refs: set = set()  # {(task_type, task_id), ...}  已安排行程的任务缓存
-        # 初始化搜索协调器
+        self._arranged_task_refs = set()
         self._search_coordinator = SearchCoordinator(self)
         self.init_ui()
         self.load_data()
 
     def init_ui(self):
-        """初始化用户界面"""
         self.setWindowTitle(config.config.WINDOW_TITLE)
         self.setGeometry(100, 100, config.config.WINDOW_WIDTH, config.config.WINDOW_HEIGHT)
-
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-
-        main_layout = QVBoxLayout(central_widget)
-
+        layout = QVBoxLayout(central_widget)
         self.tab_widget = QTabWidget()
-        main_layout.addWidget(self.tab_widget)
-
+        layout.addWidget(self.tab_widget)
         self.create_search_tab()
         self.create_daily_tab()
         self.create_todo_tab()
         self.create_entertainment_tab()
         self.create_shortcuts_tab()
-
         self.create_menu_bar()
         self.create_toolbar()
-
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("就绪")
+        self.status_bar.showMessage('就绪')
 
     def create_menu_bar(self):
-        """创建菜单栏"""
         create_menu_bar(self)
 
     def create_toolbar(self):
-        """创建工具栏"""
         create_toolbar(self)
 
     def create_daily_tab(self):
-        """创建每日任务标签页"""
-        daily_widget = create_daily_tab_ui(self)
-        self.tab_widget.addTab(daily_widget, '每日必做')
+        self.tab_widget.addTab(create_daily_tab_ui(self), '每日必做')
 
     def create_todo_tab(self):
-        """创建待办事项标签页"""
-        todo_widget = create_todo_tab_ui(self)
-        self.tab_widget.addTab(todo_widget, '待办事项')
+        self.tab_widget.addTab(create_todo_tab_ui(self), '待办事项')
 
     def create_entertainment_tab(self):
-        """创建娱乐任务标签页"""
-        entertainment_widget = create_entertainment_tab_ui(self)
-        self.tab_widget.addTab(entertainment_widget, '娱乐任务')
+        self.tab_widget.addTab(create_entertainment_tab_ui(self), '娱乐任务')
 
     def create_shortcuts_tab(self):
-        """创建快捷入口标签页"""
-        shortcuts_widget = create_shortcuts_tab_ui(self)
-        self.tab_widget.addTab(shortcuts_widget, '快捷入口')
+        self.tab_widget.addTab(create_shortcuts_tab_ui(self), '快捷入口')
 
     def create_search_tab(self):
-        """创建全局搜索标签页"""
-        search_widget = create_search_tab_ui(self)
-        self.tab_widget.insertTab(0, search_widget, '搜索')
-
-    def load_data(self):
-        """加载所有数据"""
-        self.load_daily_tasks()
-        self.load_todo_tasks()
-        self.load_entertainment_tasks()
-        self.load_shortcuts()
-        self.load_shortcuts_history()
-        self._load_claude_skip_permission_state()
-        self._load_codex_skip_permission_state()
-        self.update_status_bar()
-
-    # ==================== 加载与切换 ====================
-
-    def load_daily_tasks(self):
-        """加载每日任务"""
-        load_daily_tasks_to_table(self)
-
-    def load_tasks_for_selected_weekday(self):
-        """星期变化时刷新行程缓存及受影响的任务表。"""
-        if self.filter_arranged_tasks:
-            self._refresh_arranged_cache()
-            self.load_todo_tasks()
-            self.load_entertainment_tasks()
-        self.load_daily_tasks()
-
-    def toggle_daily_task_status(self, row, column):
-        """切换每日任务状态"""
-        toggle_daily_task_status(self, row, column)
-
-    def load_todo_tasks(self):
-        """加载待办事项"""
-        load_todo_tasks_to_table(self)
-
-    def toggle_todo_task_status(self, row, column):
-        """切换待办事项状态"""
-        toggle_todo_task_status(self, row, column)
-
-    def sort_todo_table_by_column(self, column):
-        """根据列进行排序（支持正序和倒序）"""
-        sort_todo_table_by_column(self, column)
-
-    def load_entertainment_tasks(self):
-        """加载娱乐任务"""
-        load_entertainment_tasks_to_table(self)
-
-    def toggle_entertainment_task_status(self, row, column):
-        """切换娱乐任务状态"""
-        toggle_entertainment_task_status(self, row, column)
-
-    def load_shortcuts(self):
-        """加载快捷入口"""
-        load_shortcuts_to_table(self)
-
-    def load_shortcuts_history(self):
-        """加载快捷入口历史记录"""
-        load_shortcut_history_to_table(self)
-
-    # ==================== 全局搜索 ====================
-
-    def on_search_text_changed(self, text: str):
-        """搜索框文字变化时加载搜索结果"""
-        if not text.strip():
-            self._search_coordinator.clear_search_results()
-            return
-        load_search_results_to_table(self)
-
-    def on_search_clear(self):
-        """清除搜索"""
-        self.search_input.clear()
-        self._search_coordinator.clear_search_results()
-
-    def on_search_result_double_click(self, row: int, column: int):
-        """双击搜索结果行，跳转到对应任务的Tab并选中"""
-        self._search_coordinator.navigate_to_task(row)
-
-    # ==================== 每日任务操作（委托） ====================
-
-    def add_daily_task(self):
-        """添加每日任务"""
-        self._task_handler.add_daily_task()
-
-    def edit_daily_task(self):
-        """编辑每日任务"""
-        self._task_handler.edit_daily_task()
-
-    def delete_daily_task(self):
-        """删除每日任务"""
-        self._task_handler.delete_daily_task()
-
-    def reset_today_daily_tasks(self):
-        """手动重置今日已完成的每日任务"""
-        self._task_handler.reset_today_daily_tasks()
-
-    def random_daily_task(self):
-        """随机抽取每日任务（根据当前筛选条件）"""
-        self._task_handler.random_daily_task()
-
-    # ==================== 待办事项操作（委托） ====================
-
-    def add_todo_task(self):
-        """添加待办事项"""
-        self._task_handler.add_todo_task()
-
-    def edit_todo_task(self):
-        """编辑待办事项"""
-        self._task_handler.edit_todo_task()
-
-    def delete_todo_task(self):
-        """删除待办事项"""
-        self._task_handler.delete_todo_task()
-
-    def random_todo_task(self):
-        """随机抽取待办事项（按权重）"""
-        self._task_handler.random_todo_task()
-
-    # ==================== 娱乐任务操作（委托） ====================
-
-    def add_entertainment_task(self):
-        """添加娱乐任务"""
-        self._task_handler.add_entertainment_task()
-
-    def edit_entertainment_task(self):
-        """编辑娱乐任务"""
-        self._task_handler.edit_entertainment_task()
-
-    def delete_entertainment_task(self):
-        """删除娱乐任务"""
-        self._task_handler.delete_entertainment_task()
-
-    def random_entertainment_task(self):
-        """随机抽取娱乐任务"""
-        self._task_handler.random_entertainment_task()
-
-    # ==================== 批量操作（委托） ====================
-
-    def batch_edit_daily_status(self):
-        """批量修改每日任务状态"""
-        self._task_handler.batch_edit_daily_status()
-
-    def batch_edit_todo_status(self):
-        """批量修改待办事项状态"""
-        self._task_handler.batch_edit_todo_status()
-
-    def batch_edit_entertainment_status(self):
-        """批量修改娱乐任务状态"""
-        self._task_handler.batch_edit_entertainment_status()
-
-    def batch_edit_daily_tags(self):
-        """批量编辑每日任务标签"""
-        self._task_handler.batch_edit_tags('daily')
-
-    def batch_edit_todo_tags(self):
-        """批量编辑待办事项标签"""
-        self._task_handler.batch_edit_tags('todo')
-
-    def batch_edit_entertainment_tags(self):
-        """批量编辑娱乐任务标签"""
-        self._task_handler.batch_edit_tags('entertainment')
-
-    # ==================== 快捷入口操作（委托） ====================
-
-    def add_shortcut(self):
-        """添加快捷入口"""
-        self._task_handler.add_shortcut()
-
-    def edit_shortcut(self):
-        """编辑选中的快捷入口"""
-        self._task_handler.edit_shortcut()
-
-    def delete_shortcut(self):
-        """删除选中的快捷入口（不经过垃圾桶）"""
-        self._task_handler.delete_shortcut()
-
-    def open_shortcut(self):
-        """打开选中的快捷入口"""
-        row = self.shortcuts_table.currentRow()
-        if row < 0:
-            from utils.ui_messages import warn_no_task_selected
-            warn_no_task_selected()
-            return
-        btn = self.shortcuts_table.cellWidget(row, 0)
-        if btn is None:
-            return
-        shortcut_id = btn.property('task_id')
-        if not shortcut_id:
-            return
-        # 使用快捷入口操作服务
-        shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
-        result = shortcut_service.open_shortcut(shortcut_id)
-        # 刷新历史记录表格和标签显示
-        self.load_shortcuts_history()
-        self._update_history_limit_label()
-
-    def on_shortcuts_cell_clicked(self, row, col):
-        """快捷入口表格单击处理（列0时触发按钮点击）"""
-        if col == 0:
-            btn = self.shortcuts_table.cellWidget(row, 0)
-            if btn:
-                btn.click()
-
-    def set_history_limit(self):
-        """设置历史记录缓存数量"""
-        from PyQt6.QtWidgets import QInputDialog, QMessageBox
-        shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
-        current_limit = shortcut_service.get_history_limit()
-        new_limit, ok = QInputDialog.getInt(
-            self, '设置缓存数量',
-            '请输入历史记录缓存数量（1-1000）:',
-            value=current_limit, min=1, max=1000
-        )
-        if not ok:
-            return
-        shortcut_service.set_history_limit(new_limit)
-        self._update_history_limit_label()
-        self.load_shortcuts_history()
-        QMessageBox.information(self, '设置完成', f'历史记录缓存数量已设置为 {new_limit} 条')
-
-    def clear_history(self):
-        """清空历史记录（保留置顶）"""
-        from PyQt6.QtWidgets import QMessageBox
-        shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
-        count = shortcut_service.clear_history()
-        self.load_shortcuts_history()
-        QMessageBox.information(self, '清空完成', f'已清空 {count} 条非置顶历史记录')
-
-    def _update_history_limit_label(self):
-        """更新历史记录缓存数量标签"""
-        if hasattr(self, 'history_limit_label'):
-            shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
-            limit = shortcut_service.get_history_limit()
-            self.history_limit_label.setText(f'当前缓存: {limit} 条')
-
-    # ==================== Claude 启动放权开关 ====================
-
-    def _load_claude_skip_permission_state(self):
-        """启动时从持久化层恢复放权开关状态。"""
-        if not hasattr(self, 'claude_skip_perm_checkbox'):
-            return
-        try:
-            shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
-            enabled = shortcut_service.get_dangerously_skip_permissions()
-        except Exception as e:
-            logger.warning(f"加载 Claude 放权状态失败，使用默认: {e}")
-            enabled = config.config.CLAUDE_DANGEROUS_SKIP_PERMISSIONS_DEFAULT
-        # blockSignals 防止加载阶段触发写入回持久化
-        self.claude_skip_perm_checkbox.blockSignals(True)
-        self.claude_skip_perm_checkbox.setChecked(enabled)
-        self.claude_skip_perm_checkbox.blockSignals(False)
-
-    def on_claude_skip_permission_toggled(self, state):
-        """勾选/取消"放权启动 Claude"时持久化最新值。"""
-        enabled = bool(state)
-        try:
-            shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
-            shortcut_service.set_dangerously_skip_permissions(enabled)
-            if enabled:
-                self.status_bar.showMessage('已开启 Claude 放权启动（--dangerously-skip-permissions）', 3000)
-            else:
-                self.status_bar.showMessage('已关闭 Claude 放权启动，恢复默认行为', 3000)
-        except Exception as e:
-            logger.error(f"保存 Claude 放权状态失败: {e}", exc_info=True)
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, '保存失败', f'无法保存放权设置: {e}')
-            # 回滚 UI 状态
-            self.claude_skip_perm_checkbox.blockSignals(True)
-            self.claude_skip_perm_checkbox.setChecked(not enabled)
-            self.claude_skip_perm_checkbox.blockSignals(False)
-
-    def _load_codex_skip_permission_state(self):
-        """启动时从持久化层恢复 Codex 放权开关状态。"""
-        if not hasattr(self, 'codex_skip_perm_checkbox'):
-            return
-        try:
-            shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
-            enabled = shortcut_service.get_codex_dangerously_skip_permissions()
-        except Exception as e:
-            logger.warning(f"加载 Codex 放权状态失败，使用默认: {e}")
-            enabled = config.config.CODEX_DANGEROUS_SKIP_PERMISSIONS_DEFAULT
-        self.codex_skip_perm_checkbox.blockSignals(True)
-        self.codex_skip_perm_checkbox.setChecked(enabled)
-        self.codex_skip_perm_checkbox.blockSignals(False)
-
-    def on_codex_skip_permission_toggled(self, state):
-        """勾选/取消"放权启动 Codex"时持久化最新值。"""
-        enabled = bool(state)
-        try:
-            shortcut_service = self.data_manager._service_factory.get_shortcut_operation_service()
-            shortcut_service.set_codex_dangerously_skip_permissions(enabled)
-            if enabled:
-                self.status_bar.showMessage('已开启 Codex 放权启动（--dangerously-skip-permissions）', 3000)
-            else:
-                self.status_bar.showMessage('已关闭 Codex 放权启动，恢复默认行为', 3000)
-        except Exception as e:
-            logger.error(f"保存 Codex 放权状态失败: {e}", exc_info=True)
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, '保存失败', f'无法保存放权设置: {e}')
-            # 回滚 UI 状态
-            self.codex_skip_perm_checkbox.blockSignals(True)
-            self.codex_skip_perm_checkbox.setChecked(not enabled)
-            self.codex_skip_perm_checkbox.blockSignals(False)
-
-    # ==================== 数据导入导出 ====================
-
-    def export_data(self):
-        """导出数据"""
-        from PyQt6.QtWidgets import QFileDialog
-        filepath, _ = QFileDialog.getSaveFileName(
-            self, '导出数据', 'tasks_export.json', 'JSON Files (*.json)'
-        )
-        if not filepath:
-            return
-        success = self.data_manager.export_to_json(filepath)
-        if success:
-            show_export_success()
-        else:
-            show_export_failure()
-
-    def import_data(self):
-        """导入数据"""
-        from PyQt6.QtWidgets import QFileDialog
-        filepath, _ = QFileDialog.getOpenFileName(
-            self, '导入数据', '', 'JSON Files (*.json)'
-        )
-        if not filepath:
-            return
-        if confirm_data_import(self) != QMessageBox.StandardButton.Yes:
-            return
-        success = self.data_manager.import_from_json(filepath)
-        if success:
-            self.load_data()
-            show_import_success(self)
-            self.status_bar.showMessage('数据导入成功')
-        else:
-            show_import_failure(self)
-            self.status_bar.showMessage('数据导入失败')
-
-    # ==================== 其他 ====================
-
-    def show_statistics(self):
-        """显示统计信息"""
-        stats = self.data_manager.get_statistics()
-        show_statistics_dialog(stats)
-
-    def run_type_check(self):
-        """运行 mypy 类型检查"""
-        from utils.ui_messages import show_type_check_dialog
-        show_type_check_dialog(self)
-
-    def _refresh_arranged_cache(self):
-        """按主界面所选星期刷新已安排任务缓存。"""
-        weekday = self.daily_weekday_combo.currentText()
-        day_of_week = None
-        if weekday in config.config.WEEKDAY_NAMES:
-            day_of_week = config.config.WEEKDAY_NAMES.index(weekday) + 1
-        self._arranged_task_refs = self.data_manager.get_itinerary_task_refs(
-            day_of_week=day_of_week,
-        )
-
-    def _get_arranged_task_refs(self) -> set:
-        """获取已安排行程引用集合，优先用缓存。"""
-        return self._arranged_task_refs
-
-    def show_itinerary(self):
-        """显示/隐藏行程面板"""
-        from PyQt6 import sip
-        # 检查窗口是否已被销毁
-        if self._itinerary_widget is not None and sip.isdeleted(self._itinerary_widget):
-            self._itinerary_widget = None
-            self._itinerary_positioned = False
-
-        if self._itinerary_widget is None:
-            self._itinerary_widget = ItineraryWidget(self.data_manager, self)
-            self._itinerary_widget.destroyed.connect(lambda: (
-                setattr(self, '_itinerary_widget', None),
-                setattr(self, '_itinerary_positioned', False)
-            ))
-            # 首次创建时刷新缓存
-            self._refresh_arranged_cache()
-
-        if self._itinerary_widget.isVisible():
-            self._itinerary_widget.hide()
-            return
-
-        if not self._itinerary_positioned and not self._itinerary_widget.has_saved_position():
-            geo = self.geometry()
-            x = geo.center().x() - self._itinerary_widget.width() // 2
-            y = geo.center().y() - self._itinerary_widget.height() // 2
-            self._itinerary_widget.move(x, y)
-        self._itinerary_positioned = True
-        self._itinerary_widget.show()
-        self._itinerary_widget.raise_()
-        # 每次打开行程面板时刷新缓存（可能有变动）
-        self._refresh_arranged_cache()
-
-    def refresh_arranged_cache(self):
-        """刷新已安排任务缓存（供外部调用）。"""
-        self._refresh_arranged_cache()
-
-    def toggle_arranged_tasks_filter(self, checked: bool):
-        """切换已安排任务过滤（仅显示未安排到当前星期行程的任务）"""
-        self.filter_arranged_tasks = checked
-        if checked:
-            self._refresh_arranged_cache()
-        self.load_daily_tasks()
-        self.load_todo_tasks()
-        self.load_entertainment_tasks()
-
-    def show_pomodoro(self):
-        """显示/隐藏番茄钟工具栏"""
-        # 检查工具栏是否已被销毁
-        from PyQt6 import sip
-        if self._pomodoro_toolbar is not None and sip.isdeleted(self._pomodoro_toolbar):
-            self._pomodoro_toolbar = None
-            self._pomodoro_toolbar_positioned = False
-
-        if self._pomodoro_toolbar is None:
-            self._pomodoro_toolbar = PomodoroToolbarWidget(self._pomodoro_service, self)
-            self._pomodoro_toolbar.destroyed.connect(lambda: (
-                setattr(self, '_pomodoro_toolbar', None),
-                setattr(self, '_pomodoro_toolbar_positioned', False)
-            ))
-
-        if not self._pomodoro_toolbar.isVisible():
-            if not self._pomodoro_toolbar_positioned:
-                # 首次显示时，设置在主窗口右下角
-                geo = self.geometry()
-                x = geo.right() - self._pomodoro_toolbar.width() - 10
-                y = geo.bottom() - self._pomodoro_toolbar.height() - 10
-                self._pomodoro_toolbar.move(x, y)
-                self._pomodoro_toolbar_positioned = True
-            self._pomodoro_toolbar.show()
-        else:
-            self._pomodoro_toolbar.hide()
-
-    def show_schulte_grid(self):
-        """显示/隐藏舒尔特方格训练"""
-        from PyQt6 import sip
-        # 检查窗口是否已被销毁
-        if hasattr(self, 'schulte_grid') and not sip.isdeleted(self.schulte_grid):
-            if self.schulte_grid.isVisible():
-                self.schulte_grid.hide()
-                return
-            else:
-                # 窗口存在但被隐藏，显示它
-                geo = self.geometry()
-                x = geo.center().x() - self.schulte_grid.width() // 2
-                y = geo.center().y() - self.schulte_grid.height() // 2
-                self.schulte_grid.move(x, y)
-                self.schulte_grid.show()
-                return
-
-        # 创建新窗口，相对主窗口居中
-        from components.schulte_grid import SchulteGridWidget
-        self.schulte_grid = SchulteGridWidget()
-        geo = self.geometry()
-        x = geo.center().x() - self.schulte_grid.width() // 2
-        y = geo.center().y() - self.schulte_grid.height() // 2
-        self.schulte_grid.move(x, y)
-        self.schulte_grid.show()
-
-    def show_pomodoro_config(self):
-        """显示番茄钟配置对话框"""
-        dialog = PomodoroConfigDialog(self, self.data_manager)
-        dialog.exec()
-
-    def show_time_period_settings(self):
-        """打开时段设置对话框；任何变更后刷新 UI。"""
-        from dialogs.time_period_dialog import TimePeriodDialog
-        from components.ui_components import refresh_all_time_period_combos
-        dialog = TimePeriodDialog(self, self.data_manager)
-        # 任一时段变更后，让筛选下拉框与表格时段列都同步
-        dialog.updated.connect(
-            lambda: refresh_all_time_period_combos(self)
-        )
-        dialog.exec()
-
-    def show_json_examples(self):
-        """显示JSON导入示例"""
-        dialog = JsonExamplesDialog(self)
-        dialog.exec()
-
-    def show_about(self):
-        """显示关于信息"""
-        show_about_dialog(self)
-
-    def update_status_bar(self):
-        """更新状态栏"""
-        import logging
-        import traceback
-        logger = logging.getLogger(__name__)
-        try:
-            stats = self.data_manager.get_statistics()
-
-            # 格式化进行中任务耗时
-            pending_dur = stats['daily'].get('pending_duration', 0)
-            if pending_dur >= 60:
-                dur_text = f"{pending_dur // 60}小时{pending_dur % 60}分钟"
-            elif pending_dur > 0:
-                dur_text = f"{pending_dur}分钟"
-            else:
-                dur_text = ""
-
-            pending_count = stats['daily'].get('pending', 0)
-            pending_info = f"({dur_text})" if pending_count > 0 else ""
-
-            msg = (f"每日: {stats['daily']['completed']}/{stats['daily']['total']} 完成 "
-                   f"{pending_info} "
-                   f"({stats['daily']['paused']} 暂弃不统计) | "
-                   f"待办: {stats['todo']['completed']}/{stats['todo']['total']} 完成 "
-                   f"({stats['todo']['expired']} 过期, {stats['todo']['paused']} 暂弃不统计) | "
-                   f"娱乐: {stats['entertainment']['completed']}/{stats['entertainment']['total']} 完成 "
-                   f"({stats['entertainment']['paused']} 暂弃不统计)")
-            logger.info(f"设置状态栏: {msg}")
-            self.status_bar.showMessage(msg, 0)  # 0 表示永久显示，不自动消失
-        except Exception as e:
-            logger.error(f"更新状态栏失败: {e}\n{traceback.format_exc()}")
-            self.status_bar.showMessage(f"获取统计数据时出错: {e}", 0)
-
-    def update_task_row_style(self, table, row, is_completed):
-        """更新任务行样式（根据完成状态）"""
-        from utils.ui_messages import update_task_row_style as update_style
-        update_style(table, row, is_completed)
-
-    def closeEvent(self, event):
-        """关闭事件处理"""
-        self.data_manager.close_session()
-        event.accept()
-
-    def open_trash_dialog(self):
-        """打开垃圾桶对话框"""
-        dialog = TrashDialog(self, self.data_manager)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.load_data()
-
-    def is_auto_cleanup_enabled(self) -> bool:
-        """检查是否启用了自动检测删除未使用标签"""
-        return self.data_manager.get_config('auto_cleanup_unused_tags', '0') == '1'
-
-    def cleanup_unused_tags_manual(self):
-        """手动清理所有类别中未被任务使用的标签"""
-        cleanup_service = self.data_manager._service_factory.get_tag_cleanup_service()
-        result = cleanup_service.cleanup_unused_tags()
-        total_cleaned = sum(result.values())
-        self.daily_tag_filter.refresh_tags()
-        self.todo_tag_filter.refresh_tags()
-        self.entertainment_tag_filter.refresh_tags()
-        self.shortcut_tag_filter.refresh_tags()
-        QMessageBox.information(
-            self, '清理完成',
-            f'共清理了 {total_cleaned} 个未使用标签\n'
-            f'每日任务: {result.get("daily", 0)} 个\n'
-            f'待办事项: {result.get("todo", 0)} 个\n'
-            f'娱乐任务: {result.get("entertainment", 0)} 个\n'
-            f'快捷入口: {result.get("shortcut", 0)} 个'
-        )
-        self.status_bar.showMessage(f'标签清理完成，共删除 {total_cleaned} 个未使用标签')
+        self.tab_widget.insertTab(0, create_search_tab_ui(self), '搜索')
 
 
 def main():
-    """主函数"""
     app = QApplication(sys.argv)
     window = TaskManagerMainWindow()
     window.show()
