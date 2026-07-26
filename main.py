@@ -23,9 +23,9 @@ from components.ui_elements import create_menu_bar, create_toolbar
 from managers.application.data_manager import DataManager
 from services.search.search_coordinator import SearchCoordinator
 from services.application.window_task_operations import TaskOperationHandler
-from ui.main_window_table_actions import MainWindowTableActionsMixin
-from ui.main_window_task_actions import MainWindowTaskActionsMixin
-from ui.main_window_tools import MainWindowToolsMixin
+from ui.main_window.table_actions import MainWindowTableActionsMixin
+from ui.main_window.task_actions import MainWindowTaskActionsMixin
+from ui.main_window.tools import MainWindowToolsMixin
 from utils.logging_config import setup_logging
 
 setup_logging(log_level=config.config.LOG_LEVEL)
