@@ -8,7 +8,7 @@ import logging
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import Qt
 from managers.application.data_manager import TaskType
-from ui.task_edit_dialog import TaskEditDialog
+from ui.task_edit.dialog import TaskEditDialog
 
 logger = logging.getLogger(__name__)
 from utils.ui_messages import (

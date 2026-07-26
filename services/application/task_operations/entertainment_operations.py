@@ -6,7 +6,7 @@
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import Qt
 from managers.application.data_manager import TaskType
-from ui.task_edit_dialog import TaskEditDialog
+from ui.task_edit.dialog import TaskEditDialog
 from utils.ui_messages import (
     show_task_added_confirmation,
     show_task_updated_confirmation,

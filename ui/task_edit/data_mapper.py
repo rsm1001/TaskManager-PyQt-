@@ -10,7 +10,7 @@ from managers.tasks.priority import DEFAULT_PRIORITY, LABEL_TO_KEY, get_priority
 from utils.log_context import get_trace_id
 
 if TYPE_CHECKING:
-    from ui.task_edit_dialog import TaskEditDialog
+    from ui.task_edit.dialog import TaskEditDialog
 
 
 logger = logging.getLogger(__name__)

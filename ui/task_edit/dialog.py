@@ -17,9 +17,9 @@ from PyQt6.QtWidgets import (
 )
 
 from managers.application.data_manager import TaskType
-from ui.task_edit_data_mapper import TaskEditDataMapper
-from ui.task_edit_form_factory import TaskFieldSectionFactory
-from ui.task_edit_subtasks import SubtaskEditor
+from ui.task_edit.data_mapper import TaskEditDataMapper
+from ui.task_edit.form_factory import TaskFieldSectionFactory
+from ui.task_edit.subtasks import SubtaskEditor
 from utils.log_context import get_trace_id
 from widgets.tag_selector_widget import TagSelectorWidget
 

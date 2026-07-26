@@ -10,7 +10,7 @@ from managers.application.data_manager import TaskType
 from managers.tasks.priority import PRIORITY_LABELS
 
 if TYPE_CHECKING:
-    from ui.task_edit_dialog import TaskEditDialog
+    from ui.task_edit.dialog import TaskEditDialog
 
 
 class TaskFieldSectionFactory:
