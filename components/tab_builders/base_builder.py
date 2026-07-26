@@ -23,12 +23,12 @@ from PyQt6.QtWidgets import (
 
 import config.config as config
 
-from components.tab_filters import (
+from components.main_window.tab_filters import (
     _init_time_period_combo,
     wrap_edit_handler,
 )
 
-from components.draggable_table import DraggableTaskTable
+from components.main_window.draggable_table import DraggableTaskTable
 
 logger = logging.getLogger(__name__)
 

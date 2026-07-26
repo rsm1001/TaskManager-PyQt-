@@ -3,7 +3,7 @@ Tab Builders 子包
 将原本集中在 components/ui_components.py 中的 Tab UI 创建逻辑拆分到各独立文件，
 通过工厂模式统一入口（create_tab_ui），新增 Tab 类型无需改动调用方。
 
-对外暴露的统一接口（便于 components.ui_components 继续作为门面）:
+对外暴露的统一接口（便于 components.main_window.ui_components 继续作为门面）:
 - create_daily_tab_ui(parent_window)
 - create_todo_tab_ui(parent_window)
 - create_entertainment_tab_ui(parent_window)

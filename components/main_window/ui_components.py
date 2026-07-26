@@ -1,7 +1,7 @@
 """
 UI Components 门面模块
 提供向后兼容的接口，实际实现已迁移到:
-- components.tab_filters                过滤器与时段辅助函数
+- components.main_window.tab_filters    过滤器与时段辅助函数
 - components.tab_builders               各 Tab 页面的工厂与构建器
 
 Why: 原文件 513 行混入了 5 个 Tab 的 UI 构建 + 多种过滤辅助逻辑；
@@ -20,7 +20,7 @@ from components.tab_builders import (
 )
 
 # ---------- 过滤器 / 时段辅助入口 ----------
-from components.tab_filters import (
+from components.main_window.tab_filters import (
     _init_time_period_combo,  # noqa: F401  （保留以防反射式访问）
     on_shortcut_tag_filter_clicked,
     on_tag_filter_clicked,

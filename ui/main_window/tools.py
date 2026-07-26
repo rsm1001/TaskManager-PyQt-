@@ -136,7 +136,7 @@ class MainWindowToolsMixin:
         PomodoroConfigDialog(self, self.data_manager).exec()
 
     def show_time_period_settings(self):
-        from components.ui_components import refresh_all_time_period_combos
+        from components.main_window.ui_components import refresh_all_time_period_combos
         from dialogs.time_period_dialog import TimePeriodDialog
         dialog = TimePeriodDialog(self, self.data_manager)
         dialog.updated.connect(lambda: refresh_all_time_period_combos(self))

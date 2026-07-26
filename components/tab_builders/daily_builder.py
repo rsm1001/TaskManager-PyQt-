@@ -7,8 +7,8 @@ import logging
 from PyQt6.QtWidgets import QVBoxLayout, QWidget
 
 from components.tab_builders.base_builder import BaseTabBuilder
-from components.tag_filter_bar import TagFilterBar
-from components.tab_filters import on_tag_filter_clicked
+from components.main_window.tag_filter_bar import TagFilterBar
+from components.main_window.tab_filters import on_tag_filter_clicked
 from managers.application.data_manager import TaskType
 
 logger = logging.getLogger(__name__)

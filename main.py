@@ -12,14 +12,14 @@ from PyQt6.QtCore import QFileInfo
 from PyQt6.QtWidgets import QApplication, QFileIconProvider, QMainWindow, QStatusBar, QTabWidget, QVBoxLayout, QWidget
 
 import config.config
-from components.ui_components import (
+from components.main_window.ui_components import (
     create_daily_tab_ui,
     create_entertainment_tab_ui,
     create_search_tab_ui,
     create_shortcuts_tab_ui,
     create_todo_tab_ui,
 )
-from components.ui_elements import create_menu_bar, create_toolbar
+from components.main_window.ui_elements import create_menu_bar, create_toolbar
 from managers.application.data_manager import DataManager
 from services.search.search_coordinator import SearchCoordinator
 from services.application.window_task_operations import TaskOperationHandler
