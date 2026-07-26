@@ -4,7 +4,7 @@ services/statistics_service.py 单元测试
 import pytest
 from unittest.mock import MagicMock
 
-from services.statistics_service import StatisticsService
+from services.domain.statistics_service import StatisticsService
 
 
 class TestStatisticsService:

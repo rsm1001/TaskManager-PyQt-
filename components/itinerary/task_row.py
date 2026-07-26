@@ -7,7 +7,7 @@ from PyQt6.QtGui import QColor, QDrag, QPainter, QPixmap
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton
 
 from components.itinerary.constants import STATUS_TO_KEY, TASK_ROW_HEIGHT
-from managers.priority import DEFAULT_PRIORITY, LABEL_TO_KEY, PRIORITY_BG_COLORS, PRIORITY_TEXT_COLORS
+from managers.tasks.priority import DEFAULT_PRIORITY, LABEL_TO_KEY, PRIORITY_BG_COLORS, PRIORITY_TEXT_COLORS
 
 
 class ItineraryTaskRow(QFrame):

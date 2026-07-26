@@ -49,52 +49,51 @@ exclude = [
 # 已添加完整类型注解的核心文件：严格检查（不含 data_manager，因其依赖大量未注解模块）
 module = [
     "models.model",
-    "managers.data_access",
-    "managers.task_orchestrator",
-    "managers.priority",
-    "managers.task_type",
-    "services.statistics_service",
-    "services.service_factory",
+    "managers.infrastructure.data_access",
+    "managers.tasks.task_orchestrator",
+    "managers.tasks.priority",
+    "managers.tasks.task_type",
+    "services.domain.statistics_service",
+    "services.factories.service_factory",
 ]
 disallow_untyped_defs = true
 warn_return_any = true
 
 [[tool.mypy.overrides]]
 # data_manager 包含大量未注解的 orchestrator 依赖，启用宽松检查
-module = ["managers.data_manager"]
+module = ["managers.application.data_manager"]
 disallow_untyped_defs = false
 warn_return_any = false
 
 [[tool.mypy.overrides]]
 # 未注解的遗留 manager / service 文件：跳过检查
 module = [
-    "managers.trash_manager",
-    "managers.daily_task_manager",
-    "managers.todo_task_manager",
-    "managers.entertainment_task_manager",
-    "managers.config_manager",
-    "managers.shortcut_manager",
-    "managers.tag_manager",
-    "managers.tag_orchestrator",
-    "managers.shortcut_orchestrator",
-    "managers.trash_orchestrator",
-    "managers.config_orchestrator",
-    "managers.orchestrator_factory",
-    "services.orchestrator_factory",
-    "services.trash_restoration_service",
-    "services.daily_reset_service",
-    "services.table_operations",
-    "services.window_task_operations",
-    "services.task_ops_todo",
-    "services.task_ops_entertainment",
-    "services.task_ops_shortcuts",
-    "services.data_loaders",
-    "services.pomodoro_service",
-    "services.search_service",
-    "services.task_limit_service",
-    "services.shortcut_operation_service",
-    "services.tag_cleanup_service",
-    "services.random_task_service",
-    "services.vacuum_service",
-    "services.search_coordinator",
+    "managers.trash.trash_manager",
+    "managers.tasks.daily_task_manager",
+    "managers.tasks.todo_task_manager",
+    "managers.tasks.entertainment_task_manager",
+    "managers.configuration.config_manager",
+    "managers.shortcuts.shortcut_manager",
+    "managers.tags.tag_manager",
+    "managers.tags.tag_orchestrator",
+    "managers.shortcuts.shortcut_orchestrator",
+    "managers.trash.trash_orchestrator",
+    "managers.configuration.config_orchestrator",
+    "services.factories.orchestrator_factory",
+    "services.domain.trash_restoration_service",
+    "services.domain.daily_reset_service",
+    "services.application.table_operations",
+    "services.application.window_task_operations",
+    "services.application.task_ops_todo",
+    "services.application.task_ops_entertainment",
+    "services.application.task_ops_shortcuts",
+    "services.application.data_loaders",
+    "services.pomodoro.pomodoro_service",
+    "services.search.search_service",
+    "services.domain.task_limit_service",
+    "services.shortcuts.shortcut_operation_service",
+    "services.domain.tag_cleanup_service",
+    "services.domain.random_task_service",
+    "services.domain.vacuum_service",
+    "services.search.search_coordinator",
 ]

@@ -29,7 +29,7 @@ class OrchestratorFactory:
     def get_task_orchestrator(self):
         """获取任务编排器（单例）"""
         if "task" not in self._instances:
-            from managers.task_orchestrator import TaskOrchestrator
+            from managers.tasks.task_orchestrator import TaskOrchestrator
 
             self._instances["task"] = TaskOrchestrator(
                 session=self._dm.get_session(),
@@ -46,7 +46,7 @@ class OrchestratorFactory:
     def get_shortcut_orchestrator(self):
         """获取快捷入口编排器（单例）"""
         if "shortcut" not in self._instances:
-            from managers.shortcut_orchestrator import ShortcutOrchestrator
+            from managers.shortcuts.shortcut_orchestrator import ShortcutOrchestrator
 
             self._instances["shortcut"] = ShortcutOrchestrator(
                 shortcut_manager=self._dm.shortcut_manager,
@@ -58,7 +58,7 @@ class OrchestratorFactory:
     def get_tag_orchestrator(self):
         """获取标签编排器（单例）"""
         if "tag" not in self._instances:
-            from managers.tag_orchestrator import TagOrchestrator
+            from managers.tags.tag_orchestrator import TagOrchestrator
 
             self._instances["tag"] = TagOrchestrator(
                 tag_manager=self._dm.tag_manager,
@@ -71,7 +71,7 @@ class OrchestratorFactory:
     def get_trash_orchestrator(self):
         """获取垃圾桶编排器（单例）"""
         if "trash" not in self._instances:
-            from managers.trash_orchestrator import TrashOrchestrator
+            from managers.trash.trash_orchestrator import TrashOrchestrator
 
             self._instances["trash"] = TrashOrchestrator(
                 trash_manager=self._dm.trash_manager,
@@ -83,7 +83,7 @@ class OrchestratorFactory:
     def get_config_orchestrator(self):
         """获取配置编排器（单例）"""
         if "config" not in self._instances:
-            from managers.config_orchestrator import ConfigOrchestrator
+            from managers.configuration.config_orchestrator import ConfigOrchestrator
 
             self._instances["config"] = ConfigOrchestrator(
                 config_manager=self._dm.config_manager,

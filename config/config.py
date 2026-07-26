@@ -26,9 +26,9 @@ WINDOW_WIDTH = 1200
 WINDOW_HEIGHT = 800
 WINDOW_TITLE = f"{APP_NAME} v{APP_VERSION}"
 
-# 优先级颜色配置（从 managers.priority 派生）
+# 优先级颜色配置（从 managers.tasks.priority 派生）
 # 真正的定义在 managers/priority.py PRIORITY_LEVELS
-from managers.priority import PRIORITY_BG_COLORS, PRIORITY_TEXT_COLORS  # noqa: E402,F401
+from managers.tasks.priority import PRIORITY_BG_COLORS, PRIORITY_TEXT_COLORS  # noqa: E402,F401
 
 # 颜色配置
 COLOR_COMPLETED = "#4CAF50"  # 绿色

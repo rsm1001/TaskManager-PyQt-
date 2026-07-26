@@ -4,7 +4,7 @@
 """
 
 from models.model import DailyTask
-from managers.priority import PRIORITY_RANK
+from managers.tasks.priority import PRIORITY_RANK
 from sqlalchemy import case
 from typing import List, Optional
 import uuid

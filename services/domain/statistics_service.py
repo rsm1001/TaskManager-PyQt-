@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from managers.data_manager import DataManager
+    from managers.application.data_manager import DataManager
 
 logger = logging.getLogger(__name__)
 

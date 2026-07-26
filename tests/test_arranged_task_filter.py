@@ -2,7 +2,7 @@
 已安排行程过滤测试
 """
 from main import TaskManagerMainWindow
-from managers.itinerary_manager import ItineraryManager
+from managers.scheduling.itinerary_manager import ItineraryManager
 from models.model import ItineraryTask
 
 

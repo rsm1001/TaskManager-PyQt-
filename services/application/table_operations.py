@@ -12,15 +12,15 @@ import config.config as config
 
 logger = logging.getLogger(__name__)
 
-from services.shortcut_table_service import (
+from services.shortcuts.shortcut_table_service import (
     render_shortcut_row,
     render_history_row,
     _open_shortcut_path,
 )
 
-# 优先级显示/排序（从 managers.priority 派生）
+# 优先级显示/排序（从 managers.tasks.priority 派生）
 # 真正的定义在 managers/priority.py PRIORITY_LEVELS
-from managers.priority import (  # noqa: E402,F401
+from managers.tasks.priority import (  # noqa: E402,F401
     PRIORITY_DISPLAY_MAP,
     get_priority_label,
     get_priority_rank,
@@ -182,19 +182,19 @@ def _render_shortcut_row(table, row, shortcut_item, on_open_callback=None):
 
 def _get_claude_path():
     """动态查找claude可执行文件路径（委托给 ShortcutTableService）"""
-    from services.shortcut_table_service import _get_claude_path as get_path
+    from services.shortcuts.shortcut_table_service import _get_claude_path as get_path
     return get_path()
 
 
 def _open_in_terminal(path):
     """在文件/文件夹所在目录启动cmd执行claude"""
-    from services.shortcut_table_service import _open_in_terminal as open_terminal
+    from services.shortcuts.shortcut_table_service import _open_in_terminal as open_terminal
     open_terminal(path)
 
 
 def _open_shortcut_path(path, action_type='open'):
     """打开快捷入口路径"""
-    from services.shortcut_table_service import _open_shortcut_path as open_path
+    from services.shortcuts.shortcut_table_service import _open_shortcut_path as open_path
     open_path(path, action_type)
 
 
@@ -393,19 +393,19 @@ def load_shortcut_history_to_table(window):
 
 def _on_history_open(window, history_item):
     """打开历史记录对应的快捷入口"""
-    from services.shortcut_table_service import _open_shortcut_path
+    from services.shortcuts.shortcut_table_service import _open_shortcut_path
     _open_shortcut_path(history_item.get('shortcut_path', ''), history_item.get('action_type', 'open'))
 
 
 def _on_history_terminal(window, history_item):
     """在终端中打开历史记录对应的路径"""
-    from services.shortcut_table_service import _open_in_terminal
+    from services.shortcuts.shortcut_table_service import _open_in_terminal
     _open_in_terminal(history_item.get('shortcut_path', ''))
 
 
 def _on_history_codex(window, history_item):
     """在终端中打开历史记录对应的路径（Codex）"""
-    from services.shortcut_table_service import _open_codex_in_terminal
+    from services.shortcuts.shortcut_table_service import _open_codex_in_terminal
     _open_codex_in_terminal(history_item.get('shortcut_path', ''))
 
 

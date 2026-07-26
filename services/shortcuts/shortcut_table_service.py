@@ -15,9 +15,9 @@ from PyQt6.QtWidgets import QPushButton, QTableWidgetItem
 
 logger = logging.getLogger(__name__)
 
-# 优先级显示映射（从 managers.priority 派生）
+# 优先级显示映射（从 managers.tasks.priority 派生）
 # 真正的定义在 managers/priority.py PRIORITY_LEVELS
-from managers.priority import PRIORITY_DISPLAY_MAP, get_priority_label  # noqa: E402,F401
+from managers.tasks.priority import PRIORITY_DISPLAY_MAP, get_priority_label  # noqa: E402,F401
 
 
 def _get_priority_display(priority):

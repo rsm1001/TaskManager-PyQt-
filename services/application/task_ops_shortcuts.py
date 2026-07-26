@@ -4,7 +4,7 @@
 """
 
 from PyQt6.QtWidgets import QMessageBox
-from managers.data_manager import TaskType
+from managers.application.data_manager import TaskType
 from dialogs.shortcut_edit_dialog import ShortcutEditDialog
 from utils.ui_messages import (
     show_task_added_confirmation,

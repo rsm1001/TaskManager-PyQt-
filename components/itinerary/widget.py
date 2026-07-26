@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import QApplication, QGraphicsDropShadowEffect, QHBoxLayout
 from components.itinerary.constants import DAY_BUTTON_HEIGHT, KEY_TO_STATUS, WEEKDAY_NAMES
 from components.itinerary.factory import ItineraryComponentFactory
 from components.itinerary.payload import parse_task_payload
-from managers.priority import DEFAULT_PRIORITY, get_priority_label
+from managers.tasks.priority import DEFAULT_PRIORITY, get_priority_label
 
 logger = logging.getLogger(__name__)
 

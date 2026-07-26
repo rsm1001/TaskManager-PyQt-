@@ -7,7 +7,7 @@
 import logging
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import Qt
-from managers.data_manager import TaskType
+from managers.application.data_manager import TaskType
 from ui.task_edit_dialog import TaskEditDialog
 
 logger = logging.getLogger(__name__)
@@ -21,12 +21,12 @@ from utils.ui_messages import (
     inform_no_suitable_tasks,
     inform_no_pending_tasks,
 )
-from services.random_task_service import (
+from services.domain.random_task_service import (
     pick_random_daily_task,
 )
-from services.task_ops_todo import TodoTaskOperations
-from services.task_ops_entertainment import EntertainmentTaskOperations
-from services.task_ops_shortcuts import ShortcutOperations
+from services.application.task_ops_todo import TodoTaskOperations
+from services.application.task_ops_entertainment import EntertainmentTaskOperations
+from services.application.task_ops_shortcuts import ShortcutOperations
 from dialogs.batch_tag_edit_dialog import BatchTagEditDialog
 
 

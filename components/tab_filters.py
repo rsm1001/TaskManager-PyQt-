@@ -63,7 +63,7 @@ def _init_time_period_combo(parent_window, task_type: str) -> None:
         parent_window: 主窗口对象
         task_type: 任务大类（daily/todo/entertainment）
     """
-    from services.table_operations import _SENTINEL_ALL, _SENTINEL_NONE
+    from services.application.table_operations import _SENTINEL_ALL, _SENTINEL_NONE
 
     combo = getattr(parent_window, f'{task_type}_time_period_combo', None)
     if combo is None or not isinstance(combo, QComboBox):

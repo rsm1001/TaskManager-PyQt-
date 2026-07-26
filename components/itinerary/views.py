@@ -1,7 +1,7 @@
 """行程的时段块和日视图组件。"""
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QStyle, QVBoxLayout, QWidget
 
 from components.itinerary.constants import BLOCK_COLORS, BLOCK_HEADER_HEIGHT, HOUR_BLOCKS, WEEKDAY_FULL
 from components.itinerary.factory import ItineraryComponentFactory
@@ -34,9 +34,14 @@ class HourBlockWidget(QFrame):
         self.header.clicked.connect(self._toggle_collapse)
         self.header.setStyleSheet(f'QPushButton {{ background-color: transparent; color: white; border: none; font-size: 13px; font-weight: bold; text-align: left; padding-left: 10px; }} QPushButton:hover {{ background-color: {color}DD; }}')
         header.addWidget(self.header)
-        for text, tip, handler in [('⌫', '移除本时段未完成任务', self._remove_unfinished), ('⌧', '移除本时段全部任务', self._remove_all)]:
-            button = QPushButton(text)
+        for standard_icon, tip, handler in [
+            (QStyle.StandardPixmap.SP_BrowserReload, '移除本时段未完成任务', self._remove_unfinished),
+            (QStyle.StandardPixmap.SP_TrashIcon, '移除本时段全部任务', self._remove_all),
+        ]:
+            button = QPushButton()
             button.setFixedSize(28, BLOCK_HEADER_HEIGHT)
+            button.setIcon(self.style().standardIcon(standard_icon))
+            button.setIconSize(QSize(16, 16))
             button.setToolTip(tip)
             button.clicked.connect(handler)
             button.setStyleSheet('QPushButton { background: transparent; color: white; border: none; font-size: 14px; } QPushButton:hover { background-color: #E74C3C; border-radius: 4px; }')

@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, Dict
 
 from PyQt6.QtCore import QDate
 
-from managers.data_manager import TaskType
-from managers.priority import DEFAULT_PRIORITY, LABEL_TO_KEY, get_priority_label
+from managers.application.data_manager import TaskType
+from managers.tasks.priority import DEFAULT_PRIORITY, LABEL_TO_KEY, get_priority_label
 from utils.log_context import get_trace_id
 
 if TYPE_CHECKING:

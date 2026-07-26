@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtWidgets import QApplication, QTableWidget
 
 import config.config as config
-from services import shortcut_table_service
+from services.shortcuts import shortcut_table_service
 
 
 def test_codex_bypass_command_uses_supported_flag(monkeypatch):

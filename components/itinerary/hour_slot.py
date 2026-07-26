@@ -3,14 +3,14 @@
 import json
 import logging
 
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtCore import QSize, pyqtSignal
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QMessageBox, QPushButton, QStyle, QVBoxLayout, QWidget
 
 from components.itinerary.constants import HOUR_HEADER_HEIGHT
 from components.itinerary.factory import ItineraryComponentFactory
 from components.itinerary.payload import parse_task_payload
 from components.itinerary.task_row import ItineraryTaskRow
-from managers.priority import DEFAULT_PRIORITY, PRIORITY_BG_COLORS
+from managers.tasks.priority import DEFAULT_PRIORITY, PRIORITY_BG_COLORS
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +42,16 @@ class HourSlotWidget(QFrame):
         self.header.clicked.connect(self._toggle_collapse)
         self.header.setStyleSheet('QPushButton { background-color: #ECF0F1; color: #2C3E50; border: none; border-radius: 4px; font-size: 12px; text-align: left; padding-left: 8px; } QPushButton:hover { background-color: #D5DBDB; }')
         header_layout.addWidget(self.header, 1)
-        self.clear_unfinished_btn = self._make_clear_button('⌫', '移除本小时未完成任务', self._remove_unfinished)
-        self.clear_all_btn = self._make_clear_button('⌧', '移除本小时全部任务', self._remove_all)
+        self.clear_unfinished_btn = self._make_clear_button(
+            QStyle.StandardPixmap.SP_BrowserReload,
+            '移除本小时未完成任务',
+            self._remove_unfinished,
+        )
+        self.clear_all_btn = self._make_clear_button(
+            QStyle.StandardPixmap.SP_TrashIcon,
+            '移除本小时全部任务',
+            self._remove_all,
+        )
         header_layout.addWidget(self.clear_unfinished_btn)
         header_layout.addWidget(self.clear_all_btn)
         layout.addWidget(header_box)
@@ -55,10 +63,11 @@ class HourSlotWidget(QFrame):
         self.task_container.setVisible(False)
         self._update_header()
 
-    @staticmethod
-    def _make_clear_button(text, tooltip, callback):
-        button = QPushButton(text)
+    def _make_clear_button(self, standard_icon, tooltip, callback):
+        button = QPushButton()
         button.setFixedSize(24, HOUR_HEADER_HEIGHT)
+        button.setIcon(self.style().standardIcon(standard_icon))
+        button.setIconSize(QSize(16, 16))
         button.setToolTip(tooltip)
         button.clicked.connect(callback)
         button.setStyleSheet('QPushButton { background-color: transparent; color: #7F8C8D; border: none; font-size: 12px; } QPushButton:hover { background-color: #E74C3C; color: white; border-radius: 3px; }')

@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLineEdit,
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from widgets.tag_selector_widget import TagSelectorWidget
-from managers.data_manager import TaskType
+from managers.application.data_manager import TaskType
 import os
 
 

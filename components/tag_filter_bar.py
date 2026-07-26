@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QGridLayout, QDialogButtonBox, QMessageBox, QLineEdit)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
-from managers.data_manager import DataManager, TaskType
+from managers.application.data_manager import DataManager, TaskType
 import config.config as config
 
 

@@ -11,10 +11,10 @@ from typing import List, Optional, Callable, Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
     from models.model import TodoTask, EntertainmentTask
-    from managers.daily_task_manager import DailyTaskManager
-    from managers.todo_task_manager import TodoTaskManager
-    from managers.entertainment_task_manager import EntertainmentTaskManager
-    from managers.trash_manager import TrashManager
+    from managers.tasks.daily_task_manager import DailyTaskManager
+    from managers.tasks.todo_task_manager import TodoTaskManager
+    from managers.tasks.entertainment_task_manager import EntertainmentTaskManager
+    from managers.trash.trash_manager import TrashManager
 
 from models.model import DailyTask, TodoTask
 

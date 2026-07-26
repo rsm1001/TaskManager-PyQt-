@@ -10,22 +10,22 @@ from __future__ import annotations
 import logging
 from typing import List, Dict, Any, Optional, TYPE_CHECKING
 
-from managers.task_type import TaskType  # noqa: F401 供外部 from managers.data_manager import TaskType
-from managers.data_access import DataAccess
-from managers.todo_task_manager import TodoTaskManager
-from managers.entertainment_task_manager import EntertainmentTaskManager
-from managers.config_manager import ConfigManager
-from managers.trash_manager import TrashManager
-from managers.shortcut_manager import ShortcutManager
-from managers.daily_task_manager import DailyTaskManager
-from managers.tag_manager import TagManager
-from managers.time_period_manager import TimePeriodManager
-from managers.time_period_orchestrator import TimePeriodOrchestrator
-from managers.itinerary_manager import ItineraryManager
-from services.service_factory import ServiceFactory
+from managers.tasks.task_type import TaskType  # noqa: F401 供外部 from managers.application.data_manager import TaskType
+from managers.infrastructure.data_access import DataAccess
+from managers.tasks.todo_task_manager import TodoTaskManager
+from managers.tasks.entertainment_task_manager import EntertainmentTaskManager
+from managers.configuration.config_manager import ConfigManager
+from managers.trash.trash_manager import TrashManager
+from managers.shortcuts.shortcut_manager import ShortcutManager
+from managers.tasks.daily_task_manager import DailyTaskManager
+from managers.tags.tag_manager import TagManager
+from managers.scheduling.time_period_manager import TimePeriodManager
+from managers.scheduling.time_period_orchestrator import TimePeriodOrchestrator
+from managers.scheduling.itinerary_manager import ItineraryManager
+from services.factories.service_factory import ServiceFactory
 
 if TYPE_CHECKING:
-    from services.orchestrator_factory import OrchestratorFactory
+    from services.factories.orchestrator_factory import OrchestratorFactory
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -82,8 +82,8 @@ class DataManager:
         self.trash_restoration_service = self._make_trash_restoration_service()
 
         # 工厂：服务 + 编排器（延迟导入避免循环依赖）
-        from services.service_factory import ServiceFactory  # noqa: PLC0415
-        from services.orchestrator_factory import OrchestratorFactory  # noqa: PLC0415
+        from services.factories.service_factory import ServiceFactory  # noqa: PLC0415
+        from services.factories.orchestrator_factory import OrchestratorFactory  # noqa: PLC0415
         self._service_factory: "ServiceFactory" = ServiceFactory(self)
         self._orchestrator_factory: "OrchestratorFactory" = OrchestratorFactory(self)
 
@@ -94,16 +94,16 @@ class DataManager:
     # ==================== 内部工厂方法 ====================
 
     def _make_daily_reset_service(self) -> Any:
-        from services.daily_reset_service import DailyResetService
+        from services.domain.daily_reset_service import DailyResetService
         return DailyResetService(self.session, self.config_manager)
 
     def _make_vacuum_service(self) -> Any:
-        from services.vacuum_service import VacuumService
+        from services.domain.vacuum_service import VacuumService
         import config.config
         return VacuumService(self.engine, config.config.TRASH_DATABASE_PATH)
 
     def _make_trash_restoration_service(self) -> Any:
-        from services.trash_restoration_service import TrashRestorationService
+        from services.domain.trash_restoration_service import TrashRestorationService
         return TrashRestorationService(
             session=self.session,
             shortcut_manager=self.shortcut_manager,

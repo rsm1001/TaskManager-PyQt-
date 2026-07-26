@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
                             QScrollArea, QCheckBox, QPushButton, QInputDialog, 
                             QMessageBox, QLineEdit, QLabel, QGridLayout)
 from PyQt6.QtCore import Qt, pyqtSignal
-from managers.data_manager import TaskType
+from managers.application.data_manager import TaskType
 
 
 class TagSelectorWidget(QWidget):

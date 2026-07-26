@@ -6,8 +6,8 @@ from PyQt6.QtCore import QDate
 from PyQt6.QtWidgets import QComboBox, QDateEdit, QHBoxLayout, QLabel, QPushButton, QSpinBox, QVBoxLayout
 
 from config.config import ESTIMATED_DURATION_QUICK_OPTIONS
-from managers.data_manager import TaskType
-from managers.priority import PRIORITY_LABELS
+from managers.application.data_manager import TaskType
+from managers.tasks.priority import PRIORITY_LABELS
 
 if TYPE_CHECKING:
     from ui.task_edit_dialog import TaskEditDialog

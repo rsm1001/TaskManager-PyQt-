@@ -5,9 +5,9 @@
 
 import random
 
-# 优先级权重映射（从 managers.priority 派生）
+# 优先级权重映射（从 managers.tasks.priority 派生）
 # 真正的定义在 managers/priority.py PRIORITY_LEVELS
-from managers.priority import PRIORITY_WEIGHTS, get_priority_weight  # noqa: E402,F401
+from managers.tasks.priority import PRIORITY_WEIGHTS, get_priority_weight  # noqa: E402,F401
 
 
 def pick_random_daily_task(data_manager, weekday_filter, status_filter):

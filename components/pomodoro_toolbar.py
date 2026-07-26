@@ -206,7 +206,7 @@ class PomodoroToolbarWidget(QWidget):
 
     def _update_ui(self):
         """更新UI"""
-        from services.pomodoro_service import PomodoroState
+        from services.pomodoro.pomodoro_service import PomodoroState
 
         state = self._service.state
         self.state_label.setText(self._service.get_state_display())
@@ -270,7 +270,7 @@ class PomodoroToolbarWidget(QWidget):
         self.time_label.setText(self._service.format_time(remaining))
 
         # 更新进度条
-        from services.pomodoro_service import PomodoroState
+        from services.pomodoro.pomodoro_service import PomodoroState
         state = self._service.state
         if state == PomodoroState.IDLE:
             return
@@ -289,7 +289,7 @@ class PomodoroToolbarWidget(QWidget):
 
     def _on_start_clicked(self):
         """开始/暂停按钮点击"""
-        from services.pomodoro_service import PomodoroState
+        from services.pomodoro.pomodoro_service import PomodoroState
 
         if self._service.state == PomodoroState.IDLE:
             self._service.start_work()

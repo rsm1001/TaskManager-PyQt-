@@ -3,7 +3,13 @@
 import os
 import sys
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QStatusBar, QTabWidget, QVBoxLayout, QWidget
+# LobsterAI 的嵌入式 Python 运行时不会自动将脚本目录加入 sys.path。
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+if PROJECT_DIR not in sys.path:
+    sys.path.insert(0, PROJECT_DIR)
+
+from PyQt6.QtCore import QFileInfo
+from PyQt6.QtWidgets import QApplication, QFileIconProvider, QMainWindow, QStatusBar, QTabWidget, QVBoxLayout, QWidget
 
 import config.config
 from components.ui_components import (
@@ -14,15 +20,14 @@ from components.ui_components import (
     create_todo_tab_ui,
 )
 from components.ui_elements import create_menu_bar, create_toolbar
-from managers.data_manager import DataManager
-from services.search_coordinator import SearchCoordinator
-from services.window_task_operations import TaskOperationHandler
+from managers.application.data_manager import DataManager
+from services.search.search_coordinator import SearchCoordinator
+from services.application.window_task_operations import TaskOperationHandler
 from ui.main_window_table_actions import MainWindowTableActionsMixin
 from ui.main_window_task_actions import MainWindowTaskActionsMixin
 from ui.main_window_tools import MainWindowToolsMixin
 from utils.logging_config import setup_logging
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 setup_logging(log_level=config.config.LOG_LEVEL)
 
 
@@ -98,7 +103,11 @@ class TaskManagerMainWindow(
 
 def main():
     app = QApplication(sys.argv)
+    runtime_icon = QFileIconProvider().icon(QFileInfo(sys.executable))
+    if not runtime_icon.isNull():
+        app.setWindowIcon(runtime_icon)
     window = TaskManagerMainWindow()
+    window.setWindowIcon(app.windowIcon())
     window.show()
     sys.exit(app.exec())
 

@@ -1,6 +1,6 @@
 """主窗口的数据加载和搜索行为。"""
 
-from services.table_operations import (
+from services.application.table_operations import (
     load_daily_tasks_to_table,
     load_entertainment_tasks_to_table,
     load_search_results_to_table,

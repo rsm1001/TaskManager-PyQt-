@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from managers.data_manager import TaskType
+from managers.application.data_manager import TaskType
 from ui.task_edit_data_mapper import TaskEditDataMapper
 from ui.task_edit_form_factory import TaskFieldSectionFactory
 from ui.task_edit_subtasks import SubtaskEditor

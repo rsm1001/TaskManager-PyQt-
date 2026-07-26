@@ -3,7 +3,7 @@
 import json
 
 from components.itinerary.constants import STATUS_TO_KEY
-from managers.priority import DEFAULT_PRIORITY, LABEL_TO_KEY
+from managers.tasks.priority import DEFAULT_PRIORITY, LABEL_TO_KEY
 
 
 def parse_task_payload(raw: str) -> dict:

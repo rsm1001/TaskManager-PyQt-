@@ -1,15 +1,16 @@
 """
-娱乐任务管理器 - 负责 EntertainmentTask 的CRUD操作
+待办任务管理器 - 负责 TodoTask 的CRUD操作与紧急度计算
 """
 
-from models.model import EntertainmentTask
-from managers.priority import PRIORITY_RANK
+from datetime import datetime, date
+from models.model import TodoTask
+from managers.tasks.priority import PRIORITY_RANK
 from sqlalchemy import case
 from typing import List, Optional
 
 
-class EntertainmentTaskManager:
-    """娱乐任务管理器"""
+class TodoTaskManager:
+    """待办任务管理器"""
 
     def __init__(self, session):
         self.session = session
@@ -18,42 +19,55 @@ class EntertainmentTaskManager:
 
     def get_tasks(self, status: Optional[str] = None, tag: Optional[str] = None,
                   keyword: Optional[str] = None,
-                  time_period_id: Optional[str] = None) -> List[EntertainmentTask]:
-        """获取娱乐任务列表
+                  time_period_id: Optional[str] = None) -> List[TodoTask]:
+        """获取待办任务列表
 
         Args:
-            status: 状态筛选，None/'all' 不过滤
-            tag: 标签筛选（模糊包含），None 不过滤
+            status: 筛选状态，'all' 时不过滤；'expired' 时筛选已过期任务；
+                    其他值（pending/completed/abandoned）精确匹配 status 字段
+            tag: 标签过滤（模糊包含）
             keyword: 关键词筛选（模糊匹配 title/description/tags/category）
             time_period_id: 时段筛选；None 不过滤；"" 仅查未设；其它精确匹配
         """
-        query = self.session.query(EntertainmentTask)
+        query = self.session.query(TodoTask)
 
         if status and status != "all":
-            query = query.filter(EntertainmentTask.status == status)
+            if status == "expired":
+                # 已过期：deadline 不为空、未完成、且截止日期早于今天
+                today = date.today()
+                query = query.filter(
+                    (TodoTask.deadline.isnot(None)) &
+                    (TodoTask.deadline != "") &
+                    (TodoTask.deadline < today.strftime("%Y-%m-%d")) &
+                    (TodoTask.status != "completed")
+                )
+            else:
+                query = query.filter(TodoTask.status == status)
 
         if tag:
-            query = query.filter(EntertainmentTask.tags.contains(tag))
+            query = query.filter(TodoTask.tags.contains(tag))
 
         if keyword:
             kw = f"%{keyword}%"
             query = query.filter(
-                (EntertainmentTask.title.ilike(kw)) |
-                (EntertainmentTask.description.ilike(kw)) |
-                (EntertainmentTask.tags.ilike(kw)) |
-                (EntertainmentTask.category.ilike(kw))
+                (TodoTask.title.ilike(kw)) |
+                (TodoTask.description.ilike(kw)) |
+                (TodoTask.tags.ilike(kw)) |
+                (TodoTask.category.ilike(kw))
             )
 
         query = self._apply_time_period_filter(query, time_period_id)
 
         return query.order_by(
-            case(PRIORITY_RANK, value=EntertainmentTask.priority, else_=3).desc(),
-            EntertainmentTask.title
+            case(PRIORITY_RANK, value=TodoTask.priority, else_=3).desc(),
+            case((TodoTask.deadline == '') | (TodoTask.deadline.is_(None)), else_='9999-12-31'),
+            TodoTask.deadline,
+            TodoTask.title
         ).all()
 
-    def get_by_id(self, task_id: str) -> Optional[EntertainmentTask]:
+    def get_by_id(self, task_id: str) -> Optional[TodoTask]:
         """根据ID获取任务"""
-        return self.session.query(EntertainmentTask).filter(EntertainmentTask.id == task_id).first()
+        return self.session.query(TodoTask).filter(TodoTask.id == task_id).first()
 
     def _apply_time_period_filter(self, query, time_period_id):
         """通用时段筛选：返回过滤后的 query（必须回传，因 chain 返回新对象）"""
@@ -61,29 +75,29 @@ class EntertainmentTaskManager:
             return query
         if time_period_id == "":
             return query.filter(
-                (EntertainmentTask.time_period_id.is_(None)) | (EntertainmentTask.time_period_id == "")
+                (TodoTask.time_period_id.is_(None)) | (TodoTask.time_period_id == "")
             )
-        return query.filter(EntertainmentTask.time_period_id == time_period_id)
+        return query.filter(TodoTask.time_period_id == time_period_id)
 
     def clear_time_period_refs(self, period_id: str) -> int:
         """把所有 time_period_id 等于 period_id 的记录的时段引用清空（保留任务）。"""
-        count = self.session.query(EntertainmentTask).filter(
-            EntertainmentTask.time_period_id == period_id
+        count = self.session.query(TodoTask).filter(
+            TodoTask.time_period_id == period_id
         ).update({"time_period_id": None})
         self.session.commit()
         return count
 
     # ==================== 增删改 ====================
 
-    def create(self, title: str, description: str = "", fun_category: str = "general",
+    def create(self, title: str, description: str = "", deadline: str = "",
                completed: bool = False, status: str = "pending", tags: str = "",
                shortcut_path: str = "", category: str = "",
                priority: str = "normal", subtasks: str = "[]",
                estimated_duration: int = 0,
-               time_period_id: Optional[str] = None) -> EntertainmentTask:
-        """创建娱乐任务"""
-        task = EntertainmentTask(
-            title=title, description=description, fun_category=fun_category,
+               time_period_id: Optional[str] = None) -> TodoTask:
+        """创建待办任务"""
+        task = TodoTask(
+            title=title, description=description, deadline=deadline,
             completed=completed, status=status, tags=tags, shortcut_path=shortcut_path,
             category=category, priority=priority, subtasks=subtasks,
             estimated_duration=estimated_duration,
@@ -91,10 +105,12 @@ class EntertainmentTaskManager:
         )
         self.session.add(task)
         self.session.commit()
+        self._calculate_urgency(task)
+        self.session.commit()
         return task
 
     def update(self, task_id: str, **kwargs) -> bool:
-        """更新娱乐任务"""
+        """更新待办任务"""
         task = self.get_by_id(task_id)
         if not task:
             return False
@@ -108,10 +124,11 @@ class EntertainmentTaskManager:
         elif 'completed' in kwargs:
             task.status = 'completed' if kwargs['completed'] else 'pending'
 
+        self._calculate_urgency(task)
         self.session.commit()
         return True
 
-    def delete(self, task_id: str) -> Optional[EntertainmentTask]:
+    def delete(self, task_id: str) -> Optional[TodoTask]:
         """删除任务并返回任务对象（调用方负责移入垃圾桶）"""
         task = self.get_by_id(task_id)
         if task:
@@ -123,10 +140,10 @@ class EntertainmentTaskManager:
         """批量删除任务（不commit，返回供垃圾箱序列化的数据列表）"""
         if not task_ids:
             return []
-        tasks = self.session.query(EntertainmentTask).filter(EntertainmentTask.id.in_(task_ids)).all()
+        tasks = self.session.query(TodoTask).filter(TodoTask.id.in_(task_ids)).all()
         result = []
         for task in tasks:
-            result.append(('entertainment', task.id, self.to_dict(task)))
+            result.append(('todo', task.id, self.to_dict(task)))
         for task in tasks:
             self.session.delete(task)
         return result
@@ -147,18 +164,55 @@ class EntertainmentTaskManager:
             task.status = "pending"
             task.completed = False
 
+        self._calculate_urgency(task)
         self.session.commit()
         return True
 
+    # ==================== 紧急度计算 ====================
+
+    def _calculate_urgency(self, task: TodoTask):
+        """计算单个任务的紧急度"""
+        if task.completed:
+            task.urgency_score = 0
+            return
+
+        if not task.deadline:
+            task.urgency_score = 1
+            return
+
+        try:
+            deadline_date = datetime.strptime(task.deadline, "%Y-%m-%d").date()
+            today = date.today()
+
+            if deadline_date < today:
+                days_overdue = (today - deadline_date).days
+                task.urgency_score = 3 + days_overdue
+            elif deadline_date == today:
+                task.urgency_score = 2
+            else:
+                days_remaining = (deadline_date - today).days
+                if days_remaining <= 7:
+                    task.urgency_score = max(1, 2 - (days_remaining / 7))
+                else:
+                    task.urgency_score = 1
+        except ValueError:
+            task.urgency_score = 1
+
+    def recalculate_all_urgency(self):
+        """重新计算所有待办任务的紧急度"""
+        for task in self.get_tasks():
+            self._calculate_urgency(task)
+        self.session.commit()
+
     # ==================== 序列化 ====================
 
-    def to_dict(self, task: EntertainmentTask) -> dict:
+    def to_dict(self, task: TodoTask) -> dict:
         """将任务对象转为字典（用于垃圾桶序列化）"""
         return {
             'id': task.id,
             'title': task.title,
             'description': task.description or '',
-            'fun_category': task.fun_category or 'general',
+            'deadline': task.deadline or '',
             'completed': task.completed,
             'status': task.status,
             'tags': task.tags or '',
@@ -171,3 +225,13 @@ class EntertainmentTaskManager:
             'created_at': task.created_at.isoformat() if task.created_at else '',
             'updated_at': task.updated_at.isoformat() if task.updated_at else '',
         }
+
+    def is_expired(self, task: TodoTask) -> bool:
+        """判断任务是否过期"""
+        if not task.deadline or task.completed:
+            return False
+        try:
+            deadline_date = datetime.strptime(task.deadline, "%Y-%m-%d").date()
+            return deadline_date < date.today()
+        except ValueError:
+            return False

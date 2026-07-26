@@ -3,7 +3,7 @@ managers/priority.py 单元测试
 测试优先级元数据的正确性和工具函数的逻辑
 """
 import pytest
-from managers.priority import (
+from managers.tasks.priority import (
     PRIORITY_LEVELS,
     PRIORITY_KEYS,
     PRIORITY_LABELS,

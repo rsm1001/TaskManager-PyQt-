@@ -17,7 +17,7 @@ class TestDataAccess:
 
     def _make_da(self, engine: Any) -> "DataAccess":
         """构造一个最小化的 DataAccess 测试替身（不启动真实 init_db）。"""
-        from managers.data_access import DataAccess
+        from managers.infrastructure.data_access import DataAccess
 
         SessionCls = sessionmaker(bind=engine)
 

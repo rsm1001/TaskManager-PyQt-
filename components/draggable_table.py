@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QTableWidget, QAbstractItemView
 from PyQt6.QtCore import Qt, QMimeData, QByteArray
 from PyQt6.QtGui import QDrag
 
-from managers.priority import DEFAULT_PRIORITY, LABEL_TO_KEY
+from managers.tasks.priority import DEFAULT_PRIORITY, LABEL_TO_KEY
 
 
 class DraggableTaskTable(QTableWidget):

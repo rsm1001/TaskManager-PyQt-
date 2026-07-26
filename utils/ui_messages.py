@@ -133,13 +133,13 @@ def show_type_check_dialog(parent=None):
 
     files = [
         "models/model.py",
-        "managers/data_access.py",
-        "managers/task_orchestrator.py",
-        "managers/data_manager.py",
-        "managers/priority.py",
-        "managers/task_type.py",
-        "services/statistics_service.py",
-        "services/service_factory.py",
+        "managers/infrastructure/data_access.py",
+        "managers/tasks/task_orchestrator.py",
+        "managers/application/data_manager.py",
+        "managers/tasks/priority.py",
+        "managers/tasks/task_type.py",
+        "services/domain/statistics_service.py",
+        "services/factories/service_factory.py",
     ]
     cmd = [
         sys.executable, "-m", "mypy",
