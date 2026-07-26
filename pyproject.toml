@@ -26,6 +26,21 @@ addopts = "-v"
 
 [tool.mypy]
 python_version = "3.8"
+files = [
+    "models/model.py",
+    "managers/infrastructure/data_access.py",
+    "managers/tasks/task_orchestrator.py",
+    "managers/tasks/priority.py",
+    "managers/tasks/task_type.py",
+    "services/domain/statistics_service.py",
+    "services/factories/service_factory.py",
+    "managers/application/data_manager.py",
+    "services/application/window_task_operations.py",
+    "services/application/task_operations/todo_operations.py",
+    "services/application/task_operations/entertainment_operations.py",
+    "services/application/task_operations/shortcut_operations.py",
+]
+follow_imports = "skip"
 show_error_codes = true
 pretty = true
 no_color_output = false

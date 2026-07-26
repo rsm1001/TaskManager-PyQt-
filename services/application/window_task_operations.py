@@ -24,9 +24,9 @@ from utils.ui_messages import (
 from services.domain.random_task_service import (
     pick_random_daily_task,
 )
-from services.application.task_ops_todo import TodoTaskOperations
-from services.application.task_ops_entertainment import EntertainmentTaskOperations
-from services.application.task_ops_shortcuts import ShortcutOperations
+from services.application.task_operations.todo_operations import TodoTaskOperations
+from services.application.task_operations.entertainment_operations import EntertainmentTaskOperations
+from services.application.task_operations.shortcut_operations import ShortcutOperations
 from dialogs.batch_tag_edit_dialog import BatchTagEditDialog
 
 

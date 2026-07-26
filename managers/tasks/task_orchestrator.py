@@ -6,7 +6,7 @@
 """
 
 import logging
-from typing import List, Optional, Callable, Any, TYPE_CHECKING
+from typing import List, Optional, Callable, Any, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -66,13 +66,13 @@ class TaskOrchestrator:
         time_period_id: Optional[str] = None,
     ) -> List["DailyTask"]:
         """获取每日任务列表"""
-        return self._daily.get_tasks(
+        return cast(List["DailyTask"], self._daily.get_tasks(
             weekday=weekday,
             status=status,
             tag=tag,
             keyword=keyword,
             time_period_id=time_period_id,
-        )  # type: ignore[no-any-return]
+        ))
 
     def get_daily_task_by_id(self, task_id: str) -> Optional["DailyTask"]:
         return self._daily.get_by_id(task_id)  # type: ignore[no-any-return]
@@ -150,10 +150,10 @@ class TaskOrchestrator:
         keyword: Optional[str] = None,
         time_period_id: Optional[str] = None,
     ) -> List["TodoTask"]:
-        return self._todo.get_tasks(
+        return cast(List["TodoTask"], self._todo.get_tasks(
             status=status, tag=tag, keyword=keyword,
             time_period_id=time_period_id,
-        )  # type: ignore[no-any-return]
+        ))
 
     def get_todo_task_by_id(self, task_id: str) -> Optional["TodoTask"]:
         return self._todo.get_by_id(task_id)  # type: ignore[no-any-return]
@@ -247,10 +247,10 @@ class TaskOrchestrator:
         keyword: Optional[str] = None,
         time_period_id: Optional[str] = None,
     ) -> List["EntertainmentTask"]:
-        return self._entertainment.get_tasks(
+        return cast(List["EntertainmentTask"], self._entertainment.get_tasks(
             status=status, tag=tag, keyword=keyword,
             time_period_id=time_period_id,
-        )  # type: ignore[no-any-return]
+        ))
 
     def get_entertainment_task_by_id(self, task_id: str) -> Optional["EntertainmentTask"]:
         return self._entertainment.get_by_id(task_id)  # type: ignore[no-any-return]
