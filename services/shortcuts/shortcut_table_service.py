@@ -9,7 +9,7 @@ import sqlite3
 import subprocess
 import config.config as _config
 from PyQt6.QtWidgets import QPushButton, QWidget, QHBoxLayout
-from PyQt6.QtCore import Qt, QProcess, QUrl
+from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QPushButton, QTableWidgetItem
 
@@ -113,22 +113,50 @@ def _build_codex_command():
 
 def _launch_terminal(target_dir, command):
     """在目标目录的新终端中执行命令，目录不参与 CMD 文本解析。"""
-    logger.info("启动终端 command=%s working_directory=%s", command, target_dir)
-    if os.name == "nt":
-        subprocess.Popen(
-            ["cmd.exe", "/k", *command],
-            cwd=target_dir,
-            creationflags=subprocess.CREATE_NEW_CONSOLE,
-        )
-        return
-    subprocess.Popen(command, cwd=target_dir)
+    working_dir = _get_existing_terminal_directory(target_dir)
+    logger.info("启动终端 command=%s working_directory=%s", command, working_dir)
+    try:
+        if os.name == "nt":
+            subprocess.Popen(
+                ["cmd.exe", "/k", *command],
+                cwd=working_dir,
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            )
+            return
+        subprocess.Popen(command, cwd=working_dir)
+    except OSError:
+        logger.exception("启动终端失败 command=%s working_directory=%s", command, working_dir)
+
+
+def _get_existing_terminal_directory(target_dir):
+    """Return the nearest existing directory for a terminal working directory."""
+    candidate = os.path.abspath(target_dir) if target_dir else os.getcwd()
+    while not os.path.isdir(candidate):
+        parent = os.path.dirname(candidate)
+        if parent == candidate:
+            logger.warning("No valid terminal directory found for %s; using the current directory", target_dir)
+            return os.getcwd()
+        candidate = parent
+    if os.path.abspath(target_dir) != candidate:
+        logger.warning("Terminal directory does not exist; using parent directory: %s", candidate)
+    return candidate
+
+
+def _get_terminal_directory(path):
+    """Return the directory in which a terminal should open for a shortcut path."""
+    absolute_path = os.path.abspath(os.path.expanduser(path))
+    if os.path.isdir(absolute_path):
+        return absolute_path
+    if os.path.isfile(absolute_path) or os.path.splitext(os.path.basename(absolute_path))[1]:
+        return os.path.dirname(absolute_path)
+    return absolute_path
 
 
 def _open_codex_in_terminal(path):
     """在文件/文件夹所在目录启动cmd执行codex"""
     if not path:
         return
-    target_dir = os.path.dirname(os.path.abspath(path)) if os.path.isfile(path) else os.path.abspath(path)
+    target_dir = _get_terminal_directory(path)
     _launch_terminal(target_dir, _build_codex_command())
 
 
@@ -136,8 +164,32 @@ def _open_in_terminal(path):
     """在文件/文件夹所在目录启动cmd执行claude"""
     if not path:
         return
-    target_dir = os.path.dirname(os.path.abspath(path)) if os.path.isfile(path) else os.path.abspath(path)
+    target_dir = _get_terminal_directory(path)
     _launch_terminal(target_dir, _build_claude_command())
+
+
+def _run_script(path):
+    """Run a script from its own directory and keep command output visible."""
+    script_path = os.path.abspath(os.path.expanduser(path))
+    working_dir = os.path.dirname(script_path)
+    extension = os.path.splitext(script_path)[1].lower()
+
+    if os.name == "nt" and extension in (".bat", ".cmd"):
+        subprocess.Popen(
+            ["cmd.exe", "/k", "call", script_path],
+            cwd=working_dir,
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
+    elif os.name == "nt" and extension == ".ps1":
+        subprocess.Popen(
+            ["powershell.exe", "-NoExit", "-ExecutionPolicy", "Bypass", "-File", script_path],
+            cwd=working_dir,
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
+    elif os.name == "nt":
+        os.startfile(script_path)
+    else:
+        subprocess.Popen([script_path], cwd=working_dir)
 
 
 def _open_shortcut_path(path, action_type='open'):
@@ -154,13 +206,9 @@ def _open_shortcut_path(path, action_type='open'):
     logger.info(f"打开快捷路径: {path}, 操作类型: {action_type}")
 
     if action_type == 'script':
-        # 执行脚本：在文件所在目录启动cmd执行claude
-        script_dir = os.path.dirname(os.path.abspath(path)) if path else ''
-        _launch_terminal(script_dir, _build_claude_command())
+        _run_script(path)
     elif os.path.isfile(path) and path.lower().endswith(('.bat', '.cmd')):
-        # bat/cmd 文件：用 QProcess 执行，设置正确的工作目录
-        working_dir = os.path.dirname(os.path.abspath(path))
-        QProcess.startDetached('cmd.exe', ['/c', 'start', '', path], working_dir)
+        _run_script(path)
     elif os.path.isfile(path):
         # 文件：直接打开
         QDesktopServices.openUrl(QUrl.fromLocalFile(path))

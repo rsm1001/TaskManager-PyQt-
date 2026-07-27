@@ -37,20 +37,33 @@ def test_codex_terminal_uses_cwd_for_directory_with_cmd_metacharacters(monkeypat
     assert all("cd /d" not in value for value in args[0])
 
 
-def test_script_shortcut_launches_claude_with_argument_list(monkeypatch):
-    """脚本快捷入口不能将 Python 列表字符串传入 CMD。"""
+def test_codex_terminal_uses_parent_for_missing_script_shortcut(monkeypatch, tmp_path):
+    """A missing script must not be passed to CreateProcess as its working directory."""
+    script_path = tmp_path / "start.bat"
+    monkeypatch.setattr(shortcut_table_service, "_build_codex_command", lambda: ["codex.exe"])
+
+    with patch.object(shortcut_table_service.subprocess, "Popen") as popen:
+        shortcut_table_service._open_codex_in_terminal(str(script_path))
+
+    assert popen.call_args.kwargs["cwd"] == str(tmp_path)
+
+
+def test_terminal_uses_nearest_existing_parent_for_missing_directory(tmp_path):
+    """A stale shortcut directory must not be passed to subprocess as cwd."""
+    missing_directory = tmp_path / "missing-project" / "nested"
+
+    assert shortcut_table_service._get_existing_terminal_directory(str(missing_directory)) == str(tmp_path)
+
+
+def test_script_shortcut_runs_batch_file_in_its_directory(monkeypatch):
+    """Script shortcuts must run the selected batch file rather than Claude."""
     script_path = os.path.abspath(os.path.join("R&D", "run.cmd"))
-    launched = []
-    monkeypatch.setattr(shortcut_table_service, "_build_claude_command", lambda: ["claude.exe", "--test"])
-    monkeypatch.setattr(
-        shortcut_table_service,
-        "_launch_terminal",
-        lambda directory, command: launched.append((directory, command)),
-    )
+    with patch.object(shortcut_table_service.subprocess, "Popen") as popen:
+        shortcut_table_service._open_shortcut_path(script_path, "script")
 
-    shortcut_table_service._open_shortcut_path(script_path, "script")
-
-    assert launched == [(os.path.dirname(script_path), ["claude.exe", "--test"])]
+    args, kwargs = popen.call_args
+    assert args[0] == ["cmd.exe", "/k", "call", script_path]
+    assert kwargs["cwd"] == os.path.dirname(script_path)
 
 
 def test_shortcut_row_keeps_path_and_created_at_in_separate_columns():
