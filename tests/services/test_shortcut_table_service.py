@@ -1,6 +1,7 @@
 """快捷入口终端启动与表格渲染的回归测试。"""
 
 import os
+import sys
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -64,6 +65,14 @@ def test_script_shortcut_runs_batch_file_in_its_directory(monkeypatch):
     args, kwargs = popen.call_args
     assert args[0] == ["cmd.exe", "/k", "call", script_path]
     assert kwargs["cwd"] == os.path.dirname(script_path)
+
+
+def test_script_environment_makes_current_python_discoverable():
+    environment = shortcut_table_service._get_script_environment()
+    python_directory = os.path.dirname(sys.executable)
+    path_key = next(key for key in environment if key.upper() == 'PATH')
+
+    assert python_directory in environment[path_key].split(os.pathsep)
 
 
 def test_shortcut_row_keeps_path_and_created_at_in_separate_columns():

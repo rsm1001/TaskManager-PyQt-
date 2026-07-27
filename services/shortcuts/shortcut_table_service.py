@@ -7,6 +7,7 @@ import os
 import logging
 import sqlite3
 import subprocess
+import sys
 import config.config as _config
 from PyQt6.QtWidgets import QPushButton, QWidget, QHBoxLayout
 from PyQt6.QtCore import Qt, QUrl
@@ -152,6 +153,23 @@ def _get_terminal_directory(path):
     return absolute_path
 
 
+def _get_script_environment():
+    '''Provide launched scripts with the Python used by this application.'''
+    environment = os.environ.copy()
+    python_directories = []
+    for executable in (sys.executable, getattr(sys, '_base_executable', '')):
+        if executable:
+            directory = os.path.dirname(os.path.abspath(executable))
+            if os.path.isdir(directory) and directory not in python_directories:
+                python_directories.append(directory)
+
+    if python_directories:
+        path_key = next((key for key in environment if key.upper() == 'PATH'), 'PATH')
+        existing_path = environment.get(path_key, '')
+        environment[path_key] = os.pathsep.join([*python_directories, existing_path])
+    return environment
+
+
 def _open_codex_in_terminal(path):
     """在文件/文件夹所在目录启动cmd执行codex"""
     if not path:
@@ -178,12 +196,14 @@ def _run_script(path):
         subprocess.Popen(
             ["cmd.exe", "/k", "call", script_path],
             cwd=working_dir,
+            env=_get_script_environment(),
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
     elif os.name == "nt" and extension == ".ps1":
         subprocess.Popen(
             ["powershell.exe", "-NoExit", "-ExecutionPolicy", "Bypass", "-File", script_path],
             cwd=working_dir,
+            env=_get_script_environment(),
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
     elif os.name == "nt":
