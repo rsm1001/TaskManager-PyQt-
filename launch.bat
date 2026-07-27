@@ -1,30 +1,43 @@
 @echo off
 chcp 65001 > nul 2>&1
-cd /d "%~dp0"
+title 任务管理系统
+set "PROJECT_ROOT=%~dp0"
+set "PYTHON_EXE=%PROJECT_ROOT%.venv\Scripts\python.exe"
+cd /d "%PROJECT_ROOT%"
 
 echo.
 echo Task Manager - PyQt Version
 echo ===========================
 echo.
 
-set PYTHON_EXE=C:\Users\27185\AppData\Roaming\LobsterAI\runtimes\python-win\python.exe
-
 if not exist "%PYTHON_EXE%" (
-    echo Error: Python not found
+    echo Creating project virtual environment...
+    py -3 -m venv .venv > nul 2>&1
+    if errorlevel 1 (
+        python -m venv .venv > nul 2>&1
+    )
+
+    if not exist "%PYTHON_EXE%" (
+        echo Failed to create the project virtual environment.
+        echo 请安装 Python 3.8+ 并加入 PATH
+        pause
+        exit /b 1
+    )
+)
+
+"%PYTHON_EXE%" -c "import sys; raise SystemExit(sys.version_info < (3, 8))" > nul 2>&1
+if errorlevel 1 (
+    echo 请安装 Python 3.8+ 并加入 PATH
     pause
     exit /b 1
 )
 
-echo Checking dependencies...
-"%PYTHON_EXE%" -c "import PyQt6; import sqlalchemy; print('OK')" > nul 2>&1
+echo Installing dependencies...
+"%PYTHON_EXE%" -m pip install -r "%PROJECT_ROOT%requirements.txt"
 if errorlevel 1 (
-    echo Dependencies not found, installing...
-    "%PYTHON_EXE%" -m pip install -r requirements.txt
-    if errorlevel 1 (
-        echo Dependency installation failed
-        pause
-        exit /b 1
-    )
+    echo Dependency installation failed
+    pause
+    exit /b 1
 )
 
 echo Starting Task Manager...
