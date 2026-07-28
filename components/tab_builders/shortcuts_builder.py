@@ -114,9 +114,9 @@ class ShortcutsTabBuilder:
         header = table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(1, 45)
+        header.resizeSection(1, 70)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(2, 45)
+        header.resizeSection(2, 70)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(3, 80)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
@@ -124,6 +124,7 @@ class ShortcutsTabBuilder:
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(6, 130)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.verticalHeader().setDefaultSectionSize(42)
         table.cellDoubleClicked.connect(win.edit_shortcut)
         table.cellClicked.connect(win.on_shortcuts_cell_clicked)
         return table
@@ -159,9 +160,9 @@ class ShortcutsTabBuilder:
         header = table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(1, 45)
+        header.resizeSection(1, 70)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(2, 45)
+        header.resizeSection(2, 70)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(3, 35)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
@@ -170,6 +171,7 @@ class ShortcutsTabBuilder:
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(6, 100)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.verticalHeader().setDefaultSectionSize(42)
         return table
 
     def _add_btn(self, layout, attr_name: str, label: str, slot) -> QPushButton:

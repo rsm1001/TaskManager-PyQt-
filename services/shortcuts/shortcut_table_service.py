@@ -16,6 +16,46 @@ from PyQt6.QtWidgets import QPushButton, QTableWidgetItem
 
 logger = logging.getLogger(__name__)
 
+
+# Keep the action buttons in separate visual hit areas.  QTableWidget places a
+# cell widget flush against the neighbouring cell by default, which makes the
+# shortcut, Claude, and Codex buttons especially easy to hit accidentally.
+_BUTTON_CELL_HORIZONTAL_MARGIN = 6
+_BUTTON_CELL_VERTICAL_MARGIN = 4
+
+
+class _PaddedButtonCell(QWidget):
+    """Container that keeps the existing cell-button API for callers.
+
+    A few parts of the application read ``cellWidget(row, 0)`` and call
+    ``property('task_id')`` or ``click()`` on it.  Forward those operations to
+    the actual button while using the container to provide the visual gap.
+    """
+
+    def __init__(self, button):
+        super().__init__()
+        self.button = button
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(
+            _BUTTON_CELL_HORIZONTAL_MARGIN,
+            _BUTTON_CELL_VERTICAL_MARGIN,
+            _BUTTON_CELL_HORIZONTAL_MARGIN,
+            _BUTTON_CELL_VERTICAL_MARGIN,
+        )
+        layout.addWidget(button)
+
+    def click(self):
+        self.button.click()
+
+    def property(self, name):
+        value = super().property(name)
+        return value if value is not None else self.button.property(name)
+
+
+def _set_button_cell(table, row, column, button):
+    """Place a button in a padded cell so adjacent actions are clearly separated."""
+    table.setCellWidget(row, column, _PaddedButtonCell(button))
+
 # 优先级显示映射（从 managers.tasks.priority 派生）
 # 真正的定义在 managers/priority.py PRIORITY_LEVELS
 from managers.tasks.priority import PRIORITY_DISPLAY_MAP, get_priority_label  # noqa: E402,F401
@@ -281,7 +321,7 @@ def render_shortcut_row(table, row, shortcut_item, on_open_callback=None):
         if cb:
             cb(si)
     btn.clicked.connect(on_click)
-    table.setCellWidget(row, 0, btn)
+    _set_button_cell(table, row, 0, btn)
 
     # Terminal按钮列：在文件所在目录启动Claude
     claude_btn = QPushButton('>_')
@@ -307,7 +347,7 @@ def render_shortcut_row(table, row, shortcut_item, on_open_callback=None):
     def on_claude_clicked(checked, p=shortcut_path):
         _open_in_terminal(p)
     claude_btn.clicked.connect(on_claude_clicked)
-    table.setCellWidget(row, 1, claude_btn)
+    _set_button_cell(table, row, 1, claude_btn)
 
     # Codex Terminal按钮列（列2）
     codex_btn = QPushButton('>_ ')
@@ -333,7 +373,7 @@ def render_shortcut_row(table, row, shortcut_item, on_open_callback=None):
     def on_codex_clicked(checked, p=shortcut_path):
         _open_codex_in_terminal(p)
     codex_btn.clicked.connect(on_codex_clicked)
-    table.setCellWidget(row, 2, codex_btn)
+    _set_button_cell(table, row, 2, codex_btn)
 
     # 类型列（列2 → 列3）
     if os.path.isfile(shortcut_path):
@@ -416,7 +456,7 @@ def render_history_row(table, row, history_item, on_open_callback, on_pin_callba
     def on_click(checked, h=history_item):
         on_open_callback(h)
     btn.clicked.connect(on_click)
-    table.setCellWidget(row, 0, btn)
+    _set_button_cell(table, row, 0, btn)
 
     # Terminal按钮列
     terminal_btn = QPushButton('>_')
@@ -442,7 +482,7 @@ def render_history_row(table, row, history_item, on_open_callback, on_pin_callba
     def on_terminal_clicked(checked, h=history_item):
         on_terminal_callback(h)
     terminal_btn.clicked.connect(on_terminal_clicked)
-    table.setCellWidget(row, 1, terminal_btn)
+    _set_button_cell(table, row, 1, terminal_btn)
 
     # Codex Terminal按钮列
     if on_codex_callback:
@@ -469,7 +509,7 @@ def render_history_row(table, row, history_item, on_open_callback, on_pin_callba
         def on_codex_clicked(checked, h=history_item):
             on_codex_callback(h)
         codex_btn.clicked.connect(on_codex_clicked)
-        table.setCellWidget(row, 2, codex_btn)
+        _set_button_cell(table, row, 2, codex_btn)
 
     # 置顶标记列（列2 → 列3）
     from PyQt6.QtGui import QColor

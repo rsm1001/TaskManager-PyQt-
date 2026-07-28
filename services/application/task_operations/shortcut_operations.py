@@ -3,7 +3,8 @@
 封装快捷入口的增删改查逻辑
 """
 
-from PyQt6.QtWidgets import QMessageBox
+from PyQt6.QtWidgets import QMessageBox, QPushButton
+from PyQt6.QtGui import QCursor
 from managers.application.data_manager import TaskType
 from dialogs.shortcut_edit_dialog import ShortcutEditDialog
 from utils.ui_messages import (
@@ -118,11 +119,15 @@ class ShortcutOperations:
         self._w.update_status_bar()
 
     def on_shortcuts_cell_clicked(self, row, col):
-        """快捷入口表格单击处理（列0时触发按钮点击）"""
-        if col == 0:
-            btn = self._w.shortcuts_table.cellWidget(row, 0)
-            if btn:
-                btn.click()
+        """Only trigger the shortcut when the name button itself was clicked."""
+        if col != 0:
+            return
+        cell = self._w.shortcuts_table.cellWidget(row, 0)
+        if not cell:
+            return
+        button = cell if isinstance(cell, QPushButton) else cell.findChild(QPushButton)
+        if button and button.rect().contains(button.mapFromGlobal(QCursor.pos())):
+            button.click()
 
     def _validate_and_refresh_filter(self, task_type: str):
         """验证并刷新标签筛选状态"""

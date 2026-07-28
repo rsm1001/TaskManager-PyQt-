@@ -2,7 +2,8 @@
 
 import logging
 
-from PyQt6.QtWidgets import QInputDialog, QMessageBox
+from PyQt6.QtWidgets import QInputDialog, QMessageBox, QPushButton
+from PyQt6.QtGui import QCursor
 
 import config.config
 from utils.ui_messages import warn_no_task_selected
@@ -93,10 +94,14 @@ class MainWindowTaskActionsMixin:
         self._update_history_limit_label()
 
     def on_shortcuts_cell_clicked(self, row, column):
-        if column == 0:
-            button = self.shortcuts_table.cellWidget(row, 0)
-            if button:
-                button.click()
+        if column != 0:
+            return
+        cell = self.shortcuts_table.cellWidget(row, 0)
+        if not cell:
+            return
+        button = cell if isinstance(cell, QPushButton) else cell.findChild(QPushButton)
+        if button and button.rect().contains(button.mapFromGlobal(QCursor.pos())):
+            button.click()
 
     def _shortcut_service(self):
         return self.data_manager._service_factory.get_shortcut_operation_service()
