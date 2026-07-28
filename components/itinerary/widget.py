@@ -36,6 +36,7 @@ class ItineraryWidget(QWidget):
         self.resize(600, 780)
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(20)
         shadow.setColor(QColor(0, 0, 0, 80))
@@ -50,13 +51,12 @@ class ItineraryWidget(QWidget):
         label.setStyleSheet('font-size: 15px; font-weight: bold; color: #2C3E50;')
         title.addWidget(label)
         title.addStretch()
-        for text, tip, handler in [('−', '最小化', self.hide), ('×', '关闭并销毁', self._on_close)]:
-            button = QPushButton(text)
-            button.setFixedSize(24, 24)
-            button.setToolTip(tip)
-            button.clicked.connect(handler)
-            button.setStyleSheet('QPushButton { background-color: transparent; color: #7F8C8D; border: none; font-size: 18px; } QPushButton:hover { background-color: #E74C3C; color: white; border-radius: 4px; }')
-            title.addWidget(button)
+        minimize_button = QPushButton('−')
+        minimize_button.setFixedSize(24, 24)
+        minimize_button.setToolTip('隐藏行程（Alt+Q）')
+        minimize_button.clicked.connect(self._hide_window)
+        minimize_button.setStyleSheet('QPushButton { background-color: transparent; color: #7F8C8D; border: none; font-size: 18px; } QPushButton:hover { background-color: #D5DBDB; color: #2C3E50; border-radius: 4px; }')
+        title.addWidget(minimize_button)
         layout.addLayout(title)
         day_layout = QHBoxLayout()
         day_layout.setSpacing(4)
@@ -95,9 +95,15 @@ class ItineraryWidget(QWidget):
     def _on_task_dropped(self, task_id, task_type, day, hour):
         logger.info('任务拖入行程', extra={'trace_id': task_id, 'task_type': task_type, 'day': day, 'hour': hour})
 
-    def _on_close(self):
+    def _hide_window(self):
+        """Hide the window while keeping the loaded itinerary alive."""
         self._save_position()
-        self.deleteLater()
+        self.hide()
+
+    def closeEvent(self, event):
+        """Intercept close requests so the itinerary is never destroyed."""
+        self._hide_window()
+        event.ignore()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -134,6 +140,14 @@ class ItineraryWidget(QWidget):
         screen = QApplication.screenAt(position) or QApplication.primaryScreen()
         return bool(screen and screen.availableGeometry().adjusted(-80, -80, 80, 80).contains(position))
 
+    def refresh_itinerary_data(self):
+        """Rebuild displayed rows so retained windows use current task state."""
+        for view in self._day_views:
+            for block in view.blocks:
+                for slot in block.hour_slots:
+                    slot.clear_displayed_tasks()
+        self._load_itinerary_data()
+
     def _load_itinerary_data(self):
         if self.data_manager is None:
             return
@@ -143,17 +157,48 @@ class ItineraryWidget(QWidget):
                 slot.add_task(self._build_task_data(record), persist=False)
         self.auto_navigate_to_current_time()
 
-    def auto_navigate_to_current_time(self):
-        now = datetime.now()
+    def auto_navigate_to_current_time(self, now=None):
+        """Prefer the latest overdue pending slot; otherwise use the current hour."""
+        now = now or datetime.now()
+        target = self._find_latest_unfinished_slot_before(now.weekday(), now.hour)
+        if target is None:
+            target = self._find_slot(now.weekday(), now.hour)
+
         self._collapse_all()
-        self._switch_day(now.weekday())
-        for block in self._day_views[now.weekday()].blocks:
-            if block.start_hour <= now.hour < block.start_hour + 4:
-                block._toggle_collapse()
-                slot = block.get_slot(now.hour)
-                if slot and slot.collapsed:
-                    slot._toggle_collapse()
-                break
+        if target is None:
+            return
+
+        day_index, block, slot = target
+        self._switch_day(day_index)
+        if block.collapsed:
+            block._toggle_collapse()
+        if slot.collapsed:
+            slot._toggle_collapse()
+
+    def _find_latest_unfinished_slot_before(self, current_day, current_hour):
+        """Return the latest pending slot before the current time this week."""
+        for day_index in range(current_day, -1, -1):
+            view = self._day_views[day_index]
+            for block in reversed(view.blocks):
+                for slot in reversed(block.hour_slots):
+                    if day_index == current_day and slot.hour >= current_hour:
+                        continue
+                    if any(self._is_unfinished(row.task_data) for row in slot.task_rows):
+                        return day_index, block, slot
+        return None
+
+    def _find_slot(self, day_index, hour):
+        view = self._day_views[day_index]
+        for block in view.blocks:
+            slot = block.get_slot(hour)
+            if slot is not None:
+                return day_index, block, slot
+        return None
+
+    @staticmethod
+    def _is_unfinished(task_data):
+        status_key = task_data.get('status_key')
+        return status_key == 'pending' if status_key is not None else task_data.get('status', '○') == '○'
 
     def _collapse_all(self):
         for view in self._day_views:

@@ -66,13 +66,18 @@ class MainWindowToolsMixin:
         from PyQt6 import sip
         if self._itinerary_widget is not None and sip.isdeleted(self._itinerary_widget):
             self._itinerary_widget, self._itinerary_positioned = None, False
-        if self._itinerary_widget is None:
+
+        created = self._itinerary_widget is None
+        if created:
             self._itinerary_widget = ItineraryWidget(self.data_manager, self)
             self._itinerary_widget.destroyed.connect(lambda: self._clear_itinerary_reference())
             self._refresh_arranged_cache()
         if self._itinerary_widget.isVisible():
             self._itinerary_widget.hide()
             return
+
+        if not created:
+            self._itinerary_widget.refresh_itinerary_data()
         if not self._itinerary_positioned and not self._itinerary_widget.has_saved_position():
             geometry = self.geometry()
             self._itinerary_widget.move(geometry.center().x() - self._itinerary_widget.width() // 2, geometry.center().y() - self._itinerary_widget.height() // 2)
@@ -169,6 +174,13 @@ class MainWindowToolsMixin:
         update_task_row_style(table, row, is_completed)
 
     def closeEvent(self, event):
+        # The itinerary is a separate top-level window. Hide it before accepting
+        # the main-window close so it cannot keep the application alive invisibly.
+        from PyQt6 import sip
+
+        itinerary = getattr(self, '_itinerary_widget', None)
+        if itinerary is not None and not sip.isdeleted(itinerary):
+            itinerary.hide()
         self.data_manager.close_session()
         event.accept()
 

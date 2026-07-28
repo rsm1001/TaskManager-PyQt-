@@ -101,6 +101,16 @@ class HourSlotWidget(QFrame):
         if self.main_window and task_data.get('itinerary_id'):
             self.main_window.refresh_arranged_cache()
 
+    def clear_displayed_tasks(self):
+        """Remove row widgets without changing persisted itinerary records."""
+        for row in list(self.task_rows):
+            row.setParent(None)
+            row.deleteLater()
+        self.task_rows.clear()
+        self.collapsed = True
+        self.task_container.setVisible(False)
+        self._update_header()
+
     def _on_task_drag_started(self, task_data: dict, _source_slot):
         self._pending_restore = task_data
         for row in self.task_rows:

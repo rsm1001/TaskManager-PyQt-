@@ -8,7 +8,8 @@ PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_DIR not in sys.path:
     sys.path.insert(0, PROJECT_DIR)
 
-from PyQt6.QtCore import QFileInfo
+from PyQt6.QtCore import QFileInfo, Qt
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileIconProvider, QMainWindow, QStatusBar, QTabWidget, QVBoxLayout, QWidget
 
 import config.config
@@ -58,7 +59,14 @@ class TaskManagerMainWindow(
         self._arranged_task_refs = set()
         self._search_coordinator = SearchCoordinator(self)
         self.init_ui()
+        self._init_global_shortcuts()
         self.load_data()
+
+    def _init_global_shortcuts(self):
+        """Register the application-wide itinerary show/hide shortcut."""
+        self._itinerary_shortcut = QShortcut(QKeySequence('Alt+Q'), self)
+        self._itinerary_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        self._itinerary_shortcut.activated.connect(self.show_itinerary)
 
     def init_ui(self):
         self.setWindowTitle(config.config.WINDOW_TITLE)
