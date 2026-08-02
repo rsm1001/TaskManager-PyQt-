@@ -37,6 +37,7 @@ class OrchestratorFactory:
                 todo_task_manager=self._dm.todo_manager,
                 entertainment_task_manager=self._dm.entertainment_manager,
                 trash_manager=self._dm.trash_manager,
+                itinerary_manager=self._dm.itinerary_manager,
                 task_limit_service_factory=self._dm._get_task_limit_service,
                 shortcut_manager=self._dm.shortcut_manager,
             )

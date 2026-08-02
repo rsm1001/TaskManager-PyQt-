@@ -113,14 +113,19 @@ class ItineraryManager:
         logger.info(f"行程任务删除成功: {task_id}")
         return True
 
-    def delete_by_task_ref(self, task_id: str, task_type: str) -> int:
-        """根据关联的任务 ID 和类型删除所有引用"""
+    def delete_by_task_ref(self, task_id: str, task_type: str, *, commit: bool = True) -> int:
+        """Delete all itinerary records that refer to a source task.
+
+        ``commit=False`` lets a caller delete the source task and its itinerary
+        references as one SQLAlchemy transaction.
+        """
         count = (
             self.session.query(ItineraryTask)
             .filter(ItineraryTask.task_id == task_id)
             .filter(ItineraryTask.task_type == task_type)
-            .delete()
+            .delete(synchronize_session=False)
         )
-        self.session.commit()
-        logger.info(f"行程任务引用清理: {task_id} ({task_type}) 共 {count} 条")
+        if commit:
+            self.session.commit()
+        logger.info("Deleted %d itinerary references for %s task %s", count, task_type, task_id)
         return count

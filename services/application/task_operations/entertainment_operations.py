@@ -110,6 +110,8 @@ class EntertainmentTaskOperations:
             if task_id:
                 task_ids.append(task_id)
         deleted = self._w.data_manager.delete_entertainment_tasks_batch(task_ids)
+        if deleted:
+            self._w.refresh_itinerary_after_task_deletion()
         self._w.load_entertainment_tasks()
         self._auto_cleanup_if_enabled()
         self._validate_and_refresh_filter('entertainment')
