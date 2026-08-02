@@ -75,6 +75,7 @@ class MainWindowToolsMixin:
         # A minimized top-level itinerary remains "visible" to Qt. Restore it
         # instead of treating Alt+Q as a request to hide the window again.
         if self._itinerary_widget.isMinimized():
+            self._itinerary_widget.refresh_itinerary_data()
             self._itinerary_widget.showNormal()
             self._itinerary_widget.raise_()
             self._itinerary_widget.activateWindow()

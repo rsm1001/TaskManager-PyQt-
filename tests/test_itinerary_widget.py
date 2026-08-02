@@ -168,15 +168,21 @@ def test_show_itinerary_restores_a_minimized_itinerary_instead_of_hiding_it():
     itinerary = ItineraryWidget(data_manager=data_manager)
     host = _ShowHost(data_manager, itinerary)
 
+    slot = itinerary._day_views[1].get_slot(9)
+    old_row = slot.task_rows[0]
     itinerary.showMinimized()
     app.processEvents()
     assert itinerary.isMinimized()
 
+    data_manager.source.status = "completed"
     host.show_itinerary()
     app.processEvents()
 
     assert itinerary.isVisible()
     assert not itinerary.isMinimized()
+    assert len(slot.task_rows) == 1
+    assert slot.task_rows[0] is not old_row
+    assert slot.task_rows[0].task_data["status_key"] == "completed"
     itinerary.deleteLater()
     app.processEvents()
 
