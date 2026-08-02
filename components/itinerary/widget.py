@@ -1,4 +1,4 @@
-"""行程浮动窗口及数据加载协调。"""
+﻿"""行程浮动窗口及数据加载协调。"""
 
 import json
 import logging
@@ -158,9 +158,9 @@ class ItineraryWidget(QWidget):
         self.auto_navigate_to_current_time()
 
     def auto_navigate_to_current_time(self, now=None):
-        """Prefer the latest overdue pending slot; otherwise use the current hour."""
+        """Open today's earliest unfinished slot, or the current hour."""
         now = now or datetime.now()
-        target = self._find_latest_unfinished_slot_before(now.weekday(), now.hour)
+        target = self._find_earliest_unfinished_slot(now.weekday())
         if target is None:
             target = self._find_slot(now.weekday(), now.hour)
 
@@ -175,16 +175,13 @@ class ItineraryWidget(QWidget):
         if slot.collapsed:
             slot._toggle_collapse()
 
-    def _find_latest_unfinished_slot_before(self, current_day, current_hour):
-        """Return the latest pending slot before the current time this week."""
-        for day_index in range(current_day, -1, -1):
-            view = self._day_views[day_index]
-            for block in reversed(view.blocks):
-                for slot in reversed(block.hour_slots):
-                    if day_index == current_day and slot.hour >= current_hour:
-                        continue
-                    if any(self._is_unfinished(row.task_data) for row in slot.task_rows):
-                        return day_index, block, slot
+    def _find_earliest_unfinished_slot(self, day_index):
+        """Return the first pending slot in chronological order for one day."""
+        view = self._day_views[day_index]
+        for block in view.blocks:
+            for slot in block.hour_slots:
+                if any(self._is_unfinished(row.task_data) for row in slot.task_rows):
+                    return day_index, block, slot
         return None
 
     def _find_slot(self, day_index, hour):

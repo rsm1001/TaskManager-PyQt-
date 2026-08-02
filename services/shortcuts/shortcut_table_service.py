@@ -6,10 +6,11 @@ Shortcut Table Service - 快捷入口表格服务模块
 import os
 import logging
 import sqlite3
+import shutil
 import subprocess
 import sys
 import config.config as _config
-from PyQt6.QtWidgets import QPushButton, QWidget, QHBoxLayout
+from PyQt6.QtWidgets import QPushButton, QWidget, QHBoxLayout, QMessageBox
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QPushButton, QTableWidgetItem
@@ -66,30 +67,43 @@ def _get_priority_display(priority):
     return get_priority_label(priority)
 
 
-def _get_claude_path():
-    """动态查找claude可执行文件路径"""
-    import shutil
-    path = shutil.which('claude')
+def _get_cli_path(command_name):
+    """Resolve a CLI executable without relying solely on the inherited PATH."""
+    path = shutil.which(command_name)
     if path:
         return path
-    # 尝试常见的用户安装路径
-    user_bin = os.path.join(os.path.expanduser('~'), '.local', 'bin', 'claude.exe')
-    if os.path.exists(user_bin):
-        return user_bin
-    return 'claude'  # fallback
+
+    candidates = []
+    if os.name == "nt":
+        # npm installs Windows global command shims here by default. Explorer
+        # shortcuts can retain an older PATH, so probe this location directly.
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            candidates.append(os.path.join(appdata, "npm", f"{command_name}.cmd"))
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        if local_appdata:
+            candidates.append(os.path.join(local_appdata, "npm", f"{command_name}.cmd"))
+
+    user_bin = os.path.join(os.path.expanduser("~"), ".local", "bin")
+    candidates.append(os.path.join(user_bin, command_name + (".exe" if os.name == "nt" else "")))
+
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            logger.info("Resolved %s from a known installation path: %s", command_name, candidate)
+            return candidate
+
+    logger.warning("Unable to resolve %s from PATH or known installation paths", command_name)
+    return None
+
+
+def _get_claude_path():
+    """Find the Claude CLI executable path, if it is installed."""
+    return _get_cli_path("claude")
 
 
 def _get_codex_path():
-    """动态查找codex可执行文件路径"""
-    import shutil
-    path = shutil.which('codex')
-    if path:
-        return path
-    # 尝试常见的用户安装路径
-    user_bin = os.path.join(os.path.expanduser('~'), '.local', 'bin', 'codex.exe')
-    if os.path.exists(user_bin):
-        return user_bin
-    return 'codex'  # fallback
+    """Find the Codex CLI executable path, if it is installed."""
+    return _get_cli_path("codex")
 
 
 def _is_dangerously_skip_permissions_enabled():
@@ -117,12 +131,14 @@ def _is_dangerously_skip_permissions_enabled():
 
 
 def _build_claude_command():
-    """根据放权开关构造 Claude 命令参数。"""
-    command = [_get_claude_path()]
+    """Build the Claude command, respecting the permission setting."""
+    executable = _get_claude_path()
+    if not executable:
+        return None
+    command = [executable]
     if _is_dangerously_skip_permissions_enabled():
         command.append(_config.CLAUDE_DANGEROUS_SKIP_PERMISSIONS_FLAG)
     return command
-
 
 def _is_codex_skip_permissions_enabled():
     """读取持久化的"Codex 放权启动"开关，失败时回落到默认值。"""
@@ -145,12 +161,14 @@ def _is_codex_skip_permissions_enabled():
 
 
 def _build_codex_command():
-    """根据放权开关构造 Codex 命令参数。"""
-    command = [_get_codex_path()]
+    """Build the Codex command, respecting the permission setting."""
+    executable = _get_codex_path()
+    if not executable:
+        return None
+    command = [executable]
     if _is_codex_skip_permissions_enabled():
         command.append(_config.CODEX_DANGEROUS_SKIP_PERMISSIONS_FLAG)
     return command
-
 
 def _launch_terminal(target_dir, command):
     """在目标目录的新终端中执行命令，目录不参与 CMD 文本解析。"""
@@ -210,21 +228,39 @@ def _get_script_environment():
     return environment
 
 
+def _show_cli_not_found(display_name, command_name):
+    """Show a clear in-app error instead of opening CMD with a bare command."""
+    npm_directory = r"%APPDATA%\npm"
+    message = (
+        f"未检测到 {display_name} 命令行工具。\n\n"
+        f"请确认已安装 `{command_name}`，并将 npm 全局目录加入用户 PATH：\n"
+        f"{npm_directory}\n\n"
+        "完成后请完全退出并重新启动任务管理器，再重试。"
+    )
+    logger.error("%s CLI was not found; terminal launch cancelled", display_name)
+    QMessageBox.warning(None, f"{display_name} 未找到", message)
+
 def _open_codex_in_terminal(path):
-    """在文件/文件夹所在目录启动cmd执行codex"""
+    """Open CMD in the shortcut directory and start Codex."""
     if not path:
         return
+    command = _build_codex_command()
+    if not command:
+        _show_cli_not_found("Codex", "codex")
+        return
     target_dir = _get_terminal_directory(path)
-    _launch_terminal(target_dir, _build_codex_command())
-
+    _launch_terminal(target_dir, command)
 
 def _open_in_terminal(path):
-    """在文件/文件夹所在目录启动cmd执行claude"""
+    """Open CMD in the shortcut directory and start Claude."""
     if not path:
         return
+    command = _build_claude_command()
+    if not command:
+        _show_cli_not_found("Claude", "claude")
+        return
     target_dir = _get_terminal_directory(path)
-    _launch_terminal(target_dir, _build_claude_command())
-
+    _launch_terminal(target_dir, command)
 
 def _run_script(path):
     """Run a script from its own directory and keep command output visible."""

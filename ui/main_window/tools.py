@@ -1,4 +1,4 @@
-"""主窗口的导入导出、浮窗和系统工具行为。"""
+﻿"""主窗口的导入导出、浮窗和系统工具行为。"""
 
 import logging
 
@@ -72,6 +72,15 @@ class MainWindowToolsMixin:
             self._itinerary_widget = ItineraryWidget(self.data_manager, self)
             self._itinerary_widget.destroyed.connect(lambda: self._clear_itinerary_reference())
             self._refresh_arranged_cache()
+        # A minimized top-level itinerary remains "visible" to Qt. Restore it
+        # instead of treating Alt+Q as a request to hide the window again.
+        if self._itinerary_widget.isMinimized():
+            self._itinerary_widget.showNormal()
+            self._itinerary_widget.raise_()
+            self._itinerary_widget.activateWindow()
+            self._refresh_arranged_cache()
+            return
+
         if self._itinerary_widget.isVisible():
             self._itinerary_widget.hide()
             return
@@ -82,8 +91,9 @@ class MainWindowToolsMixin:
             geometry = self.geometry()
             self._itinerary_widget.move(geometry.center().x() - self._itinerary_widget.width() // 2, geometry.center().y() - self._itinerary_widget.height() // 2)
         self._itinerary_positioned = True
-        self._itinerary_widget.show()
+        self._itinerary_widget.showNormal()
         self._itinerary_widget.raise_()
+        self._itinerary_widget.activateWindow()
         self._refresh_arranged_cache()
 
     def _clear_itinerary_reference(self):

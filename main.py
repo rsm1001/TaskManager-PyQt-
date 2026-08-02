@@ -1,4 +1,4 @@
-"""任务管理器主窗口入口与界面组装。"""
+﻿"""任务管理器主窗口入口与界面组装。"""
 
 import os
 import sys
@@ -28,6 +28,7 @@ from ui.main_window.table_actions import MainWindowTableActionsMixin
 from ui.main_window.task_actions import MainWindowTaskActionsMixin
 from ui.main_window.tools import MainWindowToolsMixin
 from utils.logging_config import setup_logging
+from utils.windows_hotkey import WindowsGlobalHotkey
 
 setup_logging(log_level=config.config.LOG_LEVEL)
 
@@ -63,10 +64,23 @@ class TaskManagerMainWindow(
         self.load_data()
 
     def _init_global_shortcuts(self):
-        """Register the application-wide itinerary show/hide shortcut."""
+        """Register Alt+Q, including a Windows global-hotkey implementation."""
+        self._itinerary_global_hotkey = WindowsGlobalHotkey(self.show_itinerary)
+        application = QApplication.instance()
+        if application is not None and self._itinerary_global_hotkey.start(application):
+            self._itinerary_shortcut = None
+            return
+
+        # The fallback still works while this application has focus, including
+        # on platforms that do not expose Win32 RegisterHotKey.
         self._itinerary_shortcut = QShortcut(QKeySequence('Alt+Q'), self)
         self._itinerary_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
         self._itinerary_shortcut.activated.connect(self.show_itinerary)
+
+    def closeEvent(self, event):
+        """Release the OS-level hotkey before the main window shuts down."""
+        self._itinerary_global_hotkey.stop()
+        super().closeEvent(event)
 
     def init_ui(self):
         self.setWindowTitle(config.config.WINDOW_TITLE)

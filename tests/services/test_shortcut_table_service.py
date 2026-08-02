@@ -12,6 +12,33 @@ import config.config as config
 from services.shortcuts import shortcut_table_service
 
 
+def test_cli_path_uses_windows_npm_shim_when_path_is_missing(monkeypatch, tmp_path):
+    """Desktop-launched processes may miss npm from PATH but still have APPDATA."""
+    npm_directory = tmp_path / "Roaming" / "npm"
+    npm_directory.mkdir(parents=True)
+    codex_shim = npm_directory / "codex.cmd"
+    codex_shim.write_text("@echo off", encoding="utf-8")
+
+    monkeypatch.setattr(shortcut_table_service.shutil, "which", lambda _command: None)
+    monkeypatch.setenv("APPDATA", str(npm_directory.parent))
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+
+    assert shortcut_table_service._get_codex_path() == str(codex_shim)
+
+
+def test_missing_codex_does_not_open_terminal(monkeypatch, tmp_path):
+    """A missing CLI should produce an actionable UI message, not CMD's vague error."""
+    monkeypatch.setattr(shortcut_table_service, "_build_codex_command", lambda: None)
+
+    with patch.object(shortcut_table_service.QMessageBox, "warning") as warning, \
+         patch.object(shortcut_table_service.subprocess, "Popen") as popen:
+        shortcut_table_service._open_codex_in_terminal(str(tmp_path))
+
+    warning.assert_called_once()
+    assert "Codex" in warning.call_args.args[1]
+    popen.assert_not_called()
+
+
 def test_codex_bypass_command_uses_supported_flag(monkeypatch):
     """启用放权开关时使用 Codex 支持的参数。"""
     monkeypatch.setattr(shortcut_table_service, "_get_codex_path", lambda: "codex.exe")
