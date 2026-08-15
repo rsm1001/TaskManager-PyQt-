@@ -7,6 +7,7 @@ from PyQt6.QtGui import QColor, QDrag, QPainter, QPixmap
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton
 
 from components.itinerary.constants import STATUS_TO_KEY, TASK_ROW_HEIGHT
+from components.itinerary.payload import parse_task_payload
 from managers.tasks.priority import DEFAULT_PRIORITY, LABEL_TO_KEY, PRIORITY_BG_COLORS, PRIORITY_TEXT_COLORS
 
 
@@ -16,6 +17,8 @@ class ItineraryTaskRow(QFrame):
     deleted = pyqtSignal(object)
     status_toggled = pyqtSignal(object)
     drag_started = pyqtSignal(object, object)
+    launch_requested = pyqtSignal(object)
+    shortcut_dropped = pyqtSignal(object, object)
 
     def __init__(self, task_data: dict, parent=None):
         super().__init__(parent)
@@ -27,6 +30,7 @@ class ItineraryTaskRow(QFrame):
 
     def _init_ui(self):
         self.setFixedHeight(TASK_ROW_HEIGHT)
+        self.setAcceptDrops(True)
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(6, 3, 6, 3)
         self.layout.setSpacing(6)
@@ -47,6 +51,16 @@ class ItineraryTaskRow(QFrame):
         self.priority_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.priority_label.setStyleSheet('font-size: 11px; font-weight: bold;')
         self.layout.addWidget(self.priority_label)
+        self.launch_btn = QPushButton('\u542f\u52a8')
+        self.launch_btn.setFixedSize(42, 20)
+        self.launch_btn.setToolTip('\u542f\u52a8\u7ed1\u5b9a\u7684\u5feb\u6377\u5165\u53e3\u5e76\u9690\u85cf\u884c\u7a0b\u7a97\u53e3')
+        self.launch_btn.clicked.connect(lambda: self.launch_requested.emit(self))
+        self.launch_btn.setStyleSheet(
+            'QPushButton { background: #E8F5E9; color: #2E7D32; border: 1px solid #66BB6A; '
+            'border-radius: 3px; font-size: 11px; } QPushButton:hover { background: #C8E6C9; }'
+        )
+        self.launch_btn.setVisible(self._has_shortcut_binding())
+        self.layout.addWidget(self.launch_btn)
         self.delete_btn = QPushButton('×')
         self.delete_btn.setFixedSize(20, 20)
         self.delete_btn.clicked.connect(lambda: self.deleted.emit(self))
@@ -64,11 +78,49 @@ class ItineraryTaskRow(QFrame):
         tags = self.task_data.get('tags') or '-'
         self.tags_label.setText(tags if tags != '-' else '')
         self.priority_label.setText(self.task_data.get('priority') or '普通')
+        self.launch_btn.setVisible(self._has_shortcut_binding())
 
     def set_status(self, status: str):
         self.task_data['status'] = status
         self.task_data['status_key'] = STATUS_TO_KEY.get(status, 'pending')
         self._render()
+
+    def _has_shortcut_binding(self):
+        return bool(self.task_data.get('shortcut_id'))
+
+    def set_shortcut_binding(self, shortcut_data: dict):
+        self.task_data.update(shortcut_data)
+        self._render()
+
+    @staticmethod
+    def _get_shortcut_payload(event):
+        if not event.mimeData().hasFormat('application/task-data'):
+            return None
+        try:
+            task_data = parse_task_payload(bytes(event.mimeData().data('application/task-data')).decode('utf-8'))
+        except UnicodeDecodeError:
+            return None
+        return task_data if task_data.get('task_type') == 'shortcut' else None
+
+    def dragEnterEvent(self, event):
+        if self._get_shortcut_payload(event):
+            event.acceptProposedAction()
+            self.setStyleSheet('ItineraryTaskRow { background-color: #E8F5E9; border: 2px dashed #27AE60; border-radius: 5px; }')
+            return
+        event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self._render()
+        event.accept()
+
+    def dropEvent(self, event):
+        shortcut_data = self._get_shortcut_payload(event)
+        self._render()
+        if not shortcut_data:
+            event.ignore()
+            return
+        self.shortcut_dropped.emit(self, shortcut_data)
+        event.acceptProposedAction()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:

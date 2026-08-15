@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 from components.main_window.tab_filters import on_shortcut_tag_filter_clicked
 from components.main_window.tag_filter_bar import TagFilterBar
 from managers.application.data_manager import TaskType
+from components.main_window.draggable_table import DraggableTaskTable
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +107,9 @@ class ShortcutsTabBuilder:
 
     def _make_shortcuts_table(self) -> QTableWidget:
         win = self.parent_window
-        table = QTableWidget()
+        table = DraggableTaskTable()
+        table.task_type = 'shortcut'
+        table.setToolTip('\u70b9\u51fb\u540d\u79f0\u542f\u52a8\u5feb\u6377\u5165\u53e3\uff1b\u4ece\u7c7b\u578b\u3001\u6807\u7b7e\u6216\u8def\u5f84\u5355\u5143\u683c\u62d6\u5165\u884c\u7a0b\u89c4\u5212\u4ee5\u7ed1\u5b9a')
         table.setColumnCount(7)
         table.setHorizontalHeaderLabels(['名称', 'claude', 'Codex', '类型', '标签', '路径', '创建日期'])
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)

@@ -103,6 +103,15 @@ class MainWindowToolsMixin:
     def refresh_arranged_cache(self):
         self._refresh_arranged_cache()
 
+    def refresh_itinerary_after_task_update(self):
+        """Refresh the live itinerary after a bound shortcut is edited."""
+        from PyQt6 import sip
+
+        self._refresh_arranged_cache()
+        itinerary_widget = getattr(self, '_itinerary_widget', None)
+        if itinerary_widget is not None and not sip.isdeleted(itinerary_widget):
+            itinerary_widget.refresh_itinerary_data()
+
     def refresh_itinerary_after_task_deletion(self):
         """Refresh the live itinerary after source tasks and references are deleted."""
         from PyQt6 import sip

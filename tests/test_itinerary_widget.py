@@ -1,5 +1,6 @@
 ﻿"""Tests for itinerary visibility and automatic navigation behavior."""
 
+import json
 import os
 from datetime import datetime
 from types import SimpleNamespace
@@ -7,7 +8,8 @@ from types import SimpleNamespace
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import sip
-from PyQt6.QtGui import QCloseEvent
+from PyQt6.QtCore import QByteArray, QMimeData, QPointF, Qt
+from PyQt6.QtGui import QCloseEvent, QDropEvent
 from PyQt6.QtWidgets import QApplication
 
 from components.itinerary.widget import ItineraryWidget
@@ -209,4 +211,210 @@ def test_reopening_hidden_itinerary_refreshes_task_status_rows():
     assert slot.task_rows[0] is not old_row
     assert slot.task_rows[0].task_data["status_key"] == "completed"
     itinerary.deleteLater()
+    app.processEvents()
+
+
+class _ShortcutService:
+    def __init__(self):
+        self.opened = []
+
+    def open_shortcut(self, shortcut_id):
+        self.opened.append(shortcut_id)
+        return {'success': True}
+
+
+class _ShortcutFactory:
+    def __init__(self, service):
+        self.service = service
+
+    def get_shortcut_operation_service(self):
+        return self.service
+
+
+class _ShortcutDataManager:
+    def __init__(self, service):
+        self._service_factory = _ShortcutFactory(service)
+        self.itinerary_updates = []
+
+    def get_itinerary_tasks(self):
+        return []
+
+    def update_itinerary_task(self, itinerary_id, **kwargs):
+        self.itinerary_updates.append((itinerary_id, kwargs))
+        return True
+
+    def get_all_shortcuts(self):
+        return [{
+            'id': 'shortcut-1',
+            'title': 'Launch me',
+            'shortcut_path': 'C:/launch-me.ps1',
+            'action_type': 'script',
+            'tags': 'test',
+        }]
+
+
+def test_shortcut_drop_binds_existing_itinerary_task_without_creating_a_row():
+    app = _app()
+    service = _ShortcutService()
+    data_manager = _ShortcutDataManager(service)
+    widget = ItineraryWidget(data_manager=data_manager)
+    slot = widget._day_views[0].get_slot(9)
+    task_data = {
+        'itinerary_id': 'itinerary-task-1',
+        'task_id': 'todo-1',
+        'task_type': 'todo',
+        'status': chr(0x25cb),
+        'status_key': 'pending',
+        'title': 'Existing task',
+        'tags': 'work',
+        'priority': 'normal',
+        'priority_key': 'normal',
+    }
+    slot.add_task(task_data, persist=False)
+    row = slot.task_rows[0]
+
+    shortcut_payload = {
+        'task_id': 'shortcut-1',
+        'task_type': 'shortcut',
+        'title': 'Launch me',
+        'shortcut_path': 'C:/launch-me.ps1',
+        'action_type': 'script',
+    }
+    mime_data = QMimeData()
+    mime_data.setData('application/task-data', QByteArray(json.dumps(shortcut_payload).encode('utf-8')))
+    row.dropEvent(QDropEvent(
+        QPointF(1, 1),
+        Qt.DropAction.CopyAction,
+        mime_data,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    ))
+
+    assert len(slot.task_rows) == 1
+    assert row.task_data['task_type'] == 'todo'
+    assert row.task_data['shortcut_id'] == 'shortcut-1'
+    assert row.task_data['shortcut_path'] == 'C:/launch-me.ps1'
+    assert not row.status_btn.isHidden()
+    assert not row.launch_btn.isHidden()
+    assert widget._is_unfinished(row.task_data) is True
+    assert data_manager.itinerary_updates[0][0] == 'itinerary-task-1'
+    persisted = data_manager.itinerary_updates[0][1]['description']
+    assert 'shortcut-1' in persisted
+    restored = widget._build_task_data(SimpleNamespace(
+        id='itinerary-task-1',
+        task_id='todo-1',
+        task_type='todo',
+        title='Existing task',
+        description=persisted,
+    ))
+    assert restored['shortcut_id'] == 'shortcut-1'
+    assert restored['shortcut_path'] == 'C:/launch-me.ps1'
+
+    widget.show()
+    app.processEvents()
+    row.launch_btn.click()
+    app.processEvents()
+    assert service.opened == ['shortcut-1']
+    assert not widget.isVisible()
+
+    widget.deleteLater()
+    app.processEvents()
+
+
+
+def test_shortcut_drop_to_an_empty_hour_slot_is_rejected(monkeypatch):
+    app = _app()
+    widget = ItineraryWidget(data_manager=_ShortcutDataManager(_ShortcutService()))
+    slot = widget._day_views[0].get_slot(10)
+    mime_data = QMimeData()
+    mime_data.setData('application/task-data', QByteArray(json.dumps({
+        'task_id': 'shortcut-1',
+        'task_type': 'shortcut',
+        'title': 'Launch me',
+    }).encode('utf-8')))
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr('components.itinerary.hour_slot.QMessageBox.information', lambda *args: None)
+        slot.dropEvent(QDropEvent(
+            QPointF(1, 1),
+            Qt.DropAction.CopyAction,
+            mime_data,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        ))
+
+    assert slot.task_rows == []
+    widget.deleteLater()
+    app.processEvents()
+
+def test_itinerary_shortcut_launch_refreshes_history_after_hiding():
+    app = _app()
+    service = _ShortcutService()
+    data_manager = _ShortcutDataManager(service)
+    widget = ItineraryWidget(data_manager=data_manager)
+
+    class Host:
+        def __init__(self):
+            self.history_refreshes = 0
+            self.limit_refreshes = 0
+
+        def load_shortcuts_history(self):
+            self.history_refreshes += 1
+
+        def _update_history_limit_label(self):
+            self.limit_refreshes += 1
+
+    host = Host()
+    widget.main_window = host
+    widget.show()
+    app.processEvents()
+    widget.launch_shortcut_from_itinerary('shortcut-1')
+    app.processEvents()
+
+    assert service.opened == ['shortcut-1']
+    assert not widget.isVisible()
+    assert host.history_refreshes == 1
+    assert host.limit_refreshes == 1
+
+    widget.deleteLater()
+    app.processEvents()
+
+
+
+def test_itinerary_shortcut_launch_failure_restores_itinerary_without_history_refresh(monkeypatch):
+    app = _app()
+
+    class FailedService(_ShortcutService):
+        def open_shortcut(self, shortcut_id):
+            self.opened.append(shortcut_id)
+            return {'success': False, 'message': 'OS rejected launch'}
+
+    service = FailedService()
+    widget = ItineraryWidget(data_manager=_ShortcutDataManager(service))
+
+    class Host:
+        def __init__(self):
+            self.history_refreshes = 0
+            self.limit_refreshes = 0
+
+        def load_shortcuts_history(self):
+            self.history_refreshes += 1
+
+        def _update_history_limit_label(self):
+            self.limit_refreshes += 1
+
+    widget.main_window = Host()
+    widget.show()
+    app.processEvents()
+    with monkeypatch.context() as patcher:
+        patcher.setattr('components.itinerary.widget.QMessageBox.warning', lambda *args: None)
+        widget.launch_shortcut_from_itinerary('shortcut-1')
+    app.processEvents()
+
+    assert service.opened == ['shortcut-1']
+    assert widget.isVisible()
+    assert widget.main_window.history_refreshes == 0
+    assert widget.main_window.limit_refreshes == 0
+
+    widget.deleteLater()
     app.processEvents()

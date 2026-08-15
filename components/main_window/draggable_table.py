@@ -5,7 +5,7 @@
 
 import json
 
-from PyQt6.QtWidgets import QTableWidget, QAbstractItemView
+from PyQt6.QtWidgets import QTableWidget, QAbstractItemView, QPushButton
 from PyQt6.QtCore import Qt, QMimeData, QByteArray
 from PyQt6.QtGui import QDrag
 
@@ -40,10 +40,17 @@ class DraggableTaskTable(QTableWidget):
         # 获取第一行的 task_id（存储在第 0 列的 UserRole 中）
         row = selected[0].row()
         item = self.item(row, 0)
-        if item is None:
-            return
-
-        task_id = item.data(Qt.ItemDataRole.UserRole)
+        button = None
+        if self.task_type == 'shortcut':
+            cell = self.cellWidget(row, 0)
+            button = getattr(cell, 'button', None) or (cell.findChild(QPushButton) if cell else None)
+            task_id = button.property('task_id') if button else None
+            title = button.text() if button else self._cell_text(row, 0)
+        else:
+            if item is None:
+                return
+            task_id = item.data(Qt.ItemDataRole.UserRole)
+            title = self._cell_text(row, 1)
         if not task_id:
             return
 
@@ -52,19 +59,26 @@ class DraggableTaskTable(QTableWidget):
             "daily": (4, 8),
             "todo": (5, 9),
             "entertainment": (4, 8),
+            "shortcut": (4, -1),
         }.get(self.task_type, (4, 8))
-        priority = self._cell_text(row, priority_col)
+        priority = self._cell_text(row, priority_col) if priority_col >= 0 else "normal"
 
         mime_data = QMimeData()
-        payload = json.dumps({
+        payload_data = {
             "task_id": task_id,
             "task_type": self.task_type,
-            "status": self._cell_text(row, 0),
-            "title": self._cell_text(row, 1),
+            "status": self._cell_text(row, 0) if self.task_type != "shortcut" else "\u25cb",
+            "title": title,
             "tags": self._cell_text(row, tags_col),
             "priority": priority,
             "priority_key": LABEL_TO_KEY.get(priority, DEFAULT_PRIORITY),
-        }, ensure_ascii=False)
+        }
+        if self.task_type == "shortcut":
+            payload_data.update({
+                "shortcut_path": button.property("shortcut_path") if button else self._cell_text(row, 5),
+                "action_type": button.property("action_type") if button else "open",
+            })
+        payload = json.dumps(payload_data, ensure_ascii=False)
         mime_data.setData("application/task-data", QByteArray(payload.encode("utf-8")))
 
         drag = QDrag(self)

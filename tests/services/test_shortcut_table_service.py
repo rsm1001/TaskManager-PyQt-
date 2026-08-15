@@ -1,4 +1,4 @@
-"""快捷入口终端启动与表格渲染的回归测试。"""
+﻿"""快捷入口终端启动与表格渲染的回归测试。"""
 
 import os
 import sys
@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QApplication, QTableWidget
 
 import config.config as config
 from services.shortcuts import shortcut_table_service
+import services.shortcuts.terminal_service as terminal_service
 
 
 def test_cli_path_uses_windows_npm_shim_when_path_is_missing(monkeypatch, tmp_path):
@@ -50,10 +51,13 @@ def test_codex_bypass_command_uses_supported_flag(monkeypatch):
     ]
 
 
-def test_codex_terminal_uses_cwd_for_directory_with_cmd_metacharacters(monkeypatch):
+def test_codex_terminal_uses_cwd_for_directory_with_cmd_metacharacters(monkeypatch, tmp_path):
     """目录中的 CMD 元字符不能进入命令文本。"""
-    target_dir = os.path.abspath("R&D")
+    target_dir = tmp_path / "R&D"
+    target_dir.mkdir()
+    target_dir = str(target_dir)
     monkeypatch.setattr(shortcut_table_service.os.path, "isfile", lambda _path: False)
+    monkeypatch.setattr(terminal_service, "get_windows_terminal_path", lambda: None)
     monkeypatch.setattr(shortcut_table_service, "_build_codex_command", lambda: ["codex.exe", "--test"])
 
     with patch.object(shortcut_table_service.subprocess, "Popen") as popen:
@@ -86,11 +90,12 @@ def test_terminal_uses_nearest_existing_parent_for_missing_directory(tmp_path):
 def test_script_shortcut_runs_batch_file_in_its_directory(monkeypatch):
     """Script shortcuts must run the selected batch file rather than Claude."""
     script_path = os.path.abspath(os.path.join("R&D", "run.cmd"))
+    monkeypatch.setattr(terminal_service, "get_windows_terminal_path", lambda: None)
     with patch.object(shortcut_table_service.subprocess, "Popen") as popen:
         shortcut_table_service._open_shortcut_path(script_path, "script")
 
     args, kwargs = popen.call_args
-    assert args[0] == ["cmd.exe", "/k", "call", script_path]
+    assert args[0] == ["cmd.exe", "/d", "/c", "call", script_path]
     assert kwargs["cwd"] == os.path.dirname(script_path)
 
 
@@ -123,3 +128,12 @@ def test_shortcut_row_keeps_path_and_created_at_in_separate_columns():
     assert table.item(0, 6).text() == "2026-07-26 10:30"
     table.deleteLater()
     app.processEvents()
+
+
+
+def test_open_shortcut_path_returns_false_when_os_rejects_open(monkeypatch):
+    monkeypatch.setattr(shortcut_table_service.os.path, 'isfile', lambda _path: False)
+    monkeypatch.setattr(shortcut_table_service.os.path, 'isdir', lambda _path: False)
+    monkeypatch.setattr(shortcut_table_service.QDesktopServices, 'openUrl', lambda _url: False)
+
+    assert shortcut_table_service._open_shortcut_path('/tmp/unhandled.path', 'open') is False

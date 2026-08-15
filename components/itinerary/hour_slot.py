@@ -93,6 +93,8 @@ class HourSlotWidget(QFrame):
         row.deleted.connect(self._delete_task_row)
         row.status_toggled.connect(self._toggle_task_status)
         row.drag_started.connect(self._on_task_drag_started)
+        row.launch_requested.connect(self._launch_task)
+        row.shortcut_dropped.connect(self._bind_shortcut_to_task)
         self.task_rows.append(row)
         self.task_layout.addWidget(row)
         self.collapsed = False
@@ -110,6 +112,39 @@ class HourSlotWidget(QFrame):
         self.collapsed = True
         self.task_container.setVisible(False)
         self._update_header()
+
+    def _launch_task(self, row: ItineraryTaskRow):
+        task_data = row.task_data
+        shortcut_id = task_data.get('shortcut_id')
+        if not shortcut_id:
+            return
+        launcher = getattr(self.main_window, 'launch_shortcut_from_itinerary', None)
+        if callable(launcher):
+            launcher(shortcut_id)
+            return
+        parent = self.parent()
+        while parent is not None:
+            launcher = getattr(parent, 'launch_shortcut_from_itinerary', None)
+            if callable(launcher):
+                launcher(shortcut_id)
+                return
+            parent = parent.parent()
+
+    def _bind_shortcut_to_task(self, row: ItineraryTaskRow, shortcut_data: dict):
+        shortcut_id = shortcut_data.get('task_id', '')
+        if not shortcut_id:
+            return
+        row.set_shortcut_binding({
+            'shortcut_id': shortcut_id,
+            'shortcut_title': shortcut_data.get('title', ''),
+            'shortcut_path': shortcut_data.get('shortcut_path', ''),
+            'shortcut_action_type': shortcut_data.get('action_type', 'open'),
+        })
+        self._update_persisted_snapshot(row.task_data)
+        logger.info('Shortcut bound to itinerary task', extra={
+            'trace_id': row.task_data.get('itinerary_id'),
+            'shortcut_id': shortcut_id,
+        })
 
     def _on_task_drag_started(self, task_data: dict, _source_slot):
         self._pending_restore = task_data
@@ -209,6 +244,10 @@ class HourSlotWidget(QFrame):
             logger.warning('行程投放数据无效', extra={'trace_id': 'itinerary-drop'})
             return
         if not task_data:
+            return
+        if task_data.get('task_type') == 'shortcut':
+            QMessageBox.information(self, '提示', '请将快捷入口拖放到已有行程任务上进行绑定')
+            event.acceptProposedAction()
             return
         itinerary_id = task_data.get('itinerary_id')
         if itinerary_id and self.data_manager is not None:

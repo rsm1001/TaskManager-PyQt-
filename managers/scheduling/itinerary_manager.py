@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import List, Optional
 
@@ -129,3 +130,32 @@ class ItineraryManager:
             self.session.commit()
         logger.info("Deleted %d itinerary references for %s task %s", count, task_type, task_id)
         return count
+
+    def clear_shortcut_bindings(self, shortcut_id: str, *, commit: bool = True) -> int:
+        """Remove a shortcut binding from persisted ordinary itinerary tasks.
+
+        Shortcut bindings are stored in the source itinerary task's JSON
+        description, rather than as standalone ``task_type='shortcut'`` rows.
+        Invalid or legacy descriptions are left untouched.
+        """
+        if not shortcut_id:
+            return 0
+
+        cleared = 0
+        for task in self.session.query(ItineraryTask).all():
+            try:
+                payload = json.loads(task.description or '')
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(payload, dict) or payload.get('shortcut_id') != shortcut_id:
+                continue
+
+            for key in ('shortcut_id', 'shortcut_title', 'shortcut_path', 'shortcut_action_type'):
+                payload.pop(key, None)
+            task.description = json.dumps(payload, ensure_ascii=False)
+            cleared += 1
+
+        if cleared and commit:
+            self.session.commit()
+        logger.info("Cleared %d itinerary bindings for shortcut %s", cleared, shortcut_id)
+        return cleared

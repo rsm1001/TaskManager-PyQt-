@@ -89,6 +89,7 @@ class ShortcutOperations:
             action_type=data.get('action_type', 'open')
         )
         self._w.load_shortcuts()
+        self._w.refresh_itinerary_after_task_update()
         self._validate_and_refresh_filter('shortcuts')
         show_task_updated_confirmation('shortcut', self._w)
         self._w.status_bar.showMessage('快捷入口更新成功')
@@ -111,8 +112,11 @@ class ShortcutOperations:
                 continue
             shortcut_id = btn.property('task_id')
             if shortcut_id and self._w.data_manager.delete_shortcut(shortcut_id):
+                self._w.data_manager.delete_itinerary_by_task_ref(shortcut_id, 'shortcut')
+                self._w.data_manager.clear_itinerary_shortcut_bindings(shortcut_id)
                 deleted += 1
         self._w.load_shortcuts()
+        self._w.refresh_itinerary_after_task_deletion()
         self._validate_and_refresh_filter('shortcuts')
         show_task_deleted_confirmation('shortcut', self._w)
         self._w.status_bar.showMessage(f'快捷入口删除成功 ({deleted}/{count})')

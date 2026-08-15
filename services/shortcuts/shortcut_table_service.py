@@ -15,6 +15,12 @@ from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QPushButton, QTableWidgetItem
 
+from services.shortcuts.terminal_service import (
+    AGENT_TERMINAL_GROUP,
+    SCRIPT_TERMINAL_GROUP,
+    launch_terminal_tab,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -170,33 +176,35 @@ def _build_codex_command():
         command.append(_config.CODEX_DANGEROUS_SKIP_PERMISSIONS_FLAG)
     return command
 
-def _launch_terminal(target_dir, command):
-    """在目标目录的新终端中执行命令，目录不参与 CMD 文本解析。"""
+def _launch_terminal(target_dir, command, provider="Claude"):
+    """Open a Claude/Codex tab in the shared agent terminal window."""
     working_dir = _get_existing_terminal_directory(target_dir)
-    logger.info("启动终端 command=%s working_directory=%s", command, working_dir)
+    tab_title = f"{provider} - {os.path.basename(os.path.normpath(working_dir)) or 'project'}"
+    logger.info("Launch terminal tab provider=%s command=%s cwd=%s", provider, command, working_dir)
     try:
-        if os.name == "nt":
-            subprocess.Popen(
-                ["cmd.exe", "/k", *command],
-                cwd=working_dir,
-                creationflags=subprocess.CREATE_NEW_CONSOLE,
-            )
-            return
-        subprocess.Popen(command, cwd=working_dir)
+        return launch_terminal_tab(
+            command,
+            working_dir,
+            AGENT_TERMINAL_GROUP,
+            title=tab_title,
+            popen=subprocess.Popen,
+        )
     except OSError:
-        logger.exception("启动终端失败 command=%s working_directory=%s", command, working_dir)
+        logger.exception("Terminal launch failed command=%s cwd=%s", command, working_dir)
+        return None
 
 
 def _get_existing_terminal_directory(target_dir):
     """Return the nearest existing directory for a terminal working directory."""
-    candidate = os.path.abspath(target_dir) if target_dir else os.getcwd()
+    requested = os.path.abspath(target_dir) if target_dir else os.getcwd()
+    candidate = requested
     while not os.path.isdir(candidate):
         parent = os.path.dirname(candidate)
         if parent == candidate:
             logger.warning("No valid terminal directory found for %s; using the current directory", target_dir)
             return os.getcwd()
         candidate = parent
-    if os.path.abspath(target_dir) != candidate:
+    if requested != candidate:
         logger.warning("Terminal directory does not exist; using parent directory: %s", candidate)
     return candidate
 
@@ -241,7 +249,7 @@ def _show_cli_not_found(display_name, command_name):
     QMessageBox.warning(None, f"{display_name} 未找到", message)
 
 def _open_codex_in_terminal(path):
-    """Open CMD in the shortcut directory and start Codex."""
+    """Open a Codex tab in the shared agent terminal window."""
     if not path:
         return
     command = _build_codex_command()
@@ -249,10 +257,11 @@ def _open_codex_in_terminal(path):
         _show_cli_not_found("Codex", "codex")
         return
     target_dir = _get_terminal_directory(path)
-    _launch_terminal(target_dir, command)
+    _launch_terminal(target_dir, command, provider="Codex")
+
 
 def _open_in_terminal(path):
-    """Open CMD in the shortcut directory and start Claude."""
+    """Open a Claude tab in the shared agent terminal window."""
     if not path:
         return
     command = _build_claude_command()
@@ -260,60 +269,72 @@ def _open_in_terminal(path):
         _show_cli_not_found("Claude", "claude")
         return
     target_dir = _get_terminal_directory(path)
-    _launch_terminal(target_dir, command)
+    _launch_terminal(target_dir, command, provider="Claude")
+
 
 def _run_script(path):
-    """Run a script from its own directory and keep command output visible."""
+    """Run a script in the separate script terminal window."""
     script_path = os.path.abspath(os.path.expanduser(path))
-    working_dir = os.path.dirname(script_path)
+    working_dir = os.path.dirname(script_path) or os.getcwd()
     extension = os.path.splitext(script_path)[1].lower()
+    environment = _get_script_environment()
 
     if os.name == "nt" and extension in (".bat", ".cmd"):
-        subprocess.Popen(
-            ["cmd.exe", "/k", "call", script_path],
-            cwd=working_dir,
-            env=_get_script_environment(),
-            creationflags=subprocess.CREATE_NEW_CONSOLE,
-        )
+        command = ["cmd.exe", "/d", "/c", "call", script_path]
     elif os.name == "nt" and extension == ".ps1":
-        subprocess.Popen(
-            ["powershell.exe", "-NoExit", "-ExecutionPolicy", "Bypass", "-File", script_path],
-            cwd=working_dir,
-            env=_get_script_environment(),
-            creationflags=subprocess.CREATE_NEW_CONSOLE,
-        )
-    elif os.name == "nt":
-        os.startfile(script_path)
+        command = ["powershell.exe", "-NoExit", "-ExecutionPolicy", "Bypass", "-File", script_path]
+    elif os.name == "nt" and extension == ".py":
+        # Use the interpreter running this application, not a file association.
+        command = [sys.executable, script_path]
+    elif os.name == "nt" and extension == ".exe":
+        command = [script_path]
+    elif os.name != "nt":
+        command = [script_path]
     else:
-        subprocess.Popen([script_path], cwd=working_dir)
+        # File associations such as .lnk do not expose a safe command line.
+        # Keep the existing system-open behavior for those entries.
+        try:
+            os.startfile(script_path)
+        except OSError:
+            logger.exception("Script open failed path=%s", script_path)
+            return False
+        return True
+
+    title = f"Script - {os.path.basename(script_path) or 'unnamed'}"
+    try:
+        launch_terminal_tab(
+            command,
+            working_dir,
+            SCRIPT_TERMINAL_GROUP,
+            title=title,
+            env=environment,
+            popen=subprocess.Popen,
+            wrap_in_cmd=False,
+        )
+        return True
+    except OSError:
+        logger.exception("Script terminal launch failed path=%s", script_path)
+        return False
 
 
 def _open_shortcut_path(path, action_type='open'):
-    """打开快捷入口路径（文件直接打开，文件夹打开目录，执行脚本）
-
-    Args:
-        path: 快捷路径
-        action_type: 操作类型 ('open' 或 'script')
-    """
+    """Open a shortcut path and return whether the launch request was accepted."""
     if not path:
-        logger.warning("快捷路径为空")
-        return
+        logger.warning("Shortcut path is empty")
+        return False
 
-    logger.info(f"打开快捷路径: {path}, 操作类型: {action_type}")
+    logger.info("Open shortcut path: %s, action type: %s", path, action_type)
 
     if action_type == 'script':
-        _run_script(path)
-    elif os.path.isfile(path) and path.lower().endswith(('.bat', '.cmd')):
-        _run_script(path)
-    elif os.path.isfile(path):
-        # 文件：直接打开
-        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
-    elif os.path.isdir(path):
-        # 文件夹：打开目录
-        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
-    else:
-        # 路径不存在，也尝试打开
-        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        return bool(_run_script(path))
+    if os.path.isfile(path) and path.lower().endswith(('.bat', '.cmd')):
+        return bool(_run_script(path))
+
+    url = QUrl.fromLocalFile(path)
+    opened = QDesktopServices.openUrl(url)
+    if not opened:
+        logger.warning("The operating system rejected shortcut path: %s", path)
+    return bool(opened)
 
 
 def render_shortcut_row(table, row, shortcut_item, on_open_callback=None):
@@ -353,7 +374,9 @@ def render_shortcut_row(table, row, shortcut_item, on_open_callback=None):
     """)
     # 点击按钮执行对应操作
     def on_click(checked, si=shortcut_item, cb=on_open_callback):
-        _open_shortcut_path(si['shortcut_path'], si.get('action_type', 'open'))
+        if not _open_shortcut_path(si['shortcut_path'], si.get('action_type', 'open')):
+            QMessageBox.warning(table, 'Launch failed', 'The operating system could not open this shortcut.')
+            return
         if cb:
             cb(si)
     btn.clicked.connect(on_click)
@@ -446,6 +469,9 @@ def render_shortcut_row(table, row, shortcut_item, on_open_callback=None):
     # 将 id 存在按钮属性中，方便查找
     btn.setProperty("task_id", shortcut_item['id'])
     btn.setProperty("task_type", task_type)
+    btn.setProperty("shortcut_path", shortcut_path)
+    btn.setProperty("action_type", action_type)
+    btn.setToolTip("\u70b9\u51fb\u542f\u52a8\uff1b\u4ece\u7c7b\u578b\u3001\u6807\u7b7e\u6216\u8def\u5f84\u5217\u62d6\u5165\u884c\u7a0b\u89c4\u5212\u4ee5\u7ed1\u5b9a")
     logger.debug(f"渲染快捷入口行: {title}")
 
 

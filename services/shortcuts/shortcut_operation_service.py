@@ -6,7 +6,9 @@
 
 import logging
 import os
-from typing import Callable, Optional, Dict, Any
+import subprocess
+import sys
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -74,36 +76,22 @@ class ShortcutOperationService:
         }
 
     def _open_shortcut_path(self, path: str, action_type: str = 'open'):
-        """
-        打开快捷路径或执行脚本
-
-        Args:
-            path: 快捷路径
-            action_type: 操作类型 ('open' 或 'script')
-        """
-        import subprocess
-        import sys
-
+        """Launch shortcuts consistently while preserving POSIX shell-script support."""
         if not path:
-            raise ValueError("快捷路径不能为空")
+            raise ValueError('Shortcut path cannot be empty')
 
-        if action_type == 'script' or path.endswith('.bat') or path.endswith('.cmd'):
-            # 执行脚本
-            logger.info(f"执行脚本: {path}")
-            if sys.platform == 'win32':
-                subprocess.Popen(['cmd', '/c', 'start', '', path],
-                               shell=True, cwd=os.path.dirname(path) or None)
-            else:
-                subprocess.Popen(['bash', path], cwd=os.path.dirname(path) or None)
-        else:
-            # 打开文件/文件夹
-            logger.info(f"打开路径: {path}")
-            if sys.platform == 'win32':
-                os.startfile(path)
-            elif sys.platform == 'darwin':
-                subprocess.Popen(['open', path])
-            else:
-                subprocess.Popen(['xdg-open', path])
+        is_script = action_type == 'script' or path.endswith(('.bat', '.cmd'))
+        if sys.platform != 'win32' and is_script:
+            # Keep the established POSIX behavior: scripts do not need an
+            # executable bit or a shebang when launched through Bash.
+            subprocess.Popen(['bash', path], cwd=os.path.dirname(path) or None)
+            return
+
+        # Windows delegates to the table launcher so PowerShell scripts retain
+        # its explicit powershell.exe -ExecutionPolicy Bypass behavior.
+        from services.shortcuts.shortcut_table_service import _open_shortcut_path
+        if _open_shortcut_path(path, action_type) is False:
+            raise RuntimeError('The operating system rejected the shortcut launch request')
 
     def get_history_limit(self) -> int:
         """获取历史记录缓存数量限制"""

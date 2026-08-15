@@ -563,6 +563,9 @@ class DataManager:
     def delete_itinerary_by_task_ref(self, task_id: str, task_type: str) -> int:
         return self.itinerary_manager.delete_by_task_ref(task_id, task_type)
 
+    def clear_itinerary_shortcut_bindings(self, shortcut_id: str) -> int:
+        return self.itinerary_manager.clear_shortcut_bindings(shortcut_id)
+
     # ==================== 全局搜索 ====================
 
     def search_all_tasks(self, keyword: str) -> List[Dict[str, Any]]:
