@@ -1,7 +1,9 @@
 """主窗口的任务、快捷入口与权限设置行为。"""
 
 import logging
+import os
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QInputDialog, QMessageBox, QPushButton
 from PyQt6.QtGui import QCursor
 
@@ -74,6 +76,9 @@ class MainWindowTaskActionsMixin:
     def add_shortcut(self):
         self._task_handler.add_shortcut()
 
+    def add_child_shortcut(self, parent_id=None):
+        self._task_handler.add_child_shortcut(parent_id)
+
     def edit_shortcut(self):
         self._task_handler.edit_shortcut()
 
@@ -81,30 +86,351 @@ class MainWindowTaskActionsMixin:
         self._task_handler.delete_shortcut()
 
     def open_shortcut(self):
-        row = self.shortcuts_table.currentRow()
-        if row < 0:
+        item = self.shortcuts_table.currentItem()
+        if item is None:
             warn_no_task_selected()
             return
-        button = self.shortcuts_table.cellWidget(row, 0)
-        shortcut_id = button.property('task_id') if button else None
+        shortcut_id = item.data(0, self._shortcut_user_role())
         if not shortcut_id:
             return
-        self._shortcut_service().open_shortcut(shortcut_id)
+        shortcut_data = item.data(0, Qt.ItemDataRole.UserRole + 1) or {}
+        is_workspace = (
+            shortcut_data.get('category') == 'workspace'
+            or self._workspace_service().get_workspace(shortcut_id)
+        )
+        if is_workspace:
+            self.launch_agent_workspace(shortcut_id)
+        else:
+            self._shortcut_service().open_shortcut(shortcut_id)
         self.load_shortcuts_history()
         self._update_history_limit_label()
 
+    @staticmethod
+    def _shortcut_user_role():
+        from PyQt6.QtCore import Qt
+        return Qt.ItemDataRole.UserRole
+
     def on_shortcuts_cell_clicked(self, row, column):
-        if column != 0:
+        return None
+
+    def show_shortcut_context_menu(self, position):
+        from PyQt6.QtWidgets import QMenu
+        item = self.shortcuts_table.itemAt(position)
+        if item is None:
             return
-        cell = self.shortcuts_table.cellWidget(row, 0)
-        if not cell:
-            return
-        button = cell if isinstance(cell, QPushButton) else cell.findChild(QPushButton)
-        if button and button.rect().contains(button.mapFromGlobal(QCursor.pos())):
-            button.click()
+        self.shortcuts_table.setCurrentItem(item)
+        data = item.data(0, Qt.ItemDataRole.UserRole + 1) or {}
+        shortcut_id = data.get('id') or item.data(0, Qt.ItemDataRole.UserRole)
+        workspace = self._workspace_service().get_workspace(shortcut_id) if shortcut_id else None
+        menu = QMenu(self)
+        add_child_action = None
+        configure_repo_action = None
+        new_workspace_action = None
+        active_limit_action = None
+        pool_size_action = None
+        launch_workspace_action = None
+        force_stop_workspace_action = None
+        force_delete_workspace_action = None
+        status_workspace_action = None
+        recycle_workspace_action = None
+        merge_workspace_action = None
+        open_workspace_directory_action = None
+        merge_provider_action = None
+        merge_instruction_action = None
+        reset_merge_instruction_action = None
+        if workspace:
+            launch_workspace_action = menu.addAction('启动本地项目')
+            open_workspace_directory_action = menu.addAction('打开工作目录')
+            if workspace.get('runtime_state') == 'running':
+                force_stop_workspace_action = menu.addAction('强制关闭本地项目')
+            force_delete_workspace_action = menu.addAction('\u5f3a\u5236\u5220\u9664\u667a\u80fd\u4f53\u5de5\u4f5c\u533a')
+            status_workspace_action = menu.addAction('查看 Git 工作区状态')
+            if workspace.get('state') == 'active':
+                provider_name = 'Codex' if self._workspace_service().get_merge_provider() == 'codex' else 'Claude Code'
+                merge_workspace_action = menu.addAction('交给 {} 合并分支'.format(provider_name))
+                recycle_workspace_action = menu.addAction('确认已合并并归还工作区')
+            menu.addSeparator()
+        elif not data.get('parent_id'):
+            add_child_action = menu.addAction('新增普通子快捷入口')
+            new_workspace_action = menu.addAction('快速新建智能体子类')
+            configure_repo_action = menu.addAction('配置仓库与启动脚本')
+            active_limit_action = menu.addAction('设置同时开发子类上限')
+            pool_size_action = menu.addAction('设置空闲工作区保留数量')
+            merge_provider_action = menu.addAction('设置合并智能体（Codex / Claude Code）')
+            merge_instruction_action = menu.addAction('编辑合并指令')
+            reset_merge_instruction_action = menu.addAction('恢复默认合并指令')
+            menu.addSeparator()
+        else:
+            add_child_action = menu.addAction('新增普通子快捷入口')
+            menu.addSeparator()
+        edit_action = menu.addAction('Edit')
+        delete_action = menu.addAction('Delete')
+        chosen = menu.exec(self.shortcuts_table.viewport().mapToGlobal(position))
+        if chosen is configure_repo_action:
+            self.configure_shortcut_repository(shortcut_id)
+        elif chosen is pool_size_action:
+            self.set_agent_workspace_pool_size()
+        elif chosen is active_limit_action:
+            self.set_agent_workspace_active_limit()
+        elif chosen is new_workspace_action:
+            self.create_agent_workspace(shortcut_id)
+        elif chosen is launch_workspace_action:
+            self.launch_agent_workspace(shortcut_id)
+        elif chosen is open_workspace_directory_action:
+            self.open_agent_workspace_directory(shortcut_id)
+        elif chosen is force_stop_workspace_action:
+            self.force_stop_agent_workspace_project(shortcut_id)
+        elif chosen is force_delete_workspace_action:
+            self.force_delete_agent_workspace(shortcut_id)
+        elif chosen is status_workspace_action:
+            self.show_agent_workspace_status(shortcut_id)
+        elif chosen is merge_workspace_action:
+            self.launch_agent_workspace_merge(shortcut_id)
+        elif chosen is recycle_workspace_action:
+            self.recycle_agent_workspace(shortcut_id)
+        elif chosen is merge_provider_action:
+            self.set_agent_workspace_merge_provider()
+        elif chosen is merge_instruction_action:
+            self.edit_agent_workspace_merge_instruction()
+        elif chosen is reset_merge_instruction_action:
+            self.reset_agent_workspace_merge_instruction()
+        elif chosen is add_child_action:
+            self.add_child_shortcut()
+        elif chosen is edit_action:
+            self.edit_shortcut()
+        elif chosen is delete_action:
+            self.delete_shortcut()
 
     def _shortcut_service(self):
         return self.data_manager._service_factory.get_shortcut_operation_service()
+
+    def _workspace_service(self):
+        return self.data_manager._service_factory.get_git_worktree_service()
+
+    def configure_shortcut_repository(self, parent_shortcut_id):
+        """Configure a root shortcut as an agent-workspace repository."""
+        service = self._workspace_service()
+        profile = service.get_repository_profile(parent_shortcut_id) or {}
+        parent = self.data_manager.shortcut_manager.get_by_id(parent_shortcut_id) or {}
+        root = parent.get('shortcut_path', '')
+        default_script = os.path.basename(root) if os.path.isfile(root) else ''
+        if not default_script:
+            default_script = profile.get('launch_script', '')
+        if not default_script:
+            if root:
+                for candidate in ('launch.bat', 'launch.py', 'launch.sh'):
+                    if os.path.isfile(os.path.join(root, candidate)):
+                        default_script = candidate
+                        break
+        script, accepted = QInputDialog.getText(
+            self, '配置智能体仓库',
+            '项目启动脚本（相对仓库根目录，例如 launch.bat）：', text=default_script,
+        )
+        if not accepted:
+            return False
+        base_ref, accepted = QInputDialog.getText(
+            self, '配置智能体仓库',
+            '基线分支（留空自动使用远程默认分支）：',
+            text=profile.get('base_ref', ''),
+        )
+        if not accepted:
+            return False
+        try:
+            service.configure_repository(parent_shortcut_id, script, base_ref)
+        except Exception as error:
+            QMessageBox.warning(self, '仓库配置失败', str(error))
+            return False
+        self.status_bar.showMessage('智能体仓库配置已保存', 3000)
+        return True
+
+    def create_agent_workspace(self, parent_shortcut_id):
+        """Create a ready-to-run child worktree without asking for any input."""
+        service = self._workspace_service()
+        try:
+            workspace = service.create_or_reuse_workspace(parent_shortcut_id)
+        except Exception as error:
+            QMessageBox.warning(self, '创建工作区失败', str(error))
+            return
+        self.load_shortcuts()
+        action = '已复用空闲工作区' if workspace.get('workspace_reused') else '已创建新工作区'
+        self.status_bar.showMessage(action, 5000)
+
+    def set_agent_workspace_pool_size(self):
+        service = self._workspace_service()
+        size, accepted = QInputDialog.getInt(
+            self, '空闲工作区保留数量',
+            '已合并工作区最多保留多少个可复用本地目录：',
+            value=service.get_warm_pool_size(), min=0, max=20,
+        )
+        if accepted:
+            service.set_warm_pool_size(size)
+            self.status_bar.showMessage('空闲工作区保留数量已设为 {}'.format(size), 3000)
+
+    def set_agent_workspace_active_limit(self):
+        service = self._workspace_service()
+        size, accepted = QInputDialog.getInt(
+            self, '同时开发子类上限',
+            '同时处于开发状态的智能体子类最多数量（0 表示不限制）：',
+            value=service.get_active_workspace_limit(), min=0, max=100,
+        )
+        if accepted:
+            service.set_active_workspace_limit(size)
+            label = '不限制' if size == 0 else str(size)
+            self.status_bar.showMessage('同时开发子类上限已设为 {}'.format(label), 3000)
+
+    def launch_agent_workspace(self, shortcut_id):
+        try:
+            self._workspace_service().launch_workspace_project(shortcut_id)
+        except Exception as error:
+            QMessageBox.warning(self, '启动项目失败', str(error))
+
+    def open_agent_workspace_directory(self, shortcut_id):
+        """Keep folder browsing available without confusing it with project launch."""
+        workspace = self._workspace_service().get_workspace(shortcut_id)
+        path = workspace.get('worktree_path', '') if workspace else ''
+        if not path or not os.path.isdir(path):
+            QMessageBox.warning(self, '工作目录不可用', '该智能体工作区目录不存在。')
+            return
+        try:
+            os.startfile(path)
+        except OSError as error:
+            QMessageBox.warning(self, '打开工作目录失败', str(error))
+
+    def launch_agent_workspace_merge(self, shortcut_id):
+        """Ask the configured local CLI to merge; never merge directly in the UI."""
+        try:
+            result = self._workspace_service().launch_merge_agent(shortcut_id)
+        except Exception as error:
+            QMessageBox.warning(self, '启动合并智能体失败', str(error))
+            return
+        provider = 'Codex' if result['provider'] == 'codex' else 'Claude Code'
+        self.status_bar.showMessage(
+            '{} 已在父仓库中启动合并。完成后请使用“确认已合并并归还工作区”。'.format(provider),
+            6000,
+        )
+
+    def set_agent_workspace_merge_provider(self):
+        service = self._workspace_service()
+        current = service.get_merge_provider()
+        options = ['Codex', 'Claude Code']
+        selected, accepted = QInputDialog.getItem(
+            self, '设置合并智能体', '将本地哪个智能体用于合并分支：',
+            options, 0 if current == 'codex' else 1, False,
+        )
+        if not accepted:
+            return
+        try:
+            service.set_merge_provider('codex' if selected == 'Codex' else 'claude')
+        except Exception as error:
+            QMessageBox.warning(self, '保存合并智能体失败', str(error))
+            return
+        self.status_bar.showMessage('合并智能体已设为 {}'.format(selected), 3000)
+
+    def edit_agent_workspace_merge_instruction(self):
+        service = self._workspace_service()
+        instruction, accepted = QInputDialog.getMultiLineText(
+            self, '编辑合并指令',
+            '可用占位符：{branch}、{base_branch}、{repository_root}、{worktree_path}',
+            service.get_merge_instruction(),
+        )
+        if not accepted:
+            return
+        try:
+            service.set_merge_instruction(instruction)
+        except Exception as error:
+            QMessageBox.warning(self, '保存合并指令失败', str(error))
+            return
+        self.status_bar.showMessage('合并指令已保存', 3000)
+
+    def reset_agent_workspace_merge_instruction(self):
+        answer = QMessageBox.question(
+            self, '恢复默认合并指令', '确定恢复默认合并指令吗？',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._workspace_service().reset_merge_instruction()
+        self.status_bar.showMessage('已恢复默认合并指令', 3000)
+
+    def mark_agent_workspace_project_stopped(self, shortcut_id):
+        try:
+            self._workspace_service().mark_workspace_project_stopped(shortcut_id)
+        except Exception as error:
+            QMessageBox.warning(self, '无法更新运行状态', str(error))
+            return
+        self.status_bar.showMessage('已标记本地项目停止，可安全归还或删除工作区', 4000)
+
+    def force_stop_agent_workspace_project(self, shortcut_id):
+        answer = QMessageBox.question(
+            self, '强制关闭本地项目',
+            '这会结束该工作区启动脚本及其子进程，未保存的数据可能丢失。继续吗？',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            result = self._workspace_service().force_stop_workspace_project(shortcut_id)
+        except Exception as error:
+            QMessageBox.warning(self, '无法强制关闭本地项目', str(error))
+            return
+        count = result.get('terminated_processes', 0)
+        self.status_bar.showMessage('已强制关闭本地项目（结束 {} 个进程）'.format(count), 4000)
+
+    def force_delete_agent_workspace(self, shortcut_id):
+        answer = QMessageBox.question(
+            self,
+            '\u5f3a\u5236\u5220\u9664\u667a\u80fd\u4f53\u5de5\u4f5c\u533a',
+            '\u8fd9\u5c06\u6c38\u4e45\u5220\u9664\u5de5\u4f5c\u533a\u76ee\u5f55\u548c\u529f\u80fd\u5206\u652f\uff0c\u5305\u62ec '
+            '\u672a\u5408\u5e76\u7684\u63d0\u4ea4\u548c\u672a\u63d0\u4ea4\u6587\u4ef6\u90fd\u4f1a\u4e22\u5931\uff0c\u4e14\u4e0d\u53ef\u64a4\u9500\u3002\u7ee7\u7eed\u5417\uff1f',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            result = self._workspace_service().force_remove_workspace(shortcut_id)
+        except Exception as error:
+            QMessageBox.warning(self, '\u5f3a\u5236\u5220\u9664\u5931\u8d25', str(error))
+            return
+        self.load_shortcuts()
+        if result.get('removed'):
+            self.status_bar.showMessage('\u667a\u80fd\u4f53\u5de5\u4f5c\u533a\u5df2\u5f3a\u5236\u5220\u9664', 4000)
+
+    def show_agent_workspace_status(self, shortcut_id):
+        try:
+            status = self._workspace_service().workspace_status(shortcut_id)
+        except Exception as error:
+            QMessageBox.warning(self, '无法读取工作区状态', str(error))
+            return
+        message = (
+            '功能：{feature}\n分支：{branch}\n状态：{state}\n未提交改动：{dirty}\n路径：{path}'
+        ).format(
+            feature=status.get('feature_name') or '空闲工作区',
+            branch=status.get('branch_name') or '(detached)',
+            state=status.get('state', ''),
+            dirty='是' if status.get('dirty') else '否',
+            path=status.get('worktree_path', ''),
+        )
+        message += '\n本地项目：{}'.format(
+            '运行中' if status.get('runtime_state') == 'running' else '已停止'
+        )
+        QMessageBox.information(self, 'Git 工作区状态', message)
+
+    def recycle_agent_workspace(self, shortcut_id):
+        answer = QMessageBox.question(
+            self, '归还智能体工作区',
+            '将验证分支已合并且工作区干净，然后归还到空闲池。继续吗？',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            result = self._workspace_service().recycle_merged_workspace(shortcut_id)
+        except Exception as error:
+            QMessageBox.warning(self, '无法归还工作区', str(error))
+            return
+        self.load_shortcuts()
+        removed = result.get('removed_idle_workspaces', 0)
+        self.status_bar.showMessage('工作区已归还；已清理 {} 个超额空闲工作区'.format(removed), 5000)
 
     def set_history_limit(self):
         current_limit = self._shortcut_service().get_history_limit()

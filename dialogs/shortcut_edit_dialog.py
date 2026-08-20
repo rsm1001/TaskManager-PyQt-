@@ -103,13 +103,16 @@ class ShortcutEditDialog(QDialog):
 
     def __init__(self, parent=None, data_manager=None,
                  initial_title: str = "", initial_path: str = "", initial_tags: str = "",
-                 initial_action_type: str = "open"):
+                 initial_action_type: str = "open", initial_parent_id=None,
+                 excluded_parent_ids=None):
         super().__init__(parent)
         self.data_manager = data_manager
         self.initial_title = initial_title
         self.initial_path = initial_path
         self.initial_tags = initial_tags
         self.initial_action_type = initial_action_type
+        self.initial_parent_id = initial_parent_id
+        self.excluded_parent_ids = set(excluded_parent_ids or [])
         self.current_path = initial_path
         self.current_action_type = initial_action_type
         self.init_ui()
@@ -132,6 +135,27 @@ class ShortcutEditDialog(QDialog):
         action_type_layout.addWidget(self.action_type_combo)
         action_type_layout.addStretch()
         layout.addLayout(action_type_layout)
+
+        # Parent selector: empty means a root shortcut; the first release is two-level.
+        parent_layout = QHBoxLayout()
+        parent_layout.addWidget(QLabel("Parent shortcut:"))
+        self.parent_combo = QComboBox()
+        self.parent_combo.addItem("None (root)", None)
+        if self.data_manager is not None:
+            try:
+                roots = [
+                    item for item in self.data_manager.get_all_shortcuts()
+                    if not item.get("parent_id") and item.get("id") not in self.excluded_parent_ids
+                ]
+                for item in roots:
+                    self.parent_combo.addItem(item.get("title", ""), item.get("id"))
+            except Exception:
+                pass
+        current_index = self.parent_combo.findData(self.initial_parent_id)
+        self.parent_combo.setCurrentIndex(current_index if current_index >= 0 else 0)
+        parent_layout.addWidget(self.parent_combo)
+        parent_layout.addStretch()
+        layout.addLayout(parent_layout)
 
         # 名称输入区
         name_layout = QHBoxLayout()
@@ -337,5 +361,6 @@ class ShortcutEditDialog(QDialog):
             "title": self.name_edit.text().strip(),
             "shortcut_path": self.drop_label.file_path or self.path_edit.text().strip(),
             "tags": self.tag_selector.get_selected_tags(),
-            "action_type": self.current_action_type
+            "action_type": self.current_action_type,
+            "parent_id": self.parent_combo.currentData(),
         }

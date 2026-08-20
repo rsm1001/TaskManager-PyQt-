@@ -18,6 +18,59 @@ class JsonExportImportHandler:
         self.session = session
         self.shortcut_manager = shortcut_manager
 
+    def _snapshot_shortcut_database(self):
+        """Snapshot rows so a cross-connection import can be restored on failure."""
+        if not self.shortcut_manager:
+            return None
+        conn = self.shortcut_manager._conn
+        tables = [
+            row[0] for row in conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchall()
+        ]
+        snapshot = {}
+        for table in tables:
+            columns = [
+                row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+            ]
+            rows = conn.execute(f"SELECT * FROM {table}").fetchall()
+            snapshot[table] = (columns, rows)
+        return snapshot
+
+    def _restore_shortcut_database(self, snapshot):
+        """Restore a snapshot after an import failed across DB connections."""
+        if not snapshot or not self.shortcut_manager:
+            return
+        conn = self.shortcut_manager._conn
+        self.session.rollback()
+        conn.rollback()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        try:
+            for table in snapshot:
+                conn.execute(f"DELETE FROM {table}")
+            for table, (columns, rows) in snapshot.items():
+                if not rows:
+                    continue
+                placeholders = ",".join("?" for _ in columns)
+                column_sql = ",".join(columns)
+                conn.executemany(
+                    f"INSERT INTO {table} ({column_sql}) VALUES ({placeholders})",
+                    rows,
+                )
+            conn.commit()
+        finally:
+            conn.execute("PRAGMA foreign_keys = ON")
+        self.session.expire_all()
+
+    @staticmethod
+    def _validate_import_shape(data):
+        """Validate conversions that can otherwise fail after destructive work."""
+        for period in data.get("time_periods", []):
+            int(period.get("order_index", 0) or 0)
+        for shortcut in data.get("shortcuts", []):
+            int(shortcut.get("order_index", 0) or 0)
+
     def export_to_json(self, filepath: str = "tasks_export.json") -> bool:
         """导出数据到JSON文件"""
         try:
@@ -102,7 +155,7 @@ class JsonExportImportHandler:
             # 导出快捷入口
             if self.shortcut_manager:
                 for row in self.shortcut_manager._conn.execute(
-                    "SELECT id, title, shortcut_path, action_type, category, tags, created_at, updated_at FROM shortcut_entries"
+                    "SELECT id, title, shortcut_path, action_type, category, tags, parent_id, order_index, created_at, updated_at FROM shortcut_entries"
                 ).fetchall():
                     data["shortcuts"].append({
                         "id": row[0],
@@ -111,8 +164,10 @@ class JsonExportImportHandler:
                         "action_type": row[3] or "open",
                         "category": row[4] or "todo",
                         "tags": row[5] or "",
-                        "created_at": row[6] or "",
-                        "updated_at": row[7] or "",
+                        "parent_id": row[6],
+                        "order_index": row[7] or 0,
+                        "created_at": row[8] or "",
+                        "updated_at": row[9] or "",
                     })
 
                 # 导出历史记录
@@ -150,14 +205,27 @@ class JsonExportImportHandler:
                 data = json.load(f)
 
             # 清空现有数据
+            self._validate_import_shape(data)
+            snapshot = self._snapshot_shortcut_database()
+
             self.session.query(DailyTask).delete()
             self.session.query(TodoTask).delete()
             self.session.query(EntertainmentTask).delete()
             self.session.query(TimePeriod).delete()
             self.session.query(Config).delete()
 
-            # 清空快捷入口和历史记录（使用原生连接）
+            # Release the ORM write lock only when a second sqlite connection
+            # is going to be used for shortcut data. Without that connection,
+            # the ORM transaction remains rollback-safe until the final commit.
             if self.shortcut_manager:
+                self.session.commit()
+
+            # JSON import is a full replacement. Git workspace metadata is not
+            # part of the portable shortcut export, so retaining it could bind
+            # a reused shortcut ID to an unrelated imported repository path.
+            if self.shortcut_manager:
+                self.shortcut_manager._conn.execute("DELETE FROM shortcut_agent_workspaces")
+                self.shortcut_manager._conn.execute("DELETE FROM shortcut_repository_profiles")
                 self.shortcut_manager._conn.execute("DELETE FROM shortcut_entries")
                 self.shortcut_manager._conn.execute("DELETE FROM shortcut_history")
                 self.shortcut_manager._conn.commit()
@@ -267,23 +335,48 @@ class JsonExportImportHandler:
 
             # 导入快捷入口
             if "shortcuts" in data and self.shortcut_manager:
-                for sc_data in data["shortcuts"]:
+                shortcut_rows = list(data.get("shortcuts", []))
+                known_ids = {item.get("id") for item in shortcut_rows if item.get("id")}
+                root_rows = [
+                    item for item in shortcut_rows
+                    if item.get("parent_id") not in known_ids
+                ]
+                child_rows = [
+                    item for item in shortcut_rows
+                    if item.get("parent_id") in known_ids
+                ]
+                ordered_rows = root_rows + child_rows
+                assigned_ids = {}
+                root_ids = set()
+                for sc_data in ordered_rows:
+                    original_id = sc_data.get("id") or str(uuid.uuid4())
+                    entry_id = original_id
+                    if entry_id in assigned_ids.values():
+                        entry_id = str(uuid.uuid4())
+                    raw_parent_id = sc_data.get("parent_id")
+                    parent_id = assigned_ids.get(raw_parent_id)
+                    if parent_id not in root_ids:
+                        parent_id = None
                     self.shortcut_manager._conn.execute(
-                        "INSERT INTO shortcut_entries (id, title, shortcut_path, action_type, category, tags, created_at, updated_at) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO shortcut_entries (id, title, shortcut_path, action_type, category, tags, parent_id, order_index, created_at, updated_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
-                            sc_data.get("id", str(uuid.uuid4())),
+                            entry_id,
                             sc_data.get("title", ""),
                             sc_data.get("shortcut_path", ""),
                             sc_data.get("action_type", "open"),
                             sc_data.get("category", "todo"),
                             sc_data.get("tags", ""),
+                            parent_id,
+                            sc_data.get("order_index", 0) or 0,
                             sc_data.get("created_at", datetime.now().isoformat()),
                             sc_data.get("updated_at", datetime.now().isoformat()),
-                        )
+                        ),
                     )
+                    assigned_ids[original_id] = entry_id
+                    if parent_id is None:
+                        root_ids.add(entry_id)
 
-                # 导入历史记录
                 for hist_data in data.get("history", []):
                     self.shortcut_manager._conn.execute(
                         "INSERT INTO shortcut_history (id, shortcut_id, shortcut_title, shortcut_path, action_type, opened_at, is_pinned) "
@@ -315,6 +408,10 @@ class JsonExportImportHandler:
             logger.error(f"JSON格式错误: {str(e)}", exc_info=True)
             return False
         except Exception as e:
-            logger.error(f"导入JSON失败: {str(e)}", exc_info=True)
+            logger.error(f"JSON import failed: {str(e)}", exc_info=True)
             self.session.rollback()
+            try:
+                self._restore_shortcut_database(locals().get("snapshot"))
+            except Exception:
+                logger.error("Failed to restore the pre-import database snapshot", exc_info=True)
             return False

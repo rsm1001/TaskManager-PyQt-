@@ -39,8 +39,8 @@ class _PaddedButtonCell(QWidget):
     the actual button while using the container to provide the visual gap.
     """
 
-    def __init__(self, button):
-        super().__init__()
+    def __init__(self, button, parent=None):
+        super().__init__(parent)
         self.button = button
         layout = QHBoxLayout(self)
         layout.setContentsMargins(
@@ -175,6 +175,19 @@ def _build_codex_command():
     if _is_codex_skip_permissions_enabled():
         command.append(_config.CODEX_DANGEROUS_SKIP_PERMISSIONS_FLAG)
     return command
+
+
+def build_agent_command(provider):
+    """Return the configured local CLI command for a supported agent provider.
+
+    This is intentionally UI-free so worktree actions can launch an agent with
+    a task prompt while preserving the application's existing permission flags.
+    """
+    if provider == "codex":
+        return _build_codex_command()
+    if provider == "claude":
+        return _build_claude_command()
+    raise ValueError("Unsupported agent provider: {}".format(provider))
 
 def _launch_terminal(target_dir, command, provider="Claude"):
     """Open a Claude/Codex tab in the shared agent terminal window."""
@@ -663,3 +676,107 @@ def render_history_row(table, row, history_item, on_open_callback, on_pin_callba
     # 将 id 存在按钮属性中，方便查找
     btn.setProperty("history_id", history_item['id'])
     logger.debug(f"渲染历史记录行: {title}")
+
+
+
+def render_shortcut_tree_item(
+    tree, item, shortcut_item, on_open_callback=None,
+    on_workspace_launch_callback=None,
+):
+    """Render one shortcut entry into a QTreeWidgetItem."""
+    from datetime import datetime
+    from PyQt6.QtWidgets import QPushButton
+
+    title = shortcut_item.get("title", "")
+    shortcut_path = shortcut_item.get("shortcut_path", "") or ""
+    action_type = shortcut_item.get("action_type", "open")
+    tags = shortcut_item.get("tags", "") or ""
+
+    item.setText(3, "File" if os.path.isfile(shortcut_path)
+                 else "Folder" if os.path.isdir(shortcut_path) else "Unknown")
+    item.setText(4, tags if tags else "-")
+    item.setText(5, shortcut_path if shortcut_path else "-")
+    item.setToolTip(5, shortcut_path)
+    raw_date = shortcut_item.get("created_at", "-")
+    date_display = raw_date
+    if raw_date and raw_date != "-":
+        try:
+            date_display = datetime.fromisoformat(raw_date).strftime("%Y-%m-%d %H:%M")
+        except (TypeError, ValueError):
+            pass
+    item.setText(6, date_display or "-")
+    item.setData(0, Qt.ItemDataRole.UserRole, shortcut_item.get("id"))
+    item.setData(0, Qt.ItemDataRole.UserRole + 1, dict(shortcut_item))
+
+    def make_button(text, callback, tooltip=""):
+        button = QPushButton(text)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        if tooltip:
+            button.setToolTip(tooltip)
+        button.clicked.connect(callback)
+        return button
+
+    def on_open(checked=False, data=shortcut_item):
+        tree.setCurrentItem(item)
+        item.setSelected(True)
+        if data.get("category") == "workspace":
+            # A worktree shortcut stores its directory as ``shortcut_path``.
+            # Its visible name must run the inherited project launcher instead
+            # of asking the OS to open that directory.
+            if not on_workspace_launch_callback:
+                QMessageBox.warning(tree, "Launch failed", "The workspace launcher is unavailable.")
+                return
+            if on_workspace_launch_callback(data) is False:
+                return
+        else:
+            if not _open_shortcut_path(data.get("shortcut_path", ""), data.get("action_type", "open")):
+                QMessageBox.warning(tree, "Launch failed", "The operating system could not open this shortcut.")
+                return
+        if on_open_callback:
+            on_open_callback(data)
+
+    name_button = make_button(title, on_open, "Click to launch shortcut")
+    name_button.setProperty("task_id", shortcut_item.get("id"))
+    name_button.setProperty("task_type", shortcut_item.get("task_type", "todo"))
+    name_button.setProperty("shortcut_path", shortcut_path)
+    name_button.setProperty("action_type", action_type)
+    name_button.setStyleSheet(
+        "QPushButton { background-color: #e3f2fd; border: 1px solid #2196F3; "
+        "border-radius: 4px; padding: 4px 12px; color: #1976D2; "
+        "font-size: 13px; text-align: left; } "
+        "QPushButton:hover { background-color: #bbdefb; } "
+        "QPushButton:pressed { background-color: #90caf9; }"
+    )
+    _set_tree_button_cell(tree, item, 0, name_button)
+
+    claude_button = make_button(
+        ">_", lambda checked=False, p=shortcut_path: _open_in_terminal(p),
+        "Launch Claude in the shortcut directory",
+    )
+    claude_button.setStyleSheet(
+        "QPushButton { background-color: #f3e5f5; border: 1px solid #9c27b0; "
+        "border-radius: 4px; padding: 4px 8px; color: #7b1fa2; "
+        "font-size: 13px; font-weight: bold; } "
+        "QPushButton:hover { background-color: #e1bee7; } "
+        "QPushButton:pressed { background-color: #ce93d8; }"
+    )
+    _set_tree_button_cell(tree, item, 1, claude_button)
+
+    codex_button = make_button(
+        ">_", lambda checked=False, p=shortcut_path: _open_codex_in_terminal(p),
+        "Launch Codex in the shortcut directory",
+    )
+    codex_button.setStyleSheet(
+        "QPushButton { background-color: #e8f5e9; border: 1px solid #2e7d32; "
+        "border-radius: 4px; padding: 4px 8px; color: #1b5e20; "
+        "font-size: 13px; font-weight: bold; } "
+        "QPushButton:hover { background-color: #c8e6c9; } "
+        "QPushButton:pressed { background-color: #a5d6a7; }"
+    )
+    _set_tree_button_cell(tree, item, 2, codex_button)
+
+
+def _set_tree_button_cell(tree, item, column, button):
+    """Set a padded button in a tree item cell."""
+    cell = _PaddedButtonCell(button, tree)
+    tree.setItemWidget(item, column, cell)

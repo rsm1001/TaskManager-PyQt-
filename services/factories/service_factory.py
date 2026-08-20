@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from services.domain.task_limit_service import TaskLimitService
     from services.pomodoro.pomodoro_service import PomodoroService
     from services.shortcuts.shortcut_operation_service import ShortcutOperationService
+    from services.shortcuts.git_worktree_service import GitWorktreeService
     from services.domain.tag_cleanup_service import TagCleanupService
     from services.search.search_coordinator import SearchCoordinator
 
@@ -81,6 +82,15 @@ class ServiceFactory:
             self._services["shortcut_operation"] = ShortcutOperationService(self._dm)
             logger.info("ShortcutOperationService 已创建")
         return cast("ShortcutOperationService", self._services["shortcut_operation"])
+
+    def get_git_worktree_service(self) -> "GitWorktreeService":
+        """Return the Git worktree lifecycle service for agent shortcut children."""
+        if "git_worktree" not in self._services:
+            from services.shortcuts.git_worktree_service import GitWorktreeService
+
+            self._services["git_worktree"] = GitWorktreeService(self._dm)
+            logger.info("GitWorktreeService created")
+        return cast("GitWorktreeService", self._services["git_worktree"])
 
     def get_tag_cleanup_service(self) -> "TagCleanupService":
         """获取标签清理服务（单例）"""

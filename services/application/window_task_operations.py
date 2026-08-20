@@ -262,6 +262,10 @@ class TaskOperationHandler:
         """添加快捷入口"""
         self._shortcut_ops.add_shortcut()
 
+    def add_child_shortcut(self, parent_id=None):
+        """Add a child shortcut under the selected root."""
+        self._shortcut_ops.add_child_shortcut(parent_id)
+
     def edit_shortcut(self):
         """编辑选中的快捷入口"""
         self._shortcut_ops.edit_shortcut()

@@ -132,23 +132,86 @@ class TrashRestorationService:
         return True
 
     def _restore_shortcut(self, trash_id: str, data: Dict[str, Any]) -> bool:
-        """恢复快捷入口"""
+        """Restore a shortcut or an entire root/child shortcut bundle."""
         now = datetime.now().isoformat()
-        self.shortcut_manager._conn.execute(
-            "INSERT INTO shortcut_entries (id, title, shortcut_path, category, tags, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                data.get('id', str(uuid.uuid4())),
-                data.get('title', ''),
-                data.get('shortcut_path', ''),
-                data.get('category', 'todo'),
-                data.get('tags', ''),
-                data.get('created_at', now),
-                now
+        entries = [dict(data)]
+        children = data.get('_children', [])
+        if isinstance(children, list):
+            entries.extend(dict(item) for item in children)
+        requested_ids = {item.get('id') for item in entries if item.get('id')}
+        existing_ids = {
+            row[0] for row in self.shortcut_manager._conn.execute(
+                "SELECT id FROM shortcut_entries"
+            ).fetchall()
+        }
+        id_map = {}
+        for item in entries:
+            original_id = item.get('id') or str(uuid.uuid4())
+            item['_restore_original_id'] = original_id
+            id_map[original_id] = original_id if original_id not in existing_ids else str(uuid.uuid4())
+
+        root_original_id = entries[0].get('_restore_original_id')
+        root_id = id_map.get(root_original_id)
+        for item in entries:
+            original_parent = item.get('parent_id')
+            if len(entries) == 1 and original_parent:
+                # An individually deleted child keeps its original parent when
+                # that root still exists. If the root was deleted meanwhile,
+                # restore the child as a root rather than creating a dangling FK.
+                parent_row = self.shortcut_manager._conn.execute(
+                    "SELECT parent_id FROM shortcut_entries WHERE id = ?",
+                    (original_parent,),
+                ).fetchone()
+                parent_id = (
+                    original_parent
+                    if parent_row is not None and parent_row[0] is None
+                    else None
+                )
+            else:
+                parent_id = id_map.get(original_parent) if original_parent in requested_ids else None
+                # Children are allowed only below the restored root.
+                if item is entries[0]:
+                    parent_id = None
+            self.shortcut_manager._conn.execute(
+                "INSERT INTO shortcut_entries "
+                "(id, title, shortcut_path, action_type, category, tags, parent_id, order_index, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    id_map[item.get('_restore_original_id')],
+                    item.get('title', ''),
+                    item.get('shortcut_path', ''),
+                    item.get('action_type', 'open'),
+                    item.get('category', 'todo'),
+                    item.get('tags', ''),
+                    parent_id,
+                    item.get('order_index', 0) or 0,
+                    item.get('created_at', now),
+                    item.get('updated_at', now),
+                ),
             )
-        )
+        profile = data.get('_repository_profile')
+        if isinstance(profile, dict) and root_id:
+            self.shortcut_manager._conn.execute(
+                """INSERT INTO shortcut_repository_profiles
+                   (parent_shortcut_id, repository_root, remote_name, base_ref, launch_script, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(parent_shortcut_id) DO UPDATE SET
+                     repository_root=excluded.repository_root,
+                     remote_name=excluded.remote_name,
+                     base_ref=excluded.base_ref,
+                     launch_script=excluded.launch_script,
+                     updated_at=excluded.updated_at""",
+                (
+                    root_id,
+                    profile.get('repository_root', data.get('shortcut_path', '')),
+                    profile.get('remote_name', 'origin'),
+                    profile.get('base_ref', ''),
+                    profile.get('launch_script', ''),
+                    profile.get('updated_at', now) or now,
+                ),
+            )
         self.shortcut_manager._conn.commit()
-        logger.debug(f"快捷入口已恢复: id={data.get('id')}")
+        logger.debug("Shortcut bundle restored: id=%s", root_id)
         return True
 
     def purge_task(self, trash_id: str) -> None:

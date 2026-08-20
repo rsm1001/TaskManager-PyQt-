@@ -98,18 +98,30 @@ class SearchCoordinator:
             return False
 
         # 重新加载表格确保数据最新
-        reload_func = getattr(self._window, f'load_{task_type}_tasks', None)
+        reload_name = 'load_shortcuts' if task_type == 'shortcuts' else f'load_{task_type}_tasks'
+        reload_func = getattr(self._window, reload_name, None)
         if reload_func:
             reload_func()
 
         # 查找并选中对应行
+        if task_type == 'shortcuts' and hasattr(table, 'find_item_by_id'):
+            item = table.find_item_by_id(task_id)
+            if item is not None:
+                parent = item.parent()
+                if parent is not None:
+                    parent.setExpanded(True)
+                table.setCurrentItem(item)
+                item.setSelected(True)
+                table.scrollToItem(item)
+                logger.info(f"Selected shortcut: {task_id}")
+                return True
+
         for row in range(table.rowCount()):
             if task_type == 'shortcuts':
-                # 快捷入口的 task_id 存储在按钮属性中
                 btn = table.cellWidget(row, 0)
                 if btn and btn.property('task_id') == task_id:
                     table.selectRow(row)
-                    logger.info(f"已选中快捷入口: {task_id}")
+                    logger.info(f"Selected shortcut: {task_id}")
                     return True
             else:
                 # 普通任务的 task_id 存储在 UserRole 中

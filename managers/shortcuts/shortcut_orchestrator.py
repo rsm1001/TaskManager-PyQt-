@@ -7,6 +7,7 @@ import logging
 from typing import List, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
+_UNSET = object()
 
 
 class ShortcutOrchestrator:
@@ -22,10 +23,16 @@ class ShortcutOrchestrator:
         self._shortcut = shortcut_manager
         self._trash = trash_manager
 
-    # ==================== 快捷入口 CRUD ====================
+    # ==================== Shortcut CRUD ====================
 
     def get_all(self, tag: Optional[str] = None, keyword: Optional[str] = None) -> list:
         return self._shortcut.get_all(tag=tag, keyword=keyword)
+
+    def get_tree(self, tag: Optional[str] = None) -> list:
+        return self._shortcut.get_tree(tag=tag)
+
+    def get_children(self, parent_id: str) -> list:
+        return self._shortcut.get_children(parent_id)
 
     def create(
         self,
@@ -34,13 +41,18 @@ class ShortcutOrchestrator:
         shortcut_path: str,
         tags: str = "",
         action_type: str = "open",
+        parent_id: Optional[str] = None,
+        order_index: Optional[int] = None,
     ) -> bool:
         logger.info(
-            "创建快捷入口 | request_id=create_shortcut | title=%s task_type=%s",
+            "Creating shortcut | request_id=create_shortcut | title=%s parent_id=%s",
             title,
-            task_type,
+            parent_id,
         )
-        return self._shortcut.create(task_type, title, shortcut_path, tags, action_type)
+        return self._shortcut.create(
+            task_type, title, shortcut_path, tags, action_type,
+            parent_id=parent_id, order_index=order_index,
+        )
 
     def update(
         self,
@@ -49,19 +61,35 @@ class ShortcutOrchestrator:
         shortcut_path: Optional[str] = None,
         tags: Optional[str] = None,
         action_type: Optional[str] = None,
+        parent_id=_UNSET,
+        order_index: Optional[int] = None,
     ) -> bool:
-        return self._shortcut.update(shortcut_id, title, shortcut_path, tags, action_type)
+        kwargs = {
+            'title': title,
+            'shortcut_path': shortcut_path,
+            'tags': tags,
+            'action_type': action_type,
+            'order_index': order_index,
+        }
+        if parent_id is not _UNSET:
+            kwargs['parent_id'] = parent_id
+        return self._shortcut.update(shortcut_id, **kwargs)
 
     def delete(self, shortcut_id: str) -> bool:
-        """删除快捷入口并移入垃圾桶"""
-        shortcut_data = self._shortcut.delete(shortcut_id)
-        if shortcut_data is None:
+        """Delete an entry and its direct children as one trash bundle."""
+        entries = self._shortcut.delete_tree(shortcut_id)
+        if not entries:
             return False
+        root = entries[0]
+        trash_data = dict(root)
+        if len(entries) > 1:
+            trash_data['_children'] = entries[1:]
         logger.info(
-            "删除快捷入口并入垃圾桶 | request_id=delete_shortcut | shortcut_id=%s",
+            "Deleted shortcut bundle | request_id=delete_shortcut | shortcut_id=%s count=%d",
             shortcut_id,
+            len(entries),
         )
-        self._trash.move_to_trash("shortcut", shortcut_id, shortcut_data)
+        self._trash.move_to_trash("shortcut", shortcut_id, trash_data)
         return True
 
     # ==================== 历史记录 ====================

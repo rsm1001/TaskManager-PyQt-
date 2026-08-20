@@ -26,7 +26,7 @@ class ShortcutManager:
         self._init_history_db()
 
     def _init_db(self):
-        """初始化快捷入口表结构"""
+        """Initialize shortcut schema and migrate legacy databases."""
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS shortcut_entries (
                 id TEXT PRIMARY KEY,
@@ -35,94 +35,285 @@ class ShortcutManager:
                 action_type TEXT NOT NULL DEFAULT 'open',
                 category TEXT NOT NULL DEFAULT 'todo',
                 tags TEXT NOT NULL DEFAULT '',
+                parent_id TEXT,
+                order_index INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
         """)
-        # 兼容旧版本：如果 tags 列不存在，则添加
         cursor = self._conn.execute("PRAGMA table_info(shortcut_entries)")
         columns = [row[1] for row in cursor.fetchall()]
         if 'tags' not in columns:
-            self._conn.execute("ALTER TABLE shortcut_entries ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
-        # 兼容旧版本：如果 action_type 列不存在，则添加
+            self._conn.execute(
+                "ALTER TABLE shortcut_entries ADD COLUMN tags TEXT NOT NULL DEFAULT ''"
+            )
         if 'action_type' not in columns:
-            self._conn.execute("ALTER TABLE shortcut_entries ADD COLUMN action_type TEXT NOT NULL DEFAULT 'open'")
+            self._conn.execute(
+                "ALTER TABLE shortcut_entries ADD COLUMN action_type TEXT NOT NULL DEFAULT 'open'"
+            )
+        if 'parent_id' not in columns:
+            self._conn.execute(
+                "ALTER TABLE shortcut_entries ADD COLUMN parent_id TEXT"
+            )
+        if 'order_index' not in columns:
+            self._conn.execute(
+                "ALTER TABLE shortcut_entries ADD COLUMN order_index INTEGER NOT NULL DEFAULT 0"
+            )
+
+        # The first release supports two levels only. Invalid legacy relations
+        # are safely promoted to root entries.
+        self._conn.execute("""
+            UPDATE shortcut_entries
+               SET parent_id = NULL
+             WHERE parent_id IS NOT NULL
+               AND (parent_id = id OR parent_id NOT IN (
+                   SELECT id FROM shortcut_entries WHERE parent_id IS NULL
+               ))
+        """)
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_shortcut_entries_parent_id "
+            "ON shortcut_entries(parent_id)"
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_shortcut_entries_order "
+            "ON shortcut_entries(parent_id, order_index, created_at)"
+        )
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS shortcut_repository_profiles (
+                parent_shortcut_id TEXT PRIMARY KEY,
+                repository_root TEXT NOT NULL,
+                remote_name TEXT NOT NULL DEFAULT 'origin',
+                base_ref TEXT NOT NULL DEFAULT '',
+                launch_script TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            )
+        """)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS shortcut_agent_workspaces (
+                shortcut_id TEXT PRIMARY KEY,
+                parent_shortcut_id TEXT NOT NULL,
+                worktree_path TEXT NOT NULL,
+                branch_name TEXT NOT NULL DEFAULT '',
+                base_ref TEXT NOT NULL DEFAULT '',
+                state TEXT NOT NULL DEFAULT 'active',
+                feature_name TEXT NOT NULL DEFAULT '',
+                is_pinned INTEGER NOT NULL DEFAULT 0,
+                runtime_state TEXT NOT NULL DEFAULT 'stopped',
+                last_recycled_at TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            )
+        """)
+        workspace_columns = {
+            row[1] for row in self._conn.execute(
+                "PRAGMA table_info(shortcut_agent_workspaces)"
+            ).fetchall()
+        }
+        if 'runtime_state' not in workspace_columns:
+            self._conn.execute(
+                "ALTER TABLE shortcut_agent_workspaces "
+                "ADD COLUMN runtime_state TEXT NOT NULL DEFAULT 'stopped'"
+            )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agent_workspaces_parent_state "
+            "ON shortcut_agent_workspaces(parent_shortcut_id, state, updated_at)"
+        )
+        # Migrate only the old auto-generated labels. User-entered shortcut
+        # names remain untouched, while timestamp-heavy agent labels no longer
+        # consume most of the tree's name column.
+        rows = self._conn.execute(
+            """SELECT entries.id, entries.parent_id, entries.title
+                 FROM shortcut_entries AS entries
+                 JOIN shortcut_agent_workspaces AS workspaces
+                   ON workspaces.shortcut_id = entries.id
+                 ORDER BY entries.parent_id, entries.order_index, entries.created_at"""
+        ).fetchall()
+        slot_numbers = {}
+        for shortcut_id, parent_id, title in rows:
+            slot_numbers[parent_id] = slot_numbers.get(parent_id, 0) + 1
+            if (title or '').startswith('🤖 智能体-'):
+                self._conn.execute(
+                    "UPDATE shortcut_entries SET title = ? WHERE id = ?",
+                    ('🤖 子类 {}'.format(slot_numbers[parent_id]), shortcut_id),
+                )
         self._conn.commit()
 
-    def get_all(self, tag: str = None, keyword: str = None) -> List[Dict[str, Any]]:
-        """获取所有快捷入口，可按标签/关键词筛选
+    @staticmethod
+    def _row_to_dict(row) -> Dict[str, Any]:
+        """Convert a database row while preserving the legacy API fields."""
+        sid, title, path, action_type, category, tags, parent_id, order_index, created = row
+        return {
+            'id': sid,
+            'task_id': sid,
+            'task_type': category,
+            'title': title,
+            'shortcut_path': path or '',
+            'action_type': action_type or 'open',
+            'category': category or '',
+            'tags': tags or '',
+            'parent_id': parent_id,
+            'order_index': order_index or 0,
+            'created_at': created or '-',
+        }
 
-        Args:
-            tag: 标签筛选（逗号分隔的标签中包含该值），None 不过滤
-            keyword: 关键词筛选（模糊匹配 title/tags/shortcut_path/category）
-        """
+    def _select_rows(self, where_clause: str = '', params=None) -> List[Dict[str, Any]]:
+        params = params or []
+        cursor = self._conn.execute(
+            "SELECT id, title, shortcut_path, action_type, category, tags, "
+            "parent_id, order_index, created_at "
+            "FROM shortcut_entries "
+            f"{where_clause} "
+            "ORDER BY CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END, "
+            "COALESCE(parent_id, ''), order_index, created_at DESC",
+            params,
+        )
+        return [self._row_to_dict(row) for row in cursor.fetchall()]
+
+    def get_all(self, tag: str = None, keyword: str = None) -> List[Dict[str, Any]]:
+        """Get all shortcuts, optionally filtered by tag or keyword."""
         conditions = []
         params = []
-
-        if tag:
-            conditions.append("tags LIKE ?")
-            params.append(f"%{tag}%")
-
+        tag_value = tag.strip() if tag else None
         if keyword:
             kw = f"%{keyword}%"
             conditions.append(
                 "(title LIKE ? OR tags LIKE ? OR shortcut_path LIKE ? OR category LIKE ?)"
             )
             params.extend([kw, kw, kw, kw])
+        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ''
+        rows = self._select_rows(where_clause, params)
+        if tag_value:
+            # Tags are comma-separated. Strip only whitespace surrounding each
+            # token so internal spaces such as ``project files`` are preserved.
+            rows = [
+                row for row in rows
+                if any(part.strip() == tag_value for part in row.get('tags', '').split(','))
+            ]
+        return rows
 
-        where_clause = ""
-        if conditions:
-            where_clause = " WHERE " + " AND ".join(conditions)
+    def get_tree(self, tag: str = None) -> List[Dict[str, Any]]:
+        """Get entries for the tree and retain parent context during filtering."""
+        all_items = self.get_all()
+        if not tag:
+            return all_items
+        normalized = tag.strip()
+        matched_ids = {
+            item['id'] for item in all_items
+            if normalized in [part.strip() for part in item.get('tags', '').split(',') if part.strip()]
+        }
+        if not matched_ids:
+            return []
+        parent_ids = {
+            item['parent_id'] for item in all_items
+            if item['id'] in matched_ids and item.get('parent_id')
+        }
+        matched_root_ids = {
+            item['id'] for item in all_items
+            if item['id'] in matched_ids and not item.get('parent_id')
+        }
+        child_ids = {
+            item['id'] for item in all_items
+            if item.get('parent_id') in matched_root_ids
+        }
+        visible_ids = matched_ids | parent_ids | child_ids
+        return [item for item in all_items if item['id'] in visible_ids]
 
-        cursor = self._conn.execute(
-            f"SELECT id, title, shortcut_path, action_type, category, tags, created_at FROM shortcut_entries{where_clause} ORDER BY created_at DESC",
-            params
-        )
-        shortcuts = []
-        for row in cursor.fetchall():
-            sid, title, path, action_type, category, tags, created = row
-            shortcuts.append({
-                'id': sid,
-                'task_id': sid,
-                'task_type': category,
-                'title': title,
-                'shortcut_path': path or '',
-                'action_type': action_type or 'open',
-                'tags': tags or '',
-                'created_at': created or '-'
-            })
-        return shortcuts
+    def get_children(self, parent_id: str) -> List[Dict[str, Any]]:
+        """Get direct children of a root shortcut."""
+        return self._select_rows("WHERE parent_id = ?", [parent_id])
 
-    def create(self, task_type: str, title: str, shortcut_path: str, tags: str = '', action_type: str = 'open') -> bool:
-        """创建快捷入口
+    def _validate_parent_id(self, shortcut_id: Optional[str], parent_id: Optional[str]) -> bool:
+        if parent_id is None:
+            return True
+        if shortcut_id and parent_id == shortcut_id:
+            return False
+        row = self._conn.execute(
+            "SELECT parent_id FROM shortcut_entries WHERE id = ?", (parent_id,)
+        ).fetchone()
+        # Two-level hierarchy: a parent must itself be a root entry.
+        return row is not None and row[0] is None
 
-        Args:
-            task_type: 任务类型
-            title: 标题
-            shortcut_path: 快捷路径
-            tags: 标签（逗号分隔）
-            action_type: 操作类型 ('open' 或 'script')
-        """
+    def create(
+        self,
+        task_type: str,
+        title: str,
+        shortcut_path: str,
+        tags: str = '',
+        action_type: str = 'open',
+        parent_id: Optional[str] = None,
+        order_index: Optional[int] = None,
+    ) -> bool:
+        """Create a root or child shortcut."""
+        if not self._validate_parent_id(None, parent_id):
+            return False
         now = datetime.now().isoformat()
         sid = str(uuid.uuid4())
+        if order_index is None:
+            row = self._conn.execute(
+                "SELECT COALESCE(MAX(order_index), -1) + 1 "
+                "FROM shortcut_entries WHERE parent_id IS ?", (parent_id,)
+            ).fetchone()
+            order_index = int(row[0] if row and row[0] is not None else 0)
         self._conn.execute(
-            "INSERT INTO shortcut_entries (id, title, shortcut_path, action_type, category, tags, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (sid, title, shortcut_path, action_type, task_type, tags, now, now)
+            "INSERT INTO shortcut_entries "
+            "(id, title, shortcut_path, action_type, category, tags, parent_id, order_index, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (sid, title, shortcut_path, action_type, task_type, tags,
+             parent_id, order_index, now, now),
         )
         self._conn.commit()
         return True
 
-    def update(self, shortcut_id: str, title: str = None, shortcut_path: str = None, tags: str = None, action_type: str = None) -> bool:
-        """更新快捷入口
+    _UNSET = object()
 
-        Args:
-            shortcut_id: 快捷入口ID
-            title: 标题（可选）
-            shortcut_path: 路径（可选）
-            tags: 标签（可选，逗号分隔）
-            action_type: 操作类型（可选，'open' 或 'script'）
-        """
+    def update(
+        self,
+        shortcut_id: str,
+        title: str = None,
+        shortcut_path: str = None,
+        tags: str = None,
+        action_type: str = None,
+        parent_id=_UNSET,
+        order_index: Optional[int] = None,
+    ) -> bool:
+        """Update a shortcut; omitted parent_id keeps the existing parent."""
+        workspace_row = self._conn.execute(
+            """SELECT parent_shortcut_id, worktree_path
+                 FROM shortcut_agent_workspaces WHERE shortcut_id = ?""",
+            (shortcut_id,),
+        ).fetchone()
+        if workspace_row:
+            # A worktree child has a second source of truth. It can be renamed
+            # or retagged, but ordinary shortcut edits must never move it or
+            # point it at a different directory.
+            if shortcut_path is not None and shortcut_path != workspace_row[1]:
+                return False
+            if parent_id is not self._UNSET and parent_id != workspace_row[0]:
+                return False
+            if action_type is not None and action_type != 'open':
+                return False
+        profile_row = self._conn.execute(
+            "SELECT 1 FROM shortcut_repository_profiles WHERE parent_shortcut_id = ?",
+            (shortcut_id,),
+        ).fetchone()
+        if profile_row and (
+            shortcut_path is not None or parent_id is not self._UNSET
+        ):
+            # Repository location and root status are managed through the
+            # Git-profile workflow, never the generic shortcut editor.
+            return False
+        if parent_id is not self._UNSET:
+            if not self._validate_parent_id(shortcut_id, parent_id):
+                return False
+            if parent_id is not None:
+                current = self._conn.execute(
+                    "SELECT parent_id FROM shortcut_entries WHERE id = ?", (shortcut_id,)
+                ).fetchone()
+                child_count = self._conn.execute(
+                    "SELECT COUNT(*) FROM shortcut_entries WHERE parent_id = ?", (shortcut_id,)
+                ).fetchone()[0]
+                # A root with children cannot itself become a child in the two-level model.
+                if current is not None and current[0] is None and child_count:
+                    return False
         updates = []
         params = []
         if title is not None:
@@ -137,42 +328,228 @@ class ShortcutManager:
         if action_type is not None:
             updates.append("action_type = ?")
             params.append(action_type)
+        if parent_id is not self._UNSET:
+            updates.append("parent_id = ?")
+            params.append(parent_id)
+        if order_index is not None:
+            updates.append("order_index = ?")
+            params.append(order_index)
         if not updates:
             return False
         updates.append("updated_at = ?")
-        params.append(datetime.now().isoformat())
-        params.append(shortcut_id)
-        self._conn.execute(
-            f"UPDATE shortcut_entries SET {', '.join(updates)} WHERE id = ?",
-            params
+        params.extend([datetime.now().isoformat(), shortcut_id])
+        cursor = self._conn.execute(
+            f"UPDATE shortcut_entries SET {', '.join(updates)} WHERE id = ?", params
         )
         self._conn.commit()
-        return True
+        return cursor.rowcount > 0
 
     def get_by_id(self, shortcut_id: str) -> Optional[Dict[str, Any]]:
-        """根据ID获取快捷入口"""
-        cursor = self._conn.execute(
-            "SELECT id, title, shortcut_path, action_type, category, tags, created_at FROM shortcut_entries WHERE id = ?",
-            (shortcut_id,)
+        """Get one shortcut by ID."""
+        rows = self._select_rows("WHERE id = ?", [shortcut_id])
+        return rows[0] if rows else None
+
+    def get_tree_by_id(self, shortcut_id: str) -> List[Dict[str, Any]]:
+        """Get an entry and its direct children for bundled delete/restore."""
+        root = self.get_by_id(shortcut_id)
+        if not root:
+            return []
+        children = self.get_children(shortcut_id)
+        return [root] + children
+
+    def delete_tree(self, shortcut_id: str) -> List[Dict[str, Any]]:
+        """Delete an entry and its direct children and return the snapshot."""
+        entries = self.get_tree_by_id(shortcut_id)
+        if not entries:
+            return []
+        # The trash payload is the authoritative recovery snapshot. Keep the
+        # root's Git configuration with it; otherwise restoring a repository
+        # shortcut would restore only its path and silently lose its launcher
+        # and integration-branch settings.
+        profile = self.get_repository_profile(shortcut_id)
+        if profile:
+            entries[0]['_repository_profile'] = profile
+        ids = [entry['id'] for entry in entries]
+        placeholders = ','.join('?' for _ in ids)
+        self._conn.execute(
+            f"DELETE FROM shortcut_agent_workspaces WHERE shortcut_id IN ({placeholders})", ids
         )
-        row = cursor.fetchone()
-        if not row:
-            return None
-        sid, title, path, action_type, category, tags, created = row
-        return {
-            'id': sid, 'title': title, 'shortcut_path': path or '',
-            'action_type': action_type or 'open',
-            'category': category, 'tags': tags or '', 'created_at': created
-        }
+        self._conn.execute(
+            f"DELETE FROM shortcut_repository_profiles WHERE parent_shortcut_id IN ({placeholders})", ids
+        )
+        self._conn.execute(
+            f"DELETE FROM shortcut_entries WHERE id IN ({placeholders})", ids
+        )
+        self._conn.commit()
+        return entries
 
     def delete(self, shortcut_id: str) -> Optional[Dict[str, Any]]:
-        """删除快捷入口（返回删除的数据供垃圾箱使用）"""
-        shortcut = self.get_by_id(shortcut_id)
-        if not shortcut:
+        """Legacy delete API; deleting a root also deletes its direct children."""
+        entries = self.delete_tree(shortcut_id)
+        if not entries:
             return None
-        self._conn.execute("DELETE FROM shortcut_entries WHERE id = ?", (shortcut_id,))
+        root = dict(entries[0])
+        if len(entries) > 1:
+            root['_children'] = entries[1:]
+        return root
+
+    # ==================== 智能体 Git 工作区 ====================
+
+    def save_repository_profile(
+        self,
+        parent_shortcut_id: str,
+        repository_root: str,
+        remote_name: str = 'origin',
+        base_ref: str = '',
+        launch_script: str = '',
+    ) -> None:
+        """Persist Git settings for a root shortcut without changing normal shortcuts."""
+        now = datetime.now().isoformat()
+        self._conn.execute(
+            """INSERT INTO shortcut_repository_profiles
+               (parent_shortcut_id, repository_root, remote_name, base_ref, launch_script, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(parent_shortcut_id) DO UPDATE SET
+                 repository_root=excluded.repository_root,
+                 remote_name=excluded.remote_name,
+                 base_ref=excluded.base_ref,
+                 launch_script=excluded.launch_script,
+                 updated_at=excluded.updated_at""",
+            (parent_shortcut_id, repository_root, remote_name, base_ref, launch_script, now),
+        )
         self._conn.commit()
-        return shortcut
+
+    def get_repository_profile(self, parent_shortcut_id: str) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            """SELECT parent_shortcut_id, repository_root, remote_name, base_ref,
+                      launch_script, updated_at
+                 FROM shortcut_repository_profiles WHERE parent_shortcut_id = ?""",
+            (parent_shortcut_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            'parent_shortcut_id': row[0], 'repository_root': row[1],
+            'remote_name': row[2] or 'origin', 'base_ref': row[3] or '',
+            'launch_script': row[4] or '', 'updated_at': row[5] or '',
+        }
+
+    def create_agent_workspace(
+        self,
+        parent_shortcut_id: str,
+        title: str,
+        worktree_path: str,
+        branch_name: str,
+        base_ref: str,
+        feature_name: str,
+    ) -> Dict[str, Any]:
+        """Create a child shortcut and its worktree metadata as one DB transaction."""
+        now = datetime.now().isoformat()
+        shortcut_id = str(uuid.uuid4())
+        row = self._conn.execute(
+            "SELECT COALESCE(MAX(order_index), -1) + 1 FROM shortcut_entries WHERE parent_id = ?",
+            (parent_shortcut_id,),
+        ).fetchone()
+        order_index = int(row[0] if row else 0)
+        try:
+            self._conn.execute(
+                """INSERT INTO shortcut_entries
+                   (id, title, shortcut_path, action_type, category, tags, parent_id,
+                    order_index, created_at, updated_at)
+                   VALUES (?, ?, ?, 'open', 'workspace', '', ?, ?, ?, ?)""",
+                (shortcut_id, title, worktree_path, parent_shortcut_id,
+                 order_index, now, now),
+            )
+            self._conn.execute(
+                """INSERT INTO shortcut_agent_workspaces
+                   (shortcut_id, parent_shortcut_id, worktree_path, branch_name, base_ref,
+                    state, feature_name, is_pinned, runtime_state, last_recycled_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, 'active', ?, 0, 'stopped', '', ?)""",
+                (shortcut_id, parent_shortcut_id, worktree_path, branch_name,
+                 base_ref, feature_name, now),
+            )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
+        return self.get_by_id(shortcut_id)
+
+    def get_agent_workspace(self, shortcut_id: str) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            """SELECT shortcut_id, parent_shortcut_id, worktree_path, branch_name, base_ref,
+                      state, feature_name, is_pinned, runtime_state, last_recycled_at, updated_at
+                 FROM shortcut_agent_workspaces WHERE shortcut_id = ?""",
+            (shortcut_id,),
+        ).fetchone()
+        if not row:
+            return None
+        keys = ('shortcut_id', 'parent_shortcut_id', 'worktree_path', 'branch_name',
+                'base_ref', 'state', 'feature_name', 'is_pinned', 'runtime_state',
+                'last_recycled_at', 'updated_at')
+        return dict(zip(keys, row))
+
+    def get_idle_agent_workspaces(self, parent_shortcut_id: str) -> List[Dict[str, Any]]:
+        rows = self._conn.execute(
+            """SELECT shortcut_id FROM shortcut_agent_workspaces
+                 WHERE parent_shortcut_id = ? AND state = 'idle' AND is_pinned = 0
+                 ORDER BY updated_at ASC""",
+            (parent_shortcut_id,),
+        ).fetchall()
+        return [self.get_agent_workspace(row[0]) for row in rows]
+
+    def has_agent_workspaces(self, parent_shortcut_id: str) -> bool:
+        """Return whether a repository still owns any managed worktree child."""
+        row = self._conn.execute(
+            "SELECT 1 FROM shortcut_agent_workspaces WHERE parent_shortcut_id = ? LIMIT 1",
+            (parent_shortcut_id,),
+        ).fetchone()
+        return row is not None
+
+    def count_active_agent_workspaces(self, parent_shortcut_id: str) -> int:
+        """Count active children so an optional concurrent-agent cap can apply."""
+        row = self._conn.execute(
+            """SELECT COUNT(*) FROM shortcut_agent_workspaces
+                 WHERE parent_shortcut_id = ? AND state = 'active'""",
+            (parent_shortcut_id,),
+        ).fetchone()
+        return int(row[0] if row else 0)
+
+    def count_agent_workspaces(self, parent_shortcut_id: str) -> int:
+        """Count all slots, including idle ones, for a stable short display name."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM shortcut_agent_workspaces WHERE parent_shortcut_id = ?",
+            (parent_shortcut_id,),
+        ).fetchone()
+        return int(row[0] if row else 0)
+
+    def update_agent_workspace(self, shortcut_id: str, **values: Any) -> bool:
+        allowed = {
+            'worktree_path', 'branch_name', 'base_ref', 'state', 'feature_name',
+            'is_pinned', 'runtime_state', 'last_recycled_at',
+        }
+        updates = []
+        params = []
+        for key, value in values.items():
+            if key in allowed:
+                updates.append(f"{key} = ?")
+                params.append(value)
+        if not updates:
+            return False
+        updates.append("updated_at = ?")
+        params.extend([datetime.now().isoformat(), shortcut_id])
+        cursor = self._conn.execute(
+            f"UPDATE shortcut_agent_workspaces SET {', '.join(updates)} WHERE shortcut_id = ?",
+            params,
+        )
+        self._conn.commit()
+        return cursor.rowcount > 0
+
+    def remove_agent_workspace(self, shortcut_id: str) -> bool:
+        """Remove metadata and its child shortcut after Git removed the worktree."""
+        self._conn.execute("DELETE FROM shortcut_agent_workspaces WHERE shortcut_id = ?", (shortcut_id,))
+        cursor = self._conn.execute("DELETE FROM shortcut_entries WHERE id = ?", (shortcut_id,))
+        self._conn.commit()
+        return cursor.rowcount > 0
 
     # ==================== 历史记录相关方法 ====================
 

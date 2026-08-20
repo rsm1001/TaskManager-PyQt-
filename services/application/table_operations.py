@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 from services.shortcuts.shortcut_table_service import (
     render_shortcut_row,
+    render_shortcut_tree_item,
     render_history_row,
     _open_shortcut_path,
 )
@@ -354,27 +355,62 @@ def load_entertainment_tasks_to_table(window):
 
 
 def load_shortcuts_to_table(window):
-    """加载所有快捷入口到快捷入口表格"""
+    """Load the hierarchical shortcut tree, collapsed by default."""
     tag_filter = getattr(window, 'current_shortcut_tag_filter', '')
-    shortcuts = window.data_manager.get_all_shortcuts(tag=tag_filter if tag_filter else None)
-    window.shortcuts_table.setRowCount(len(shortcuts))
+    getter = getattr(window.data_manager, 'get_shortcut_tree', None)
+    shortcuts = getter(tag=tag_filter if tag_filter else None) if getter else window.data_manager.get_all_shortcuts(
+        tag=tag_filter if tag_filter else None
+    )
+    tree = window.shortcuts_table
+    tree.clear()
 
     def add_history_callback(shortcut_item):
-        """点击快捷入口时添加历史记录"""
         window.data_manager.add_or_update_history(
             shortcut_item['id'],
             shortcut_item['title'],
             shortcut_item['shortcut_path'],
-            shortcut_item.get('action_type', 'open')
+            shortcut_item.get('action_type', 'open'),
         )
         if hasattr(window, 'load_shortcuts_history'):
             window.load_shortcuts_history()
         if hasattr(window, '_update_history_limit_label'):
             window._update_history_limit_label()
 
-    for row, item in enumerate(shortcuts):
-        _render_shortcut_row(window.shortcuts_table, row, item, on_open_callback=add_history_callback)
+    def launch_workspace_callback(shortcut_item):
+        """Run a child worktree's inherited launcher, never open its folder."""
+        try:
+            window.data_manager._service_factory.get_git_worktree_service().launch_workspace_project(
+                shortcut_item['id']
+            )
+        except Exception as error:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(window, '启动项目失败', str(error))
+            return False
+        return True
 
+    roots = [item for item in shortcuts if not item.get('parent_id')]
+    children_by_parent = {}
+    for item in shortcuts:
+        parent_id = item.get('parent_id')
+        if parent_id:
+            children_by_parent.setdefault(parent_id, []).append(item)
+
+    from PyQt6.QtWidgets import QTreeWidgetItem
+
+    for root_data in roots:
+        root_item = QTreeWidgetItem(tree)
+        render_shortcut_tree_item(
+            tree, root_item, root_data, add_history_callback, launch_workspace_callback,
+        )
+        for child_data in children_by_parent.get(root_data['id'], []):
+            child_item = QTreeWidgetItem(root_item)
+            render_shortcut_tree_item(
+                tree, child_item, child_data, add_history_callback, launch_workspace_callback,
+            )
+        # The requested default is collapsed. Users can expand interactively.
+        root_item.setExpanded(False)
+
+    window.update_status_bar()
 
 def load_shortcut_history_to_table(window):
     """加载历史记录到历史记录表格"""

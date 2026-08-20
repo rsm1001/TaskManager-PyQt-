@@ -61,6 +61,14 @@ class MainWindowTableActionsMixin:
     def load_shortcuts_history(self):
         load_shortcut_history_to_table(self)
 
+    def collapse_shortcuts(self):
+        if hasattr(self, 'shortcuts_table'):
+            self.shortcuts_table.collapseAll()
+
+    def expand_shortcuts(self):
+        if hasattr(self, 'shortcuts_table'):
+            self.shortcuts_table.expandAll()
+
     def on_search_text_changed(self, text):
         if not text.strip():
             self._search_coordinator.clear_search_results()

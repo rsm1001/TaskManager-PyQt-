@@ -5,6 +5,7 @@
 
 import logging
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -21,7 +22,7 @@ from PyQt6.QtWidgets import (
 from components.main_window.tab_filters import on_shortcut_tag_filter_clicked
 from components.main_window.tag_filter_bar import TagFilterBar
 from managers.application.data_manager import TaskType
-from components.main_window.draggable_table import DraggableTaskTable
+from components.main_window.shortcut_tree import DraggableShortcutTree
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,8 @@ class ShortcutsTabBuilder:
         self._add_btn(control, 'edit_shortcut_btn', '编辑', win.edit_shortcut)
         self._add_btn(control, 'delete_shortcut_btn', '删除', win.delete_shortcut)
         self._add_btn(control, 'open_shortcut_btn', '打开', win.open_shortcut)
+        self._add_btn(control, 'collapse_shortcuts_btn', '折叠全部', win.collapse_shortcuts)
+        self._add_btn(control, 'expand_shortcuts_btn', '展开全部', win.expand_shortcuts)
         control.addStretch()
 
         # Claude 启动放权开关
@@ -105,17 +108,20 @@ class ShortcutsTabBuilder:
         layout.addWidget(win.shortcuts_table)
         return widget
 
-    def _make_shortcuts_table(self) -> QTableWidget:
+    def _make_shortcuts_table(self) -> DraggableShortcutTree:
         win = self.parent_window
-        table = DraggableTaskTable()
-        table.task_type = 'shortcut'
+        table = DraggableShortcutTree()
         table.setToolTip('\u70b9\u51fb\u540d\u79f0\u542f\u52a8\u5feb\u6377\u5165\u53e3\uff1b\u4ece\u7c7b\u578b\u3001\u6807\u7b7e\u6216\u8def\u5f84\u5355\u5143\u683c\u62d6\u5165\u884c\u7a0b\u89c4\u5212\u4ee5\u7ed1\u5b9a')
         table.setColumnCount(7)
-        table.setHorizontalHeaderLabels(['名称', 'claude', 'Codex', '类型', '标签', '路径', '创建日期'])
+        table.setHeaderLabels(['名称', 'claude', 'Codex', '类型', '标签', '路径', '创建日期'])
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        header = table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header = table.header()
+        # The title is rendered as an embedded QPushButton. Qt's
+        # ResizeToContents measures the empty QTreeWidgetItem text instead of
+        # that button, making the name column collapse after each reload.
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        header.resizeSection(0, 180)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(1, 70)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
@@ -127,12 +133,15 @@ class ShortcutsTabBuilder:
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(6, 130)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        table.verticalHeader().setDefaultSectionSize(42)
+        table.setIndentation(20)
+        table.setAnimated(True)
+        table.setAlternatingRowColors(True)
+        table.setExpandsOnDoubleClick(False)
+        table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        table.customContextMenuRequested.connect(win.show_shortcut_context_menu)
         table.cellDoubleClicked.connect(win.edit_shortcut)
-        table.cellClicked.connect(win.on_shortcuts_cell_clicked)
         return table
 
-    # ---------------- 子 Tab 2：历史记录 ----------------
     def _build_history_widget(self) -> QWidget:
         win = self.parent_window
         widget = QWidget()

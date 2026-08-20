@@ -7,6 +7,8 @@ Task Manager - 数据管理外观（Facade）
 
 from __future__ import annotations
 
+_UNSET = object()
+
 import logging
 from typing import List, Dict, Any, Optional, TYPE_CHECKING
 
@@ -370,10 +372,16 @@ class DataManager:
     def purge_all_trashed(self, task_type: Optional[str] = None) -> None:
         self.trash_orchestrator.purge_all(task_type)
 
-    # ==================== 快捷入口 ====================
+    # ==================== Shortcuts ====================
 
     def get_all_shortcuts(self, tag: Optional[str] = None, keyword: Optional[str] = None) -> List[Any]:
         return self.shortcut_orchestrator.get_all(tag=tag, keyword=keyword)
+
+    def get_shortcut_tree(self, tag: Optional[str] = None) -> List[Any]:
+        return self.shortcut_orchestrator.get_tree(tag=tag)
+
+    def get_shortcut_children(self, parent_id: str) -> List[Any]:
+        return self.shortcut_orchestrator.get_children(parent_id)
 
     def create_shortcut(
         self,
@@ -382,8 +390,13 @@ class DataManager:
         shortcut_path: str,
         tags: str = "",
         action_type: str = "open",
+        parent_id: Optional[str] = None,
+        order_index: Optional[int] = None,
     ) -> bool:
-        return self.shortcut_orchestrator.create(task_type, title, shortcut_path, tags, action_type)
+        return self.shortcut_orchestrator.create(
+            task_type, title, shortcut_path, tags, action_type,
+            parent_id=parent_id, order_index=order_index,
+        )
 
     def update_shortcut(
         self,
@@ -392,11 +405,19 @@ class DataManager:
         shortcut_path: Optional[str] = None,
         tags: Optional[str] = None,
         action_type: Optional[str] = None,
+        parent_id=_UNSET,
+        order_index: Optional[int] = None,
     ) -> bool:
-        return self.shortcut_orchestrator.update(
-            shortcut_id, title=title, shortcut_path=shortcut_path,
-            tags=tags, action_type=action_type,
-        )
+        kwargs = {
+            'title': title,
+            'shortcut_path': shortcut_path,
+            'tags': tags,
+            'action_type': action_type,
+            'order_index': order_index,
+        }
+        if parent_id is not _UNSET:
+            kwargs['parent_id'] = parent_id
+        return self.shortcut_orchestrator.update(shortcut_id, **kwargs)
 
     def delete_shortcut(self, shortcut_id: str) -> bool:
         return self.shortcut_orchestrator.delete(shortcut_id)
