@@ -25,6 +25,7 @@ class MainWindowTableActionsMixin:
         self.load_shortcuts_history()
         self._load_claude_skip_permission_state()
         self._load_codex_skip_permission_state()
+        self._load_add_to_vscode_workspace_state()
         self.update_status_bar()
 
     def load_daily_tasks(self):

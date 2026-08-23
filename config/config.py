@@ -56,6 +56,10 @@ URGENCY_LOW = 1     # 低紧急程度阈值
 # 快捷入口历史记录配置
 SHORTCUT_HISTORY_DEFAULT_LIMIT = 100  # 默认缓存数量
 
+# 新建快捷入口时是否将目录加入当前 VS Code 窗口/工作区
+VSCODE_ADD_TO_WORKSPACE_KEY = "shortcuts_add_to_vscode_workspace"
+VSCODE_ADD_TO_WORKSPACE_DEFAULT = False
+
 # Claude 启动选项配置（持久化键 + 默认值）
 CLAUDE_DANGEROUS_SKIP_PERMISSIONS_KEY = "claude_dangerously_skip_permissions"
 CLAUDE_DANGEROUS_SKIP_PERMISSIONS_DEFAULT = False  # 默认不放权

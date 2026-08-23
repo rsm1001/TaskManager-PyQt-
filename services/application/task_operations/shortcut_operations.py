@@ -67,6 +67,20 @@ class ShortcutOperations:
             return False
         return True
 
+    def _add_folder_to_vscode_workspace_if_enabled(self, shortcut_path):
+        """Best-effort post-create integration with the active VS Code window."""
+        service = self._w.data_manager._service_factory.get_vscode_workspace_service()
+        try:
+            service.add_folder_to_workspace_if_enabled(shortcut_path)
+        except Exception as error:
+            # The shortcut is already persisted; an external CLI failure must
+            # not roll back the user's shortcut.
+            QMessageBox.warning(
+                self._w,
+                '加入 VS Code 工作区失败',
+                '快捷入口已创建，但未能加入当前 VS Code 工作区：\n{}'.format(error),
+            )
+
     def add_shortcut(self):
         dialog = ShortcutEditDialog(self._w, data_manager=self._w.data_manager)
         if dialog.exec() != ShortcutEditDialog.DialogCode.Accepted:
@@ -81,6 +95,7 @@ class ShortcutOperations:
         if not created:
             QMessageBox.warning(self._w, 'Save failed', 'The selected parent shortcut is invalid')
             return
+        self._add_folder_to_vscode_workspace_if_enabled(data['shortcut_path'])
         self._w.load_shortcuts()
         self._validate_and_refresh_filter()
         show_task_added_confirmation('shortcut', self._w)
@@ -126,6 +141,7 @@ class ShortcutOperations:
         if not created:
             QMessageBox.warning(self._w, 'Save failed', 'The child shortcut could not be created')
             return
+        self._add_folder_to_vscode_workspace_if_enabled(data['shortcut_path'])
         self._w.load_shortcuts()
         self._validate_and_refresh_filter()
         show_task_added_confirmation('shortcut', self._w)

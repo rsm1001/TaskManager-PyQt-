@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from services.pomodoro.pomodoro_service import PomodoroService
     from services.shortcuts.shortcut_operation_service import ShortcutOperationService
     from services.shortcuts.git_worktree_service import GitWorktreeService
+    from services.shortcuts.vscode_workspace_service import VSCodeWorkspaceService
     from services.domain.tag_cleanup_service import TagCleanupService
     from services.search.search_coordinator import SearchCoordinator
 
@@ -91,6 +92,15 @@ class ServiceFactory:
             self._services["git_worktree"] = GitWorktreeService(self._dm)
             logger.info("GitWorktreeService created")
         return cast("GitWorktreeService", self._services["git_worktree"])
+
+    def get_vscode_workspace_service(self) -> "VSCodeWorkspaceService":
+        """获取 VS Code 当前工作区集成服务（单例）。"""
+        if "vscode_workspace" not in self._services:
+            from services.shortcuts.vscode_workspace_service import VSCodeWorkspaceService
+
+            self._services["vscode_workspace"] = VSCodeWorkspaceService(self._dm)
+            logger.info("VSCodeWorkspaceService created")
+        return cast("VSCodeWorkspaceService", self._services["vscode_workspace"])
 
     def get_tag_cleanup_service(self) -> "TagCleanupService":
         """获取标签清理服务（单例）"""

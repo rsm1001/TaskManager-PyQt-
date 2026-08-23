@@ -60,6 +60,16 @@ class TestServiceFactory:
 
         assert svc1 is svc2
 
+    def test_get_vscode_workspace_service_returns_same_instance(self):
+        """VS Code workspace service is cached per factory."""
+        mock_dm = MagicMock()
+        factory = ServiceFactory(mock_dm)
+
+        svc1 = factory.get_vscode_workspace_service()
+        svc2 = factory.get_vscode_workspace_service()
+
+        assert svc1 is svc2
+
     def test_get_tag_cleanup_service_returns_same_instance(self):
         """get_tag_cleanup_service 单例"""
         mock_dm = MagicMock()

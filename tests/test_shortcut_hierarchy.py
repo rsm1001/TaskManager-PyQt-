@@ -57,7 +57,7 @@ def test_shortcut_hierarchy_crud_and_parent_validation():
     connection.close()
 
 
-def test_tree_widget_starts_collapsed_and_keeps_child_items():
+def test_tree_widget_starts_expanded_and_keeps_child_items():
     app = QApplication.instance() or QApplication([])
     tree = DraggableShortcutTree()
     tree.setColumnCount(7)
@@ -73,11 +73,11 @@ def test_tree_widget_starts_collapsed_and_keeps_child_items():
         {'id': 'child', 'title': 'Child', 'shortcut_path': '/tmp/child',
          'action_type': 'open', 'tags': '', 'parent_id': 'root', 'created_at': '-'}
     )
-    root.setExpanded(False)
-    assert tree.topLevelItemCount() == 1
-    assert tree.rowCount() == 1
     root.setExpanded(True)
+    assert tree.topLevelItemCount() == 1
     assert tree.rowCount() == 2
+    root.setExpanded(False)
+    assert tree.rowCount() == 1
     assert tree.find_item_by_id('child') is child
     tree.deleteLater()
     app.processEvents()

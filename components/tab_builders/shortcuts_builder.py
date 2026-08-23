@@ -70,16 +70,28 @@ class ShortcutsTabBuilder:
 
         # 控制按钮行
         control = QHBoxLayout()
-        self._add_btn(control, 'add_shortcut_btn', '添加快捷入口', win.add_shortcut)
-        self._add_btn(control, 'edit_shortcut_btn', '编辑', win.edit_shortcut)
-        self._add_btn(control, 'delete_shortcut_btn', '删除', win.delete_shortcut)
-        self._add_btn(control, 'open_shortcut_btn', '打开', win.open_shortcut)
-        self._add_btn(control, 'collapse_shortcuts_btn', '折叠全部', win.collapse_shortcuts)
-        self._add_btn(control, 'expand_shortcuts_btn', '展开全部', win.expand_shortcuts)
+        add_button = self._add_btn(control, 'add_shortcut_btn', '+入口', win.add_shortcut)
+        add_button.setToolTip('添加新的快捷入口')
+        child_button = self._add_btn(control, 'add_child_shortcut_btn', '+子类', win.add_child_shortcut)
+        child_button.setToolTip('新增普通子快捷入口；会挂到当前选中根快捷入口下。')
+        edit_button = self._add_btn(control, 'edit_shortcut_btn', '编辑', win.edit_shortcut)
+        edit_button.setToolTip('编辑选中的快捷入口')
+        delete_button = self._add_btn(control, 'delete_shortcut_btn', '删除', win.delete_shortcut)
+        delete_button.setToolTip('删除选中的快捷入口')
+        open_button = self._add_btn(control, 'open_shortcut_btn', '打开', win.open_shortcut)
+        open_button.setToolTip('打开选中的快捷入口')
+        collapse_button = self._add_btn(control, 'collapse_shortcuts_btn', '收起', win.collapse_shortcuts)
+        collapse_button.setToolTip('折叠全部快捷入口')
+        expand_button = self._add_btn(control, 'expand_shortcuts_btn', '展开', win.expand_shortcuts)
+        expand_button.setToolTip('展开全部快捷入口，显示所有子类')
         control.addStretch()
+        layout.addLayout(control)
+
+        # 设置单独放在第二行，避免挤压主操作按钮，确保“展开全部”始终可见。
+        settings = QHBoxLayout()
 
         # Claude 启动放权开关
-        win.claude_skip_perm_checkbox = QCheckBox('放权启动 Claude')
+        win.claude_skip_perm_checkbox = QCheckBox('Claude放权')
         win.claude_skip_perm_checkbox.setToolTip(
             '勾选后，通过"快捷入口"和"历史记录"中的 Terminal 按钮启动 Claude 时，\n'
             '会自动带上 --dangerously-skip-permissions 参数（放权所有工具调用）。\n'
@@ -88,10 +100,10 @@ class ShortcutsTabBuilder:
         win.claude_skip_perm_checkbox.stateChanged.connect(
             win.on_claude_skip_permission_toggled
         )
-        control.addWidget(win.claude_skip_perm_checkbox)
+        settings.addWidget(win.claude_skip_perm_checkbox)
 
         # Codex 启动放权开关
-        win.codex_skip_perm_checkbox = QCheckBox('放权启动 Codex')
+        win.codex_skip_perm_checkbox = QCheckBox('Codex放权')
         win.codex_skip_perm_checkbox.setToolTip(
             '勾选后，通过"快捷入口"和"历史记录"中的 Codex 按钮启动 Codex 时，\n'
             '会自动带上 --dangerously-skip-permissions 参数（放权所有工具调用）。\n'
@@ -100,8 +112,31 @@ class ShortcutsTabBuilder:
         win.codex_skip_perm_checkbox.stateChanged.connect(
             win.on_codex_skip_permission_toggled
         )
-        control.addWidget(win.codex_skip_perm_checkbox)
-        layout.addLayout(control)
+        settings.addWidget(win.codex_skip_perm_checkbox)
+
+        # 新建快捷入口时将目录加入当前 VS Code 窗口；状态持久化到数据库。
+        win.add_to_vscode_workspace_checkbox = QCheckBox('VSCode+')
+        win.add_to_vscode_workspace_checkbox.setToolTip(
+            '启用后，创建快捷入口、普通子快捷入口或智能体子类成功后，\n'
+            '会执行 code --add，将其文件夹加入当前 VS Code 窗口/工作区。\n'
+            '开关状态会持久化保存，下次启动仍然生效。'
+        )
+        win.add_to_vscode_workspace_checkbox.stateChanged.connect(
+            win.on_add_to_vscode_workspace_toggled
+        )
+        settings.addWidget(win.add_to_vscode_workspace_checkbox)
+        add_vscode_button = self._add_btn(
+            settings, 'add_vscode_workspace_btn', 'VS+',
+            win.add_current_shortcut_to_vscode_workspace,
+        )
+        add_vscode_button.setToolTip('将当前选中的快捷入口文件夹主动加入 VS Code 工作区。')
+        remove_vscode_button = self._add_btn(
+            settings, 'remove_vscode_workspace_btn', 'VS-',
+            win.remove_current_shortcut_from_vscode_workspace,
+        )
+        remove_vscode_button.setToolTip('将当前选中的快捷入口文件夹主动移出 VS Code 工作区。')
+        settings.addStretch()
+        layout.addLayout(settings)
 
         # 快捷入口表格（自定义列宽）
         win.shortcuts_table = self._make_shortcuts_table()

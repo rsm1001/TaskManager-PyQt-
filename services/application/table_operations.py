@@ -355,7 +355,7 @@ def load_entertainment_tasks_to_table(window):
 
 
 def load_shortcuts_to_table(window):
-    """Load the hierarchical shortcut tree, collapsed by default."""
+    """Load the hierarchical shortcut tree, expanded so child entries are visible."""
     tag_filter = getattr(window, 'current_shortcut_tag_filter', '')
     getter = getattr(window.data_manager, 'get_shortcut_tree', None)
     shortcuts = getter(tag=tag_filter if tag_filter else None) if getter else window.data_manager.get_all_shortcuts(
@@ -407,8 +407,9 @@ def load_shortcuts_to_table(window):
             render_shortcut_tree_item(
                 tree, child_item, child_data, add_history_callback, launch_workspace_callback,
             )
-        # The requested default is collapsed. Users can expand interactively.
-        root_item.setExpanded(False)
+        # Keep children visible after every refresh; users can still collapse
+        # individual roots or use the global collapse button.
+        root_item.setExpanded(True)
 
     window.update_status_bar()
 

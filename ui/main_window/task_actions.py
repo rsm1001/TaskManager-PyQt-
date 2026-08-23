@@ -138,6 +138,9 @@ class MainWindowTaskActionsMixin:
         merge_provider_action = None
         merge_instruction_action = None
         reset_merge_instruction_action = None
+        vscode_add_action = menu.addAction('加入 VS Code 工作区')
+        vscode_remove_action = menu.addAction('移出 VS Code 工作区')
+        menu.addSeparator()
         if workspace:
             launch_workspace_action = menu.addAction('启动本地项目')
             open_workspace_directory_action = menu.addAction('打开工作目录')
@@ -166,7 +169,11 @@ class MainWindowTaskActionsMixin:
         edit_action = menu.addAction('Edit')
         delete_action = menu.addAction('Delete')
         chosen = menu.exec(self.shortcuts_table.viewport().mapToGlobal(position))
-        if chosen is configure_repo_action:
+        if chosen is vscode_add_action:
+            self.add_shortcut_to_vscode_workspace(shortcut_id)
+        elif chosen is vscode_remove_action:
+            self.remove_shortcut_from_vscode_workspace(shortcut_id)
+        elif chosen is configure_repo_action:
             self.configure_shortcut_repository(shortcut_id)
         elif chosen is pool_size_action:
             self.set_agent_workspace_pool_size()
@@ -206,6 +213,55 @@ class MainWindowTaskActionsMixin:
 
     def _workspace_service(self):
         return self.data_manager._service_factory.get_git_worktree_service()
+
+    def _vscode_workspace_service(self):
+        return self.data_manager._service_factory.get_vscode_workspace_service()
+
+    def _change_shortcut_vscode_workspace(self, shortcut_id, operation):
+        shortcut = self.data_manager.shortcut_manager.get_by_id(shortcut_id) or {}
+        path = shortcut.get('shortcut_path', '')
+        if not path:
+            QMessageBox.warning(self, 'VS Code 工作区操作失败', '该快捷入口没有可加入工作区的路径。')
+            return
+        try:
+            service = self._vscode_workspace_service()
+            if operation == 'add':
+                result = service.add_folder_to_workspace(path)
+                message = '已主动加入 VS Code 工作区：{}'.format(result['folder'])
+            else:
+                result = service.remove_folder_from_workspace(path)
+                message = '已主动移出 VS Code 工作区：{}'.format(result['folder'])
+        except Exception as error:
+            QMessageBox.warning(self, 'VS Code 工作区操作失败', str(error))
+            return
+        self.status_bar.showMessage(message, 4000)
+
+    def _current_shortcut_id(self):
+        item = self.shortcuts_table.currentItem()
+        if item is None:
+            return None
+        data = item.data(0, Qt.ItemDataRole.UserRole + 1) or {}
+        return data.get('id') or item.data(0, Qt.ItemDataRole.UserRole)
+
+    def add_shortcut_to_vscode_workspace(self, shortcut_id):
+        self._change_shortcut_vscode_workspace(shortcut_id, 'add')
+
+    def remove_shortcut_from_vscode_workspace(self, shortcut_id):
+        self._change_shortcut_vscode_workspace(shortcut_id, 'remove')
+
+    def add_current_shortcut_to_vscode_workspace(self):
+        shortcut_id = self._current_shortcut_id()
+        if not shortcut_id:
+            warn_no_task_selected()
+            return
+        self.add_shortcut_to_vscode_workspace(shortcut_id)
+
+    def remove_current_shortcut_from_vscode_workspace(self):
+        shortcut_id = self._current_shortcut_id()
+        if not shortcut_id:
+            warn_no_task_selected()
+            return
+        self.remove_shortcut_from_vscode_workspace(shortcut_id)
 
     def configure_shortcut_repository(self, parent_shortcut_id):
         """Configure a root shortcut as an agent-workspace repository."""
@@ -251,6 +307,16 @@ class MainWindowTaskActionsMixin:
         except Exception as error:
             QMessageBox.warning(self, '创建工作区失败', str(error))
             return
+        try:
+            self._vscode_workspace_service().add_folder_to_workspace_if_enabled(
+                workspace.get('worktree_path', ''),
+            )
+        except Exception as error:
+            QMessageBox.warning(
+                self,
+                '加入 VS Code 工作区失败',
+                '工作区已创建，但未能加入当前 VS Code 工作区：\n{}'.format(error),
+            )
         self.load_shortcuts()
         action = '已复用空闲工作区' if workspace.get('workspace_reused') else '已创建新工作区'
         self.status_bar.showMessage(action, 5000)
@@ -457,6 +523,19 @@ class MainWindowTaskActionsMixin:
     def _load_codex_skip_permission_state(self):
         self._load_permission_state('codex_skip_perm_checkbox', 'get_codex_dangerously_skip_permissions', config.config.CODEX_DANGEROUS_SKIP_PERMISSIONS_DEFAULT, 'Codex')
 
+    def _load_add_to_vscode_workspace_state(self):
+        checkbox = getattr(self, 'add_to_vscode_workspace_checkbox', None)
+        if checkbox is None:
+            return
+        try:
+            enabled = self._vscode_workspace_service().is_enabled()
+        except Exception:
+            logger.warning('加载 VS Code 工作区设置失败')
+            enabled = config.config.VSCODE_ADD_TO_WORKSPACE_DEFAULT
+        checkbox.blockSignals(True)
+        checkbox.setChecked(enabled)
+        checkbox.blockSignals(False)
+
     def _load_permission_state(self, checkbox_name, getter_name, default, provider):
         checkbox = getattr(self, checkbox_name, None)
         if checkbox is None:
@@ -475,6 +554,23 @@ class MainWindowTaskActionsMixin:
 
     def on_codex_skip_permission_toggled(self, state):
         self._save_permission_state('codex_skip_perm_checkbox', 'set_codex_dangerously_skip_permissions', state, 'Codex')
+
+    def on_add_to_vscode_workspace_toggled(self, state):
+        enabled = bool(state)
+        checkbox = getattr(self, 'add_to_vscode_workspace_checkbox', None)
+        try:
+            self._vscode_workspace_service().set_enabled(enabled)
+            self.status_bar.showMessage(
+                '已{}新建快捷入口时加入 VS Code 工作区'.format('开启' if enabled else '关闭'),
+                3000,
+            )
+        except Exception as error:
+            logger.exception('保存 VS Code 工作区设置失败')
+            QMessageBox.warning(self, '保存失败', '无法保存 VS Code 工作区设置: {}'.format(error))
+            if checkbox is not None:
+                checkbox.blockSignals(True)
+                checkbox.setChecked(not enabled)
+                checkbox.blockSignals(False)
 
     def _save_permission_state(self, checkbox_name, setter_name, state, provider):
         enabled = bool(state)
