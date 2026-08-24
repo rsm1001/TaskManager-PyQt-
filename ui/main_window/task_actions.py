@@ -9,6 +9,7 @@ from PyQt6.QtGui import QCursor
 
 import config.config
 from utils.ui_messages import warn_no_task_selected
+from utils.window_focus import restore_window_focus
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +236,7 @@ class MainWindowTaskActionsMixin:
             QMessageBox.warning(self, 'VS Code 工作区操作失败', str(error))
             return
         self.status_bar.showMessage(message, 4000)
+        restore_window_focus(self)
 
     def _current_shortcut_id(self):
         item = self.shortcuts_table.currentItem()
@@ -308,9 +310,11 @@ class MainWindowTaskActionsMixin:
             QMessageBox.warning(self, '创建工作区失败', str(error))
             return
         try:
-            self._vscode_workspace_service().add_folder_to_workspace_if_enabled(
+            result = self._vscode_workspace_service().add_folder_to_workspace_if_enabled(
                 workspace.get('worktree_path', ''),
             )
+            if result is not None:
+                restore_window_focus(self)
         except Exception as error:
             QMessageBox.warning(
                 self,

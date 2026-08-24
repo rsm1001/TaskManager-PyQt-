@@ -99,14 +99,20 @@ class VSCodeWorkspaceService:
 
         command = [executable, option, folder]
         try:
-            subprocess.Popen(
-                command,
-                cwd=folder,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                close_fds=os.name != "nt",
-            )
+            popen_kwargs = {
+                "cwd": folder,
+                "stdin": subprocess.DEVNULL,
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+                "close_fds": os.name != "nt",
+            }
+            # Do not let the Windows command shim briefly create a console
+            # window and steal focus from the task manager.
+            if os.name == "nt":
+                popen_kwargs["creationflags"] = getattr(
+                    subprocess, "CREATE_NO_WINDOW", 0,
+                )
+            subprocess.Popen(command, **popen_kwargs)
         except OSError as error:
             raise VSCodeWorkspaceError("启动 VS Code 命令行失败：{}".format(error)) from error
 

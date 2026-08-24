@@ -13,6 +13,7 @@ from utils.ui_messages import (
     show_task_updated_confirmation,
     warn_no_task_selected,
 )
+from utils.window_focus import restore_window_focus
 
 
 class ShortcutOperations:
@@ -71,7 +72,9 @@ class ShortcutOperations:
         """Best-effort post-create integration with the active VS Code window."""
         service = self._w.data_manager._service_factory.get_vscode_workspace_service()
         try:
-            service.add_folder_to_workspace_if_enabled(shortcut_path)
+            result = service.add_folder_to_workspace_if_enabled(shortcut_path)
+            if result is not None:
+                restore_window_focus(self._w)
         except Exception as error:
             # The shortcut is already persisted; an external CLI failure must
             # not roll back the user's shortcut.
