@@ -457,8 +457,13 @@ class MainWindowTaskActionsMixin:
         except Exception as error:
             QMessageBox.warning(self, '\u5f3a\u5236\u5220\u9664\u5931\u8d25', str(error))
             return
-        self.load_shortcuts()
         if result.get('removed'):
+            # 强制删除不会经过普通快捷入口删除流程，因此这里也要清理引用。
+            # 否则工作区和功能分支虽然已删除，行程仍可能指向已移除的子类。
+            self.data_manager.delete_itinerary_by_task_ref(shortcut_id, 'shortcut')
+            self.data_manager.clear_itinerary_shortcut_bindings(shortcut_id)
+            self.load_shortcuts()
+            self.refresh_itinerary_after_task_deletion()
             self.status_bar.showMessage('\u667a\u80fd\u4f53\u5de5\u4f5c\u533a\u5df2\u5f3a\u5236\u5220\u9664', 4000)
 
     def show_agent_workspace_status(self, shortcut_id):

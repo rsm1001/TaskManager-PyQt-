@@ -308,6 +308,43 @@ def test_workspace_deletion_removes_merged_branch_worktree_and_shortcut(tmp_path
     connection.close()
 
 
+def test_workspace_deletion_removes_merged_branch_when_parent_checkout_differs_from_base(tmp_path):
+    repository = _make_repository(tmp_path)
+    _git(repository, 'checkout', '-b', 'release')
+    _git(repository, 'push', '-u', 'origin', 'release')
+    _git(repository, 'checkout', 'main')
+
+    connection = sqlite3.connect(':memory:')
+    manager = ShortcutManager(connection=connection)
+    assert manager.create('todo', 'Repository', str(repository))
+    parent = manager.get_all()[0]
+    service = GitWorktreeService(_DataManager(manager))
+    service.configure_repository(parent['id'], 'launch.py', base_ref='origin/release')
+    created = service.create_or_reuse_workspace(parent['id'], 'release feature')
+    workspace = manager.get_agent_workspace(created['id'])
+
+    (Path(workspace['worktree_path']) / 'feature.txt').write_text(
+        'feature\n', encoding='utf-8',
+    )
+    _git(workspace['worktree_path'], 'add', 'feature.txt')
+    _git(workspace['worktree_path'], 'commit', '-m', 'feature work')
+
+    # 合并到配置的基线分支后，再让父仓库停留在另一个分支。
+    # 这种情况下?``git branch -d`` 会拒绝清理。
+    _git(repository, 'checkout', 'release')
+    _git(repository, 'merge', '--no-ff', workspace['branch_name'], '-m', 'merge feature')
+    _git(repository, 'push', 'origin', 'release')
+    _git(repository, 'checkout', 'main')
+
+    service.remove_workspace(created['id'])
+
+    assert not os.path.exists(workspace['worktree_path'])
+    assert not _git(repository, 'branch', '--list', workspace['branch_name']).stdout.strip()
+    assert manager.get_agent_workspace(created['id']) is None
+    assert manager.get_by_id(created['id']) is None
+    connection.close()
+
+
 def test_force_workspace_deletion_discards_unmerged_and_dirty_workspace(tmp_path):
     repository = _make_repository(tmp_path)
     connection = sqlite3.connect(':memory:')
