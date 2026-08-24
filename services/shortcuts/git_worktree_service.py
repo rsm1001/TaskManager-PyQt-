@@ -666,7 +666,25 @@ class GitWorktreeService:
             self._git(profile["repository_root"], "worktree", "prune", check=False)
         else:
             self._git(profile["repository_root"], "worktree", "remove", path)
-        self._git(profile["repository_root"], "branch", "-d", branch_name)
+        # 前面的校验已确认功能分支属于配置的合并基线分支。这里使用
+        # ``-D`` 而不是 ``-d``，因为父仓库当前检出的分支可能不同（例如
+        # 配置的合并目标是 ``release``，但当前检出的是 ``main``）。
+        # 上面的祖先关系校验已经提供安全保障；如果使用 ``-d``，这种情况下
+        # 可能会把已经合并的子类功能分支遗留下来。
+        branch_result = self._git(
+            profile["repository_root"], "branch", "-D", branch_name, check=False,
+        )
+        if branch_result.returncode != 0:
+            branch_exists = self._git(
+                profile["repository_root"], "show-ref", "--verify", "--quiet",
+                "refs/heads/{}".format(branch_name), check=False,
+            ).returncode == 0
+            if branch_exists:
+                raise GitWorktreeError(
+                    "已合并的功能分支无法删除 '{}': {}".format(
+                        branch_name, branch_result.stdout.strip(),
+                    )
+                )
         if not self._shortcuts.remove_agent_workspace(shortcut_id):
             raise GitWorktreeError("Git 工作区已删除，但本地快捷入口记录删除失败。")
 
