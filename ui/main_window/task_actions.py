@@ -4,7 +4,10 @@ import logging
 import os
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QInputDialog, QMessageBox, QPushButton
+from PyQt6.QtWidgets import (
+    QCheckBox, QDialog, QDialogButtonBox, QHBoxLayout, QInputDialog, QLabel,
+    QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+)
 from PyQt6.QtGui import QCursor
 
 import config.config
@@ -140,6 +143,7 @@ class MainWindowTaskActionsMixin:
         reset_merge_instruction_action = None
         vscode_add_action = menu.addAction('加入 VS Code 工作区')
         vscode_remove_action = menu.addAction('移出 VS Code 工作区')
+        cleanup_branches_action = menu.addAction('\u6e05\u9664\u975e\u4e3b\u5206\u652f\uff08master/main\uff09')
         menu.addSeparator()
         if workspace:
             launch_workspace_action = menu.addAction('启动本地项目')
@@ -173,6 +177,9 @@ class MainWindowTaskActionsMixin:
             self.add_shortcut_to_vscode_workspace(shortcut_id)
         elif chosen is vscode_remove_action:
             self.remove_shortcut_from_vscode_workspace(shortcut_id)
+        elif chosen is cleanup_branches_action:
+            repository_shortcut_id = data.get('parent_id') or shortcut_id
+            self.cleanup_non_main_branches(repository_shortcut_id)
         elif chosen is configure_repo_action:
             self.configure_shortcut_repository(shortcut_id)
         elif chosen is pool_size_action:
@@ -207,6 +214,205 @@ class MainWindowTaskActionsMixin:
             self.edit_shortcut()
         elif chosen is delete_action:
             self.delete_shortcut()
+
+    def cleanup_non_main_branches(self, parent_shortcut_id):
+        """Select branches to delete, while showing and managing worktree use."""
+        if not parent_shortcut_id:
+            QMessageBox.warning(
+                self, '\u6e05\u7406\u5206\u652f\u5931\u8d25',
+                '\u65e0\u6cd5\u786e\u5b9a\u5bf9\u5e94\u7684\u4ed3\u5e93\u5feb\u6377\u5165\u53e3\u3002',
+            )
+            return
+        service = self._workspace_service()
+        try:
+            details = service.get_non_main_branches(parent_shortcut_id)
+        except Exception as error:
+            QMessageBox.warning(self, '\u6e05\u7406\u5206\u652f\u5931\u8d25', str(error))
+            return
+
+        branches = details.get('branches', [])
+        if not branches:
+            QMessageBox.information(
+                self, '\u65e0\u9700\u6e05\u7406',
+                '\u5f53\u524d\u4ed3\u5e93\u6ca1\u6709\u53ef\u6e05\u7406\u7684\u672c\u5730\u5206\u652f\u3002\n'
+                '\u4fdd\u7559\u5206\u652f\uff1a{}\u3002'.format(
+                    '\u3001'.join(details.get('protected_branches', ['main', 'master']))
+                ),
+            )
+            return
+
+        # Checked means "delete this branch". Keep the default checked so the
+        # action remains a one-click cleanup, while allowing individual
+        # branches to be unchecked to preserve them.
+        dialog = QDialog(self)
+        dialog.setWindowTitle('\u9009\u62e9\u8981\u5220\u9664\u7684\u5206\u652f')
+        dialog.setMinimumSize(820, 500)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel(
+            '\u8bf7\u52fe\u9009\u8981\u5220\u9664\u7684\u5206\u652f\uff08\u9ed8\u8ba4\u5168\u90e8\u52fe\u9009\uff09\uff1a'
+        ))
+        legend = QLabel(
+            '<span style="color:#d32f2f;font-weight:600">'
+            '\u7ea2\u8272\uff1a\u5206\u652f\u6709\u6b63\u5728\u8fd0\u884c\u7684\u5de5\u4f5c\u533a\u9879\u76ee</span>'
+            '\uff08\u53ef\u5728\u6b64\u5f3a\u5236\u505c\u6b62\uff09'
+        )
+        layout.addWidget(legend)
+
+        scroll = QScrollArea(dialog)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setToolTip('\u5c06\u9f20\u6807\u60ac\u6d6e\u5728\u5206\u652f\u4e0a\u53ef\u67e5\u770b\u5b8c\u6574\u5206\u652f\u540d\u79f0')
+        list_widget = QWidget()
+        list_layout = QVBoxLayout(list_widget)
+        list_layout.setContentsMargins(8, 8, 8, 8)
+        list_layout.setSpacing(4)
+        checkboxes = {}
+        branch_usage = details.get('branch_usage', {})
+
+        def force_stop_workspace(shortcut_id, button, branch):
+            answer = QMessageBox.question(
+                dialog,
+                '\u5f3a\u5236\u505c\u6b62\u5de5\u4f5c\u533a',
+                '\u8fd9\u4f1a\u7ed3\u675f\u8be5\u5206\u652f\u5bf9\u5e94\u7684\u5de5\u4f5c\u533a\u542f\u52a8\u811a\u672c\u53ca\u5176\u5b50\u8fdb\u7a0b\uff0c\u672a\u4fdd\u5b58\u6570\u636e\u53ef\u80fd\u4e22\u5931\u3002\n\n\u5206\u652f\uff1a{}\n\n\u786e\u5b9a\u7ee7\u7eed\u5417\uff1f'.format(branch),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                result = service.force_stop_workspace_project(shortcut_id)
+            except Exception as error:
+                QMessageBox.warning(dialog, '\u5f3a\u5236\u505c\u6b62\u5931\u8d25', str(error))
+                return
+            button.setEnabled(False)
+            button.setText('\u5df2\u505c\u6b62')
+            button.setToolTip('\u5df2\u505c\u6b62\uff1a{}'.format(branch))
+            for usage in branch_usage.get(branch, []):
+                if usage.get('shortcut_id') == shortcut_id:
+                    usage['runtime_state'] = 'stopped'
+            if not any(
+                usage.get('runtime_state') == 'running'
+                for usage in branch_usage.get(branch, [])
+            ):
+                checkboxes[branch].setStyleSheet('')
+            self.status_bar.showMessage(
+                '\u5df2\u5f3a\u5236\u505c\u6b62\u5206\u652f {} \u5bf9\u5e94\u7684\u5de5\u4f5c\u533a\uff08\u7ed3\u675f {} \u4e2a\u8fdb\u7a0b\uff09'.format(
+                    branch, result.get('terminated_processes', 0)
+                ),
+                5000,
+            )
+
+        for branch in branches:
+            row = QWidget(list_widget)
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            checkbox = QCheckBox(branch, row)
+            checkbox.setChecked(True)
+            checkbox.setToolTip(branch)
+            checkbox.setStatusTip(branch)
+            row.setToolTip(branch)
+            usage_entries = branch_usage.get(branch, [])
+            active_usage_entries = [
+                usage for usage in usage_entries
+                if usage.get('runtime_state') == 'running'
+            ]
+            if active_usage_entries:
+                checkbox.setStyleSheet('QCheckBox { color: #d32f2f; font-weight: 600; }')
+            if usage_entries:
+                usage_text = '\n'.join(
+                    '{}{}{}'.format(
+                        usage.get('worktree_path', ''),
+                        '\uFF08\u8FD0\u884C\u4E2D\uFF09' if usage.get('runtime_state') == 'running' else '',
+                        ' [\u5DE5\u4F5C\u533A]' if usage.get('is_agent_workspace') else ' [\u5F53\u524D\u68C0\u51FA]',
+                    )
+                    for usage in usage_entries
+                )
+                checkbox.setToolTip('{}\n\n\u4F7F\u7528\u4F4D\u7F6E\uff1a\n{}'.format(branch, usage_text))
+                row.setToolTip('{}\n\n\u4F7F\u7528\u4F4D\u7F6E\uff1a\n{}'.format(branch, usage_text))
+            row_layout.addWidget(checkbox, 1)
+            checkboxes[branch] = checkbox
+
+            for usage in usage_entries:
+                shortcut_id = usage.get('shortcut_id')
+                if not shortcut_id or not usage.get('is_agent_workspace'):
+                    continue
+                stop_button = QPushButton('\u5f3a\u5236\u505c\u6b62\u5de5\u4f5c\u533a', row)
+                stop_button.setEnabled(True)
+                stop_button.setToolTip('\u5f3a\u5236\u505c\u6b62\uff1a{}'.format(branch))
+                stop_button.clicked.connect(
+                    lambda _checked=False, sid=shortcut_id, button=stop_button, name=branch:
+                    force_stop_workspace(sid, button, name)
+                )
+                row_layout.addWidget(stop_button)
+            list_layout.addWidget(row)
+        list_layout.addStretch()
+        scroll.setWidget(list_widget)
+        layout.addWidget(scroll)
+
+        protected_text = '\u3001'.join(details.get('protected_branches', ['main', 'master']))
+        layout.addWidget(QLabel('\u59cb\u7ec8\u4fdd\u7559\uff1a{}'.format(protected_text)))
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        branches_to_delete = [
+            branch for branch in branches if checkboxes[branch].isChecked()
+        ]
+        if not branches_to_delete:
+            QMessageBox.information(
+                self, '\u672a\u9009\u62e9\u5220\u9664',
+                '\u6ca1\u6709\u52fe\u9009\u4efb\u4f55\u5206\u652f\uff0c\u672a\u6267\u884c\u5220\u9664\u3002',
+            )
+            return
+
+        branch_text = '\n'.join('  \u2022 {}'.format(branch) for branch in branches_to_delete)
+        second = QMessageBox.question(
+            self,
+            '\u518d\u6b21\u786e\u8ba4\uff1a\u4e0d\u53ef\u64a4\u9500',
+            '\u4ee5\u4e0b\u672c\u5730\u5206\u652f\u5c06\u88ab\u5220\u9664\uff08\u4e0d\u4f1a\u5220\u9664\u8fdc\u7a0b\u5206\u652f\uff09\uff1a\n\n{}'
+            '\n\n\u5206\u652f\u5220\u9664\u540e\u4e0d\u80fd\u901a\u8fc7\u672c\u5e94\u7528\u6062\u590d\uff0c\u786e\u5b9a\u7ee7\u7eed\u5417\uff1f'.format(
+                branch_text,
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if second != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            result = service.cleanup_non_main_branches(
+                parent_shortcut_id, branches=branches_to_delete,
+            )
+        except Exception as error:
+            QMessageBox.warning(self, '\u6e05\u7406\u5206\u652f\u5931\u8d25', str(error))
+            return
+
+        deleted = result.get('deleted', [])
+        skipped = result.get('skipped', [])
+        message = '\u5df2\u6e05\u7406 {} \u4e2a\u672c\u5730\u5206\u652f\u3002'.format(len(deleted))
+        if skipped:
+            skipped_text = '\n'.join(
+                '  \u2022 {}\uff1a{}'.format(
+                    entry.get('branch', ''), entry.get('reason', '\u672a\u5220\u9664')
+                )
+                for entry in skipped
+            )
+            QMessageBox.warning(
+                self,
+                '\u5206\u652f\u6e05\u7406\u5b8c\u6210\uff0c\u4f46\u6709\u5206\u652f\u8df3\u8fc7',
+                '{}\n\n\u4ee5\u4e0b\u5206\u652f\u672a\u5220\u9664\uff1a\n{}'.format(
+                    message, skipped_text
+                ),
+            )
+        else:
+            QMessageBox.information(self, '\u5206\u652f\u6e05\u7406\u5b8c\u6210', message)
+        self.status_bar.showMessage(message, 5000)
 
     def _shortcut_service(self):
         return self.data_manager._service_factory.get_shortcut_operation_service()

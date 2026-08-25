@@ -47,6 +47,49 @@ def _make_repository(tmp_path):
     return repository
 
 
+def test_cleanup_non_main_branches_preserves_main_master_and_checked_out_branch(tmp_path):
+    repository = _make_repository(tmp_path)
+    connection = sqlite3.connect(':memory:')
+    manager = ShortcutManager(connection=connection)
+    assert manager.create('todo', 'Repository', str(repository))
+    parent = manager.get_all()[0]
+    service = GitWorktreeService(_DataManager(manager))
+
+    _git(repository, 'branch', 'master')
+    _git(repository, 'branch', 'feature/remove-me')
+    _git(repository, 'branch', 'feature/managed-running')
+    _git(repository, 'checkout', '-b', 'feature/checked-out')
+    managed = manager.create_agent_workspace(
+        parent['id'], 'Running agent', str(tmp_path / 'missing-worktree'),
+        'feature/managed-running', 'main', 'running-agent',
+    )
+    manager.update_agent_workspace(managed['id'], runtime_state='running')
+
+    details = service.get_non_main_branches(parent['id'])
+    assert details['protected_branches'] == ['main', 'master']
+    assert details['branches'] == [
+        'feature/checked-out', 'feature/managed-running', 'feature/remove-me'
+    ]
+    assert details['checked_out'] == ['feature/checked-out', 'feature/managed-running']
+    assert details['branch_usage']['feature/checked-out'][0]['is_registered_worktree'] is True
+    assert details['branch_usage']['feature/managed-running'][0]['runtime_state'] == 'running'
+    assert details['branch_usage']['feature/managed-running'][0]['is_registered_worktree'] is False
+
+    result = service.cleanup_non_main_branches(parent['id'], branches=['feature/remove-me'])
+    assert result['deleted'] == ['feature/remove-me']
+    assert result['skipped'] == []
+    skipped_result = service.cleanup_non_main_branches(
+        parent['id'], branches=['feature/checked-out']
+    )
+    assert skipped_result['deleted'] == []
+    assert skipped_result['skipped'][0]['branch'] == 'feature/checked-out'
+    assert _git(repository, 'branch', '--list', 'main').stdout.strip()
+    assert _git(repository, 'branch', '--list', 'master').stdout.strip()
+    assert _git(repository, 'branch', '--list', 'feature/checked-out').stdout.strip()
+    assert not _git(repository, 'branch', '--list', 'feature/remove-me').stdout.strip()
+    connection.close()
+
+
 def test_agent_workspace_is_reused_after_verified_merge(tmp_path):
     repository = _make_repository(tmp_path)
     connection = sqlite3.connect(':memory:')

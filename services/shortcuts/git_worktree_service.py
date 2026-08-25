@@ -433,6 +433,159 @@ class GitWorktreeService:
         dirty = bool(self._git(path, "status", "--porcelain").stdout.strip())
         return dict(workspace, branch_name=branch or workspace.get("branch_name", ""), dirty=dirty)
 
+    @staticmethod
+    def _branch_name_from_ref(ref: str) -> str:
+        """Normalize a configured Git ref to its local branch name."""
+        ref = (ref or "").strip()
+        if ref.startswith("refs/heads/"):
+            return ref[len("refs/heads/"):]
+        if ref.startswith("refs/remotes/"):
+            ref = ref[len("refs/remotes/"):]
+        if "/" in ref and ref.split("/", 1)[0] in {"origin", "upstream"}:
+            return ref.split("/", 1)[1]
+        return ref
+
+    def get_non_main_branches(self, parent_shortcut_id: str) -> Dict[str, Any]:
+        """List local branches eligible for the cleanup action."""
+        parent = self._shortcuts.get_by_id(parent_shortcut_id)
+        if not parent:
+            raise GitWorktreeError("\u627e\u4e0d\u5230\u5bf9\u5e94\u7684\u5feb\u6377\u5165\u53e3\u3002")
+        profile = self._shortcuts.get_repository_profile(parent_shortcut_id) or {}
+        repository_root = profile.get("repository_root") or self.discover_repository(
+            parent.get("shortcut_path", "")
+        )
+        configured_base = self._branch_name_from_ref(profile.get("base_ref", ""))
+        protected = {"main", "master"}
+        if configured_base:
+            protected.add(configured_base)
+
+        branches_result = self._git(
+            repository_root, "for-each-ref", "--format=%(refname:short)",
+            "refs/heads/",
+        )
+        branches = [line.strip() for line in branches_result.stdout.splitlines() if line.strip()]
+
+        # A branch checked out in the primary checkout or a linked worktree
+        # cannot be deleted by Git. Parse worktree porcelain output once so
+        # the UI can explain why such branches were left untouched.
+        worktree_result = self._git(
+            repository_root, "worktree", "list", "--porcelain", check=False,
+        )
+        worktrees = []
+        current_worktree = {}
+        for line in worktree_result.stdout.splitlines() + [""]:
+            if not line.strip():
+                if current_worktree:
+                    worktrees.append(current_worktree)
+                    current_worktree = {}
+                continue
+            if line.startswith("worktree "):
+                current_worktree["worktree_path"] = line[len("worktree "):].strip()
+            elif line.startswith("branch refs/heads/"):
+                current_worktree["branch"] = line[len("branch refs/heads/"):].strip()
+
+        workspace_by_path = {}
+        workspace_by_branch = {}
+        for child in self._shortcuts.get_children(parent_shortcut_id):
+            workspace = self._shortcuts.get_agent_workspace(child.get("id"))
+            if not workspace or not workspace.get("branch_name"):
+                continue
+            metadata = {
+                "shortcut_id": workspace.get("shortcut_id", child.get("id")),
+                "branch": workspace["branch_name"],
+                "worktree_path": workspace.get("worktree_path", ""),
+                "runtime_state": workspace.get("runtime_state", "stopped"),
+                "feature_name": workspace.get("feature_name", ""),
+            }
+            normalized_path = os.path.normcase(
+                os.path.normpath(os.path.abspath(metadata["worktree_path"]))
+            ) if metadata["worktree_path"] else ""
+            if normalized_path:
+                workspace_by_path[normalized_path] = metadata
+            workspace_by_branch.setdefault(metadata["branch"], []).append(metadata)
+
+        branch_usage = {}
+        for worktree in worktrees:
+            branch = worktree.get("branch")
+            if not branch:
+                continue
+            normalized_path = os.path.normcase(
+                os.path.normpath(os.path.abspath(worktree.get("worktree_path", "")))
+            )
+            metadata = workspace_by_path.get(normalized_path)
+            if metadata is None:
+                matching = workspace_by_branch.get(branch, [])
+                metadata = matching[0] if matching else None
+            usage = dict(metadata or {})
+            usage.update({
+                "branch": branch,
+                "worktree_path": worktree.get("worktree_path", ""),
+                "is_agent_workspace": metadata is not None,
+                "is_registered_worktree": True,
+            })
+            branch_usage.setdefault(branch, []).append(usage)
+
+        # The runtime marker is authoritative for a project that was launched
+        # from this application.  A terminal/process can remain active even
+        # when Git's worktree registration is temporarily stale or the path
+        # was created by an older application version.  Keep those branches in
+        # the usage map as well, otherwise the UI loses the red warning and the
+        # force-stop button exactly when it is most useful.
+        for branch, metadata_entries in workspace_by_branch.items():
+            if branch in branch_usage:
+                continue
+            if not any(entry.get("runtime_state") == "running" for entry in metadata_entries):
+                continue
+            for metadata in metadata_entries:
+                usage = dict(metadata)
+                usage.update({
+                    "branch": branch,
+                    "is_agent_workspace": True,
+                    "is_registered_worktree": False,
+                })
+                branch_usage.setdefault(branch, []).append(usage)
+
+        candidates = [branch for branch in branches if branch not in protected]
+        checked_out = set(branch_usage)
+        return {
+            "repository_root": repository_root,
+            "protected_branches": sorted(protected),
+            "branches": candidates,
+            "checked_out": sorted(branch for branch in candidates if branch in checked_out),
+            "branch_usage": {
+                branch: branch_usage[branch] for branch in candidates if branch in branch_usage
+            },
+        }
+
+    def cleanup_non_main_branches(
+        self, parent_shortcut_id: str, branches: Optional[Sequence[str]] = None,
+    ) -> Dict[str, Any]:
+        """Delete eligible local branches other than ``main``/``master``."""
+        details = self.get_non_main_branches(parent_shortcut_id)
+        requested = set(branches) if branches is not None else set(details["branches"])
+        requested &= set(details["branches"])
+        checked_out = set(details["checked_out"])
+        deleted = []
+        skipped = []
+        for branch in details["branches"]:
+            if branch not in requested:
+                continue
+            if branch in checked_out:
+                skipped.append({
+                    "branch": branch,
+                    "reason": "\u5206\u652f\u5f53\u524d\u6b63\u88ab\u5de5\u4f5c\u533a\u4f7f\u7528",
+                })
+                continue
+            result = self._git(
+                details["repository_root"], "branch", "-D", branch, check=False,
+            )
+            if result.returncode == 0:
+                deleted.append(branch)
+            else:
+                reason = (result.stdout or result.stderr or "Git \u5220\u9664\u5931\u8d25").strip()
+                skipped.append({"branch": branch, "reason": reason})
+        return dict(details, deleted=deleted, skipped=skipped)
+
     def launch_workspace_project(self, shortcut_id: str) -> None:
         workspace = self._shortcuts.get_agent_workspace(shortcut_id)
         if not workspace:
