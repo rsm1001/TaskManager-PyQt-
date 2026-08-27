@@ -11,8 +11,11 @@ echo ===========================
 echo.
 
 if not exist "%~dp0.venv\Scripts\python.exe" (
-    echo Creating project virtual environment with py...
-    py -3 -m venv .venv
+    where py > nul 2>&1
+    if not errorlevel 1 (
+        echo Creating project virtual environment with py...
+        py -3 -m venv .venv
+    )
 )
 
 if not exist "%~dp0.venv\Scripts\python.exe" (
@@ -32,7 +35,10 @@ if errorlevel 1 (
 )
 
 echo Installing dependencies...
-"%~dp0.venv\Scripts\python.exe" -m pip install -r "%~dp0requirements.txt"
+rem Bypass an invalid Windows/user proxy only for this setlocal launch session.
+set "NO_PROXY=*"
+set "no_proxy=*"
+"%~dp0.venv\Scripts\python.exe" -m pip install --isolated -r "%~dp0requirements.txt"
 if errorlevel 1 (
     echo Dependency installation failed.
     exit /b 1

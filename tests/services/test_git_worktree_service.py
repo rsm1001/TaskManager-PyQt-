@@ -1,6 +1,7 @@
 """Integration tests for the reusable local Git worktree pool."""
 
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -202,6 +203,32 @@ def test_agent_workspace_is_reused_after_verified_merge(tmp_path):
     assert second['workspace_reused'] is True
     assert manager.get_agent_workspace(second['id'])['state'] == 'active'
     connection.close()
+
+
+def test_new_worktree_directory_uses_agent_number_repository_name_and_ddhhmmss(tmp_path):
+    repository = _make_repository(tmp_path)
+    connection = sqlite3.connect(':memory:')
+    manager = ShortcutManager(connection=connection)
+    assert manager.create('todo', 'Repository', str(repository))
+    parent = manager.get_all()[0]
+    service = GitWorktreeService(_DataManager(manager))
+
+    first = service.create_or_reuse_workspace(parent['id'], 'first feature')
+    second = service.create_or_reuse_workspace(parent['id'], 'second feature')
+    first_path = manager.get_agent_workspace(first['id'])['worktree_path']
+    second_path = manager.get_agent_workspace(second['id'])['worktree_path']
+
+    assert re.fullmatch(r'1-repository-\d{8}', os.path.basename(first_path))
+    assert re.fullmatch(r'2-repository-\d{8}', os.path.basename(second_path))
+    assert manager.get_by_id(first['id'])['title'] == '\U0001f916 \u5b50\u7c7b 1'
+    assert manager.get_by_id(second['id'])['title'] == '\U0001f916 \u5b50\u7c7b 2'
+    connection.close()
+
+
+def test_worktree_directory_name_cleans_windows_illegal_repository_characters():
+    path = GitWorktreeService._workspace_path(r'C:\projects\task:manager?demo', 7)
+
+    assert re.fullmatch(r'7-task-manager-demo-\d{8}', os.path.basename(path))
 
 
 def test_quick_workspace_creation_inherits_launcher_and_uses_sibling_directory(tmp_path):

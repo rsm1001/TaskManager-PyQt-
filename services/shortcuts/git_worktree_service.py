@@ -232,13 +232,21 @@ class GitWorktreeService:
         return ""
 
     @staticmethod
-    def _workspace_path(repository_root: str, branch_name: str) -> str:
-        """Place a worktree beside, never inside, its parent repository."""
+    def _clean_repository_name(repository_root: str) -> str:
+        """Make the parent repository directory name safe for Windows paths."""
         repo_name = os.path.basename(os.path.normpath(repository_root)) or "repository"
-        branch_leaf = branch_name.rsplit("/", 1)[-1]
+        cleaned = re.sub(r'[<>:"/\|?*\x00-\x1f]+', "-", repo_name).strip(". ")
+        return cleaned[:200] or "repository"
+
+    @classmethod
+    def _workspace_path(cls, repository_root: str, agent_number: int) -> str:
+        """Place a numbered worktree beside, never inside, its parent repository."""
+        timestamp = datetime.now().strftime("%d%H%M%S")
         return os.path.join(
             os.path.dirname(repository_root),
-            "{}--agent-{}".format(repo_name, branch_leaf),
+            "{}-{}-{}".format(
+                agent_number, cls._clean_repository_name(repository_root), timestamp,
+            ),
         )
 
     def _new_branch_name(self, feature_name: str) -> str:
@@ -388,11 +396,9 @@ class GitWorktreeService:
             )
         base_ref = self._sync_and_base_ref(profile)
         branch_name = self._new_branch_name(feature_name)
-        # Keep the tree readable. Timestamp/feature identifiers remain in the
-        # branch and worktree metadata, not in the visible shortcut title.
-        title = "🤖 子类 {}".format(
-            self._shortcuts.count_agent_workspaces(parent_shortcut_id) + 1
-        )
+        agent_number = self._shortcuts.count_agent_workspaces(parent_shortcut_id) + 1
+        # Keep the display title independent from the on-disk worktree name.
+        title = "\U0001f916 \u5b50\u7c7b {}".format(agent_number)
         idle_workspaces = self._shortcuts.get_idle_agent_workspaces(parent_shortcut_id)
         for workspace in idle_workspaces:
             path = workspace["worktree_path"]
@@ -412,7 +418,7 @@ class GitWorktreeService:
             result["workspace_reused"] = True
             return result
 
-        worktree_path = self._workspace_path(profile["repository_root"], branch_name)
+        worktree_path = self._workspace_path(profile["repository_root"], agent_number)
         self._git(profile["repository_root"], "worktree", "add", "-b", branch_name, worktree_path, base_ref)
         try:
             result = self._shortcuts.create_agent_workspace(
