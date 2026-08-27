@@ -465,6 +465,25 @@ class GitWorktreeService:
         )
         branches = [line.strip() for line in branches_result.stdout.splitlines() if line.strip()]
 
+        # Remote refs are intentionally read-only here.  They are surfaced to
+        # explain why `git branch -a` can show more names than this local-only
+        # cleanup action, but they are never deletion candidates.
+        remote_name = (profile.get("remote_name") or "origin").strip() or "origin"
+        remote_result = self._git(
+            repository_root, "for-each-ref", "--format=%(refname:short)",
+            "refs/remotes/{}/".format(remote_name), check=False,
+        )
+        remote_branches = []
+        remote_prefix = remote_name + "/"
+        for ref in remote_result.stdout.splitlines():
+            ref = ref.strip()
+            if not ref.startswith(remote_prefix):
+                continue
+            branch = ref[len(remote_prefix):]
+            if branch == "HEAD" or branch in protected:
+                continue
+            remote_branches.append(branch)
+
         # A branch checked out in the primary checkout or a linked worktree
         # cannot be deleted by Git. Parse worktree porcelain output once so
         # the UI can explain why such branches were left untouched.
@@ -522,6 +541,9 @@ class GitWorktreeService:
                 "worktree_path": worktree.get("worktree_path", ""),
                 "is_agent_workspace": metadata is not None,
                 "is_registered_worktree": True,
+                "is_primary_worktree": normalized_path == os.path.normcase(
+                    os.path.normpath(os.path.abspath(repository_root))
+                ),
             })
             branch_usage.setdefault(branch, []).append(usage)
 
@@ -545,46 +567,152 @@ class GitWorktreeService:
                 })
                 branch_usage.setdefault(branch, []).append(usage)
 
-        candidates = [branch for branch in branches if branch not in protected]
+        local_candidates = [branch for branch in branches if branch not in protected]
+        remote_candidates = sorted(set(remote_branches))
+        # Preserve local-branch ordering, then append remote-only names.  A
+        # single checkbox represents both refs when the same name exists in
+        # local and remote repositories.
+        candidates = local_candidates + [
+            branch for branch in remote_candidates if branch not in local_candidates
+        ]
         checked_out = set(branch_usage)
         return {
             "repository_root": repository_root,
+            "remote_name": remote_name,
             "protected_branches": sorted(protected),
             "branches": candidates,
-            "checked_out": sorted(branch for branch in candidates if branch in checked_out),
+            "local_non_main_branches": local_candidates,
+            "remote_non_main_branches": remote_candidates,
+            "checked_out": sorted(branch for branch in local_candidates if branch in checked_out),
             "branch_usage": {
-                branch: branch_usage[branch] for branch in candidates if branch in branch_usage
+                branch: branch_usage[branch] for branch in local_candidates if branch in branch_usage
             },
         }
 
     def cleanup_non_main_branches(
         self, parent_shortcut_id: str, branches: Optional[Sequence[str]] = None,
     ) -> Dict[str, Any]:
-        """Delete eligible local branches other than ``main``/``master``."""
+        """Delete selected non-main branches from both local and remote refs."""
         details = self.get_non_main_branches(parent_shortcut_id)
         requested = set(branches) if branches is not None else set(details["branches"])
         requested &= set(details["branches"])
+        local_branches = set(details["local_non_main_branches"])
+        remote_branches = set(details["remote_non_main_branches"])
         checked_out = set(details["checked_out"])
         deleted = []
+        deleted_remote = []
         skipped = []
         for branch in details["branches"]:
             if branch not in requested:
                 continue
-            if branch in checked_out:
+            local_exists = branch in local_branches
+            remote_exists = branch in remote_branches
+            if local_exists and branch in checked_out:
                 skipped.append({
                     "branch": branch,
-                    "reason": "\u5206\u652f\u5f53\u524d\u6b63\u88ab\u5de5\u4f5c\u533a\u4f7f\u7528",
+                    "reason": "\u5206\u652f\u5f53\u524d\u6b63\u88ab\u5de5\u4f5c\u533a\u4f7f\u7528\uff0c\u672a\u5220\u9664\u672c\u5730\u6216\u8fdc\u7a0b\u5206\u652f",
                 })
                 continue
-            result = self._git(
-                details["repository_root"], "branch", "-D", branch, check=False,
-            )
-            if result.returncode == 0:
+            if local_exists:
+                local_result = self._git(
+                    details["repository_root"], "branch", "-D", branch, check=False,
+                )
+                if local_result.returncode != 0:
+                    reason = (local_result.stdout or local_result.stderr or "Git \u672c\u5730\u5206\u652f\u5220\u9664\u5931\u8d25").strip()
+                    skipped.append({"branch": branch, "reason": reason})
+                    continue
                 deleted.append(branch)
-            else:
-                reason = (result.stdout or result.stderr or "Git \u5220\u9664\u5931\u8d25").strip()
-                skipped.append({"branch": branch, "reason": reason})
-        return dict(details, deleted=deleted, skipped=skipped)
+            if remote_exists:
+                remote_result = self._git(
+                    details["repository_root"], "push", details["remote_name"],
+                    "--delete", branch, check=False,
+                )
+                if remote_result.returncode == 0:
+                    deleted_remote.append(branch)
+                else:
+                    reason = (remote_result.stdout or remote_result.stderr or "Git \u8fdc\u7a0b\u5206\u652f\u5220\u9664\u5931\u8d25").strip()
+                    skipped.append({"branch": branch, "reason": reason})
+        return dict(
+            details, deleted=deleted, deleted_local=deleted,
+            deleted_remote=deleted_remote, skipped=skipped,
+        )
+
+    def release_non_main_branch_worktrees(
+        self, parent_shortcut_id: str, branch_name: str,
+    ) -> Dict[str, Any]:
+        """Remove linked worktrees that block later local branch deletion.
+
+        This is deliberately a two-step destructive flow: release the Git
+        worktree first, then let the existing branch-cleanup confirmation delete
+        the still-present local branch.  Remote refs are never touched.
+        """
+        branch_name = (branch_name or "").strip()
+        details = self.get_non_main_branches(parent_shortcut_id)
+        if branch_name not in details["branches"]:
+            raise GitWorktreeError("\u53ea\u80fd\u89e3\u9664\u975e\u4e3b\u5206\u652f\u7684\u5de5\u4f5c\u533a\u5360\u7528\u3002")
+
+        usages = details.get("branch_usage", {}).get(branch_name, [])
+        if any(usage.get("is_primary_worktree") for usage in usages):
+            raise GitWorktreeError(
+                "\u8be5\u5206\u652f\u6b63\u88ab\u4e3b\u4ed3\u5e93\u68c0\u51fa\uff1b\u8bf7\u5148\u5728\u4e3b\u4ed3\u5e93\u5207\u6362\u5230\u53d7\u4fdd\u62a4\u5206\u652f\u540e\u518d\u89e3\u9664\u3002"
+            )
+
+        # Stop only the project processes owned by managed workspaces.  Unknown
+        # Git worktrees have no reliable process ownership marker, but Git can
+        # still remove them with --force when no external process locks files.
+        terminated_processes = 0
+        managed_shortcut_ids = []
+        for usage in usages:
+            shortcut_id = usage.get("shortcut_id")
+            if not shortcut_id or shortcut_id in managed_shortcut_ids:
+                continue
+            workspace = self._shortcuts.get_agent_workspace(shortcut_id)
+            if not workspace:
+                continue
+            if workspace.get("runtime_state") == "running":
+                stopped = self.force_stop_workspace_project(shortcut_id)
+                terminated_processes += stopped.get("terminated_processes", 0)
+            managed_shortcut_ids.append(shortcut_id)
+
+        registered_usages = [
+            usage for usage in usages if usage.get("is_registered_worktree")
+        ]
+        released_worktrees = []
+        for usage in registered_usages:
+            worktree_path = usage.get("worktree_path", "")
+            result = self._git(
+                details["repository_root"], "worktree", "remove", "--force",
+                worktree_path, check=False,
+            )
+            if result.returncode != 0:
+                message = (result.stderr or result.stdout or "Git \u5de5\u4f5c\u533a\u5220\u9664\u5931\u8d25").strip()
+                raise GitWorktreeError(
+                    "\u65e0\u6cd5\u89e3\u9664\u5de5\u4f5c\u533a\u5360\u7528 '{}': {}".format(worktree_path, message)
+                )
+            released_worktrees.append(worktree_path)
+
+        released_paths = {
+            os.path.normcase(os.path.normpath(os.path.abspath(path)))
+            for path in released_worktrees
+        }
+        removed_shortcut_ids = []
+        for shortcut_id in managed_shortcut_ids:
+            workspace = self._shortcuts.get_agent_workspace(shortcut_id)
+            if not workspace:
+                continue
+            workspace_path = os.path.normcase(
+                os.path.normpath(os.path.abspath(workspace.get("worktree_path", "")))
+            )
+            if workspace_path in released_paths and self._shortcuts.remove_agent_workspace(shortcut_id):
+                removed_shortcut_ids.append(shortcut_id)
+
+        return {
+            "branch": branch_name,
+            "released_worktrees": released_worktrees,
+            "removed_shortcuts": len(removed_shortcut_ids),
+            "removed_shortcut_ids": removed_shortcut_ids,
+            "terminated_processes": terminated_processes,
+        }
 
     def launch_workspace_project(self, shortcut_id: str) -> None:
         workspace = self._shortcuts.get_agent_workspace(shortcut_id)

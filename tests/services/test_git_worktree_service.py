@@ -90,6 +90,91 @@ def test_cleanup_non_main_branches_preserves_main_master_and_checked_out_branch(
     connection.close()
 
 
+def test_releasing_branch_worktree_keeps_branch_for_follow_up_cleanup(tmp_path):
+    repository = _make_repository(tmp_path)
+    connection = sqlite3.connect(':memory:')
+    manager = ShortcutManager(connection=connection)
+    assert manager.create('todo', 'Repository', str(repository))
+    parent = manager.get_all()[0]
+    service = GitWorktreeService(_DataManager(manager))
+    service.configure_repository(parent['id'], 'launch.py')
+    created = service.create_or_reuse_workspace(parent['id'], 'discard branch')
+    workspace = manager.get_agent_workspace(created['id'])
+    worktree_path = Path(workspace['worktree_path'])
+    branch_name = workspace['branch_name']
+    (worktree_path / 'uncommitted.txt').write_text('discarded\n', encoding='utf-8')
+
+    details = service.get_non_main_branches(parent['id'])
+    usage = details['branch_usage'][branch_name][0]
+    assert usage['is_registered_worktree'] is True
+    assert usage['is_primary_worktree'] is False
+
+    result = service.release_non_main_branch_worktrees(parent['id'], branch_name)
+
+    assert result['branch'] == branch_name
+    assert [os.path.normcase(os.path.normpath(path)) for path in result['released_worktrees']] == [
+        os.path.normcase(os.path.normpath(str(worktree_path)))
+    ]
+    assert result['removed_shortcuts'] == 1
+    assert result['removed_shortcut_ids'] == [created['id']]
+    assert not worktree_path.exists()
+    assert _git(repository, 'branch', '--list', branch_name).stdout.strip()
+    assert manager.get_agent_workspace(created['id']) is None
+
+    details_after_release = service.get_non_main_branches(parent['id'])
+    assert branch_name in details_after_release['branches']
+    assert branch_name not in details_after_release['checked_out']
+    deleted = service.cleanup_non_main_branches(parent['id'], branches=[branch_name])
+    assert deleted['deleted'] == [branch_name]
+    assert not _git(repository, 'branch', '--list', branch_name).stdout.strip()
+    assert manager.get_by_id(created['id']) is None
+    connection.close()
+
+
+def test_releasing_branch_worktree_refuses_primary_checkout(tmp_path):
+    repository = _make_repository(tmp_path)
+    connection = sqlite3.connect(':memory:')
+    manager = ShortcutManager(connection=connection)
+    assert manager.create('todo', 'Repository', str(repository))
+    parent = manager.get_all()[0]
+    service = GitWorktreeService(_DataManager(manager))
+
+    _git(repository, 'checkout', '-b', 'feature/primary-checkout')
+
+    with pytest.raises(GitWorktreeError, match='\u4e3b\u4ed3\u5e93\u68c0\u51fa'):
+        service.release_non_main_branch_worktrees(parent['id'], 'feature/primary-checkout')
+
+    assert _git(repository, 'branch', '--show-current').stdout.strip() == 'feature/primary-checkout'
+    connection.close()
+
+
+def test_non_main_branch_cleanup_deletes_remote_only_refs(tmp_path):
+    repository = _make_repository(tmp_path)
+    connection = sqlite3.connect(':memory:')
+    manager = ShortcutManager(connection=connection)
+    assert manager.create('todo', 'Repository', str(repository))
+    parent = manager.get_all()[0]
+    service = GitWorktreeService(_DataManager(manager))
+
+    _git(repository, 'push', 'origin', 'main:feature/remote-only')
+    details = service.get_non_main_branches(parent['id'])
+
+    assert details['branches'] == ['feature/remote-only']
+    assert details['local_non_main_branches'] == []
+    assert details['remote_non_main_branches'] == ['feature/remote-only']
+
+    result = service.cleanup_non_main_branches(
+        parent['id'], branches=['feature/remote-only']
+    )
+    assert result['deleted_local'] == []
+    assert result['deleted_remote'] == ['feature/remote-only']
+    assert not subprocess.run(
+        ['git', 'ls-remote', '--heads', 'origin', 'feature/remote-only'],
+        cwd=repository, text=True, capture_output=True, check=True,
+    ).stdout.strip()
+    connection.close()
+
+
 def test_agent_workspace_is_reused_after_verified_merge(tmp_path):
     repository = _make_repository(tmp_path)
     connection = sqlite3.connect(':memory:')

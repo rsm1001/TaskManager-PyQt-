@@ -3,10 +3,10 @@
 import logging
 import os
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import (
     QCheckBox, QDialog, QDialogButtonBox, QHBoxLayout, QInputDialog, QLabel,
-    QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QMessageBox, QProgressDialog, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 from PyQt6.QtGui import QCursor
 
@@ -14,6 +14,59 @@ import config.config
 from utils.ui_messages import warn_no_task_selected
 
 logger = logging.getLogger(__name__)
+
+
+class _GitOperationWorker(QObject):
+    """Run blocking Git and process operations outside the GUI thread."""
+
+    succeeded = pyqtSignal(object)
+    failed = pyqtSignal(str)
+    finished = pyqtSignal()
+
+    def __init__(self, operation):
+        super().__init__()
+        self._operation = operation
+
+    @pyqtSlot()
+    def run(self):
+        try:
+            self.succeeded.emit(self._operation())
+        except Exception as error:
+            logger.exception('Git operation failed')
+            self.failed.emit(str(error))
+        finally:
+            self.finished.emit()
+
+
+class _GitOperationCallbacks(QObject):
+    """Receive worker signals in the GUI thread and update Qt widgets safely."""
+
+    def __init__(self, owner, progress, failure_title, on_success, on_failure):
+        super().__init__(owner)
+        self._owner = owner
+        self._progress = progress
+        self._failure_title = failure_title
+        self._on_success = on_success
+        self._on_failure = on_failure
+
+    @pyqtSlot(object)
+    def handle_success(self, result):
+        self._progress.close()
+        self._on_success(result)
+
+    @pyqtSlot(str)
+    def handle_failure(self, message):
+        self._progress.close()
+        QMessageBox.warning(self._owner, self._failure_title, message)
+        if self._on_failure:
+            self._on_failure()
+
+    @pyqtSlot()
+    def handle_thread_finished(self):
+        if getattr(self._owner, '_git_operation_callbacks', None) is self:
+            self._owner._git_operation_thread = None
+            self._owner._git_operation_worker = None
+            self._owner._git_operation_callbacks = None
 
 
 class MainWindowTaskActionsMixin:
@@ -215,6 +268,46 @@ class MainWindowTaskActionsMixin:
         elif chosen is delete_action:
             self.delete_shortcut()
 
+    def _run_git_operation_in_background(
+        self, operation, progress_text, failure_title, on_success, on_failure=None,
+    ):
+        """Keep long-running Git/network work from blocking the main window."""
+        if getattr(self, '_git_operation_thread', None) is not None:
+            QMessageBox.information(
+                self, '\u6b63\u5728\u5904\u7406',
+                '\u5f53\u524d\u6709\u4e00\u4e2a Git \u64cd\u4f5c\u6b63\u5728\u8fdb\u884c\uff0c\u8bf7\u7b49\u5f85\u5b8c\u6210\u3002',
+            )
+            return False
+
+        progress = QProgressDialog(progress_text, None, 0, 0, self)
+        progress.setWindowTitle('Git')
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setCancelButton(None)
+        progress.setAutoClose(False)
+        progress.setMinimumDuration(0)
+        progress.setMinimumWidth(420)
+        progress.show()
+
+        thread = QThread(self)
+        worker = _GitOperationWorker(operation)
+        callbacks = _GitOperationCallbacks(
+            self, progress, failure_title, on_success, on_failure,
+        )
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.succeeded.connect(callbacks.handle_success)
+        worker.failed.connect(callbacks.handle_failure)
+        worker.finished.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(callbacks.handle_thread_finished)
+        thread.finished.connect(thread.deleteLater)
+
+        self._git_operation_thread = thread
+        self._git_operation_worker = worker
+        self._git_operation_callbacks = callbacks
+        thread.start()
+        return True
+
     def cleanup_non_main_branches(self, parent_shortcut_id):
         """Select branches to delete, while showing and managing worktree use."""
         if not parent_shortcut_id:
@@ -234,7 +327,7 @@ class MainWindowTaskActionsMixin:
         if not branches:
             QMessageBox.information(
                 self, '\u65e0\u9700\u6e05\u7406',
-                '\u5f53\u524d\u4ed3\u5e93\u6ca1\u6709\u53ef\u6e05\u7406\u7684\u672c\u5730\u5206\u652f\u3002\n'
+                '\u5f53\u524d\u4ed3\u5e93\u6ca1\u6709\u53ef\u6e05\u7406\u7684\u672c\u5730\u6216\u8fdc\u7a0b\u5206\u652f\u3002\n'
                 '\u4fdd\u7559\u5206\u652f\uff1a{}\u3002'.format(
                     '\u3001'.join(details.get('protected_branches', ['main', 'master']))
                 ),
@@ -249,14 +342,23 @@ class MainWindowTaskActionsMixin:
         dialog.setMinimumSize(820, 500)
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel(
-            '\u8bf7\u52fe\u9009\u8981\u5220\u9664\u7684\u5206\u652f\uff08\u9ed8\u8ba4\u5168\u90e8\u52fe\u9009\uff09\uff1a'
+            '\u8bf7\u52fe\u9009\u8981\u5220\u9664\u7684\u672c\u5730\u548c\u8fdc\u7a0b\u5206\u652f\uff08\u9ed8\u8ba4\u5168\u90e8\u52fe\u9009\uff09\uff1a'
         ))
         legend = QLabel(
             '<span style="color:#d32f2f;font-weight:600">'
-            '\u7ea2\u8272\uff1a\u5206\u652f\u6709\u6b63\u5728\u8fd0\u884c\u7684\u5de5\u4f5c\u533a\u9879\u76ee</span>'
-            '\uff08\u53ef\u5728\u6b64\u5f3a\u5236\u505c\u6b62\uff09'
+            '\u7ea2\u8272\uff1a\u5206\u652f\u6b63\u88ab Git \u5de5\u4f5c\u533a\u5360\u7528\uff0c\u65e0\u6cd5\u76f4\u63a5\u5220\u9664</span>'
+            '\uff08\u53ef\u4f7f\u7528\u201c\u89e3\u9664\u5de5\u4f5c\u533a\u5360\u7528\u201d\u540e\uff0c\u518d\u5728\u6700\u540e\u786e\u8ba4\u65f6\u5220\u9664\u672c\u5730\u5206\u652f\uff09'
         )
         layout.addWidget(legend)
+        remote_branches = details.get('remote_non_main_branches', [])
+        if remote_branches:
+            remote_info = QLabel(
+                '\u68c0\u6d4b\u5230 {} \u4e2a\u8fdc\u7a0b\u975e\u4e3b\u5206\u652f\uff1b\u52fe\u9009\u540e\u5c06\u4e0e\u540c\u540d\u672c\u5730\u5206\u652f\u4e00\u8d77\u5220\u9664\u3002'.format(
+                    len(remote_branches)
+                )
+            )
+            remote_info.setToolTip('\n'.join(remote_branches))
+            layout.addWidget(remote_info)
 
         scroll = QScrollArea(dialog)
         scroll.setWidgetResizable(True)
@@ -269,38 +371,55 @@ class MainWindowTaskActionsMixin:
         checkboxes = {}
         branch_usage = details.get('branch_usage', {})
 
-        def force_stop_workspace(shortcut_id, button, branch):
+        def release_worktree_occupancy(branch, button, checkbox, row):
             answer = QMessageBox.question(
                 dialog,
-                '\u5f3a\u5236\u505c\u6b62\u5de5\u4f5c\u533a',
-                '\u8fd9\u4f1a\u7ed3\u675f\u8be5\u5206\u652f\u5bf9\u5e94\u7684\u5de5\u4f5c\u533a\u542f\u52a8\u811a\u672c\u53ca\u5176\u5b50\u8fdb\u7a0b\uff0c\u672a\u4fdd\u5b58\u6570\u636e\u53ef\u80fd\u4e22\u5931\u3002\n\n\u5206\u652f\uff1a{}\n\n\u786e\u5b9a\u7ee7\u7eed\u5417\uff1f'.format(branch),
+                '\u89e3\u9664\u5de5\u4f5c\u533a\u5360\u7528',
+                '\u8fd9\u4f1a\u5f3a\u5236\u505c\u6b62\u7531\u672c\u5e94\u7528\u542f\u52a8\u7684\u9879\u76ee\uff0c\u5e76\u79fb\u9664\u8be5\u5206\u652f\u5bf9\u5e94\u7684 Git \u5de5\u4f5c\u533a\u76ee\u5f55\u3002\n\n'
+                '\u672a\u5408\u5e76\u7684\u63d0\u4ea4\u548c\u672a\u63d0\u4ea4\u6587\u4ef6\u4f1a\u4e22\u5931\uff0c\u4f46\u672c\u5730\u5206\u652f\u4f1a\u4fdd\u7559\uff0c\u9700\u5728\u7a97\u53e3\u6700\u540e\u786e\u8ba4\u65f6\u518d\u5220\u9664\u3002\n\n\u5206\u652f\uff1a{}\n\n\u786e\u5b9a\u7ee7\u7eed\u5417\uff1f'.format(branch),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
             if answer != QMessageBox.StandardButton.Yes:
                 return
-            try:
-                result = service.force_stop_workspace_project(shortcut_id)
-            except Exception as error:
-                QMessageBox.warning(dialog, '\u5f3a\u5236\u505c\u6b62\u5931\u8d25', str(error))
-                return
+            def apply_release_result(result):
+                button.setText('\u5df2\u89e3\u9664\u5360\u7528')
+                button.setToolTip('\u5df2\u89e3\u9664\u5360\u7528\uff1a{}'.format(branch))
+                checkbox.setChecked(True)
+                checkbox.setEnabled(True)
+                checkbox.setStyleSheet('')
+                row.setToolTip('\u5df2\u89e3\u9664\u5360\u7528\uff1a{}\n\n\u5206\u652f\u4ecd\u5df2\u52fe\u9009\uff0c\u8bf7\u70b9\u51fb\u201c\u786e\u5b9a\u201d\u5728\u6700\u540e\u786e\u8ba4\u540e\u5220\u9664\u5b83\u3002'.format(branch))
+                branch_usage.pop(branch, None)
+                removed_shortcut_ids = result.get('removed_shortcut_ids', [])
+                for removed_shortcut_id in removed_shortcut_ids:
+                    self.data_manager.delete_itinerary_by_task_ref(
+                        removed_shortcut_id, 'shortcut',
+                    )
+                    self.data_manager.clear_itinerary_shortcut_bindings(removed_shortcut_id)
+                if removed_shortcut_ids:
+                    self.load_shortcuts()
+                    self.refresh_itinerary_after_task_deletion()
+                self.status_bar.showMessage(
+                    '\u5df2\u89e3\u9664\u5206\u652f {} \u7684\u5de5\u4f5c\u533a\u5360\u7528\uff08\u79fb\u9664 {} \u4e2a\u5de5\u4f5c\u533a\uff0c\u7ed3\u675f {} \u4e2a\u8fdb\u7a0b\uff09\uff1b\u8bf7\u5728\u6700\u540e\u786e\u8ba4\u65f6\u5220\u9664\u672c\u5730\u5206\u652f\u3002'.format(
+                        branch,
+                        len(result.get('released_worktrees', [])),
+                        result.get('terminated_processes', 0),
+                    ),
+                    5000,
+                )
+
             button.setEnabled(False)
-            button.setText('\u5df2\u505c\u6b62')
-            button.setToolTip('\u5df2\u505c\u6b62\uff1a{}'.format(branch))
-            for usage in branch_usage.get(branch, []):
-                if usage.get('shortcut_id') == shortcut_id:
-                    usage['runtime_state'] = 'stopped'
-            if not any(
-                usage.get('runtime_state') == 'running'
-                for usage in branch_usage.get(branch, [])
-            ):
-                checkboxes[branch].setStyleSheet('')
-            self.status_bar.showMessage(
-                '\u5df2\u5f3a\u5236\u505c\u6b62\u5206\u652f {} \u5bf9\u5e94\u7684\u5de5\u4f5c\u533a\uff08\u7ed3\u675f {} \u4e2a\u8fdb\u7a0b\uff09'.format(
-                    branch, result.get('terminated_processes', 0)
+            started = self._run_git_operation_in_background(
+                lambda: service.release_non_main_branch_worktrees(
+                    parent_shortcut_id, branch,
                 ),
-                5000,
+                '\u6b63\u5728\u89e3\u9664\u5de5\u4f5c\u533a\u5360\u7528\uff0c\u8bf7\u7a0d\u5019\u2026',
+                '\u89e3\u9664\u5360\u7528\u5931\u8d25',
+                apply_release_result,
+                lambda: button.setEnabled(True),
             )
+            if not started:
+                button.setEnabled(True)
 
         for branch in branches:
             row = QWidget(list_widget)
@@ -312,11 +431,18 @@ class MainWindowTaskActionsMixin:
             checkbox.setStatusTip(branch)
             row.setToolTip(branch)
             usage_entries = branch_usage.get(branch, [])
-            active_usage_entries = [
-                usage for usage in usage_entries
-                if usage.get('runtime_state') == 'running'
-            ]
-            if active_usage_entries:
+            local_branches = set(details.get('local_non_main_branches', []))
+            remote_branch_names = set(details.get('remote_non_main_branches', []))
+            ref_locations = []
+            if branch in local_branches:
+                ref_locations.append('\u672c\u5730\u5206\u652f')
+            if branch in remote_branch_names:
+                ref_locations.append('\u8fdc\u7a0b\u5206\u652f ({})'.format(details.get('remote_name', 'origin')))
+            ref_text = '\u3001'.join(ref_locations)
+            checkbox.setToolTip('{}\n\n{}'.format(branch, ref_text))
+            row.setToolTip('{}\n\n{}'.format(branch, ref_text))
+            # Any primary checkout or linked worktree blocks Git branch deletion.
+            if usage_entries:
                 checkbox.setStyleSheet('QCheckBox { color: #d32f2f; font-weight: 600; }')
             if usage_entries:
                 usage_text = '\n'.join(
@@ -332,18 +458,22 @@ class MainWindowTaskActionsMixin:
             row_layout.addWidget(checkbox, 1)
             checkboxes[branch] = checkbox
 
-            for usage in usage_entries:
-                shortcut_id = usage.get('shortcut_id')
-                if not shortcut_id or not usage.get('is_agent_workspace'):
-                    continue
-                stop_button = QPushButton('\u5f3a\u5236\u505c\u6b62\u5de5\u4f5c\u533a', row)
-                stop_button.setEnabled(True)
-                stop_button.setToolTip('\u5f3a\u5236\u505c\u6b62\uff1a{}'.format(branch))
-                stop_button.clicked.connect(
-                    lambda _checked=False, sid=shortcut_id, button=stop_button, name=branch:
-                    force_stop_workspace(sid, button, name)
+            removable_usage = next(
+                (
+                    usage for usage in usage_entries
+                    if usage.get('is_registered_worktree')
+                    and not usage.get('is_primary_worktree')
+                ),
+                None,
+            )
+            if removable_usage is not None:
+                cleanup_button = QPushButton('\u89e3\u9664\u5de5\u4f5c\u533a\u5360\u7528', row)
+                cleanup_button.setToolTip('\u79fb\u9664 Git \u5de5\u4f5c\u533a\uff0c\u4fdd\u7559\u5206\u652f\u4f9b\u6700\u540e\u786e\u8ba4\u5220\u9664\uff1a{}'.format(branch))
+                cleanup_button.clicked.connect(
+                    lambda _checked=False, button=cleanup_button, box=checkbox, item=row, name=branch:
+                    release_worktree_occupancy(name, button, box, item)
                 )
-                row_layout.addWidget(stop_button)
+                row_layout.addWidget(cleanup_button)
             list_layout.addWidget(row)
         list_layout.addStretch()
         scroll.setWidget(list_widget)
@@ -375,8 +505,9 @@ class MainWindowTaskActionsMixin:
         second = QMessageBox.question(
             self,
             '\u518d\u6b21\u786e\u8ba4\uff1a\u4e0d\u53ef\u64a4\u9500',
-            '\u4ee5\u4e0b\u672c\u5730\u5206\u652f\u5c06\u88ab\u5220\u9664\uff08\u4e0d\u4f1a\u5220\u9664\u8fdc\u7a0b\u5206\u652f\uff09\uff1a\n\n{}'
-            '\n\n\u5206\u652f\u5220\u9664\u540e\u4e0d\u80fd\u901a\u8fc7\u672c\u5e94\u7528\u6062\u590d\uff0c\u786e\u5b9a\u7ee7\u7eed\u5417\uff1f'.format(
+            '\u4ee5\u4e0b\u5206\u652f\u5c06\u4ece\u672c\u5730\u4ed3\u5e93\u53ca\u8fdc\u7a0b {} \u4e2d\u5220\u9664\uff1a\n\n{}'
+            '\n\n\u8fdc\u7a0b\u5206\u652f\u5220\u9664\u540e\u4e0d\u53ef\u6062\u590d\uff0c\u786e\u5b9a\u7ee7\u7eed\u5417\uff1f'.format(
+                details.get('remote_name', 'origin'),
                 branch_text,
             ),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -385,34 +516,39 @@ class MainWindowTaskActionsMixin:
         if second != QMessageBox.StandardButton.Yes:
             return
 
-        try:
-            result = service.cleanup_non_main_branches(
-                parent_shortcut_id, branches=branches_to_delete,
+        def show_cleanup_result(result):
+            deleted = result.get('deleted_local', result.get('deleted', []))
+            deleted_remote = result.get('deleted_remote', [])
+            skipped = result.get('skipped', [])
+            message = '\u5df2\u6e05\u7406 {} \u4e2a\u672c\u5730\u5206\u652f\u3001{} \u4e2a\u8fdc\u7a0b\u5206\u652f\u3002'.format(
+                len(deleted), len(deleted_remote)
             )
-        except Exception as error:
-            QMessageBox.warning(self, '\u6e05\u7406\u5206\u652f\u5931\u8d25', str(error))
-            return
-
-        deleted = result.get('deleted', [])
-        skipped = result.get('skipped', [])
-        message = '\u5df2\u6e05\u7406 {} \u4e2a\u672c\u5730\u5206\u652f\u3002'.format(len(deleted))
-        if skipped:
-            skipped_text = '\n'.join(
-                '  \u2022 {}\uff1a{}'.format(
-                    entry.get('branch', ''), entry.get('reason', '\u672a\u5220\u9664')
+            if skipped:
+                skipped_text = '\n'.join(
+                    '  \u2022 {}\uff1a{}'.format(
+                        entry.get('branch', ''), entry.get('reason', '\u672a\u5220\u9664')
+                    )
+                    for entry in skipped
                 )
-                for entry in skipped
-            )
-            QMessageBox.warning(
-                self,
-                '\u5206\u652f\u6e05\u7406\u5b8c\u6210\uff0c\u4f46\u6709\u5206\u652f\u8df3\u8fc7',
-                '{}\n\n\u4ee5\u4e0b\u5206\u652f\u672a\u5220\u9664\uff1a\n{}'.format(
-                    message, skipped_text
-                ),
-            )
-        else:
-            QMessageBox.information(self, '\u5206\u652f\u6e05\u7406\u5b8c\u6210', message)
-        self.status_bar.showMessage(message, 5000)
+                QMessageBox.warning(
+                    self,
+                    '\u5206\u652f\u6e05\u7406\u5b8c\u6210\uff0c\u4f46\u6709\u5206\u652f\u8df3\u8fc7',
+                    '{}\n\n\u4ee5\u4e0b\u5206\u652f\u672a\u5220\u9664\uff1a\n{}'.format(
+                        message, skipped_text
+                    ),
+                )
+            else:
+                QMessageBox.information(self, '\u5206\u652f\u6e05\u7406\u5b8c\u6210', message)
+            self.status_bar.showMessage(message, 5000)
+
+        self._run_git_operation_in_background(
+            lambda: service.cleanup_non_main_branches(
+                parent_shortcut_id, branches=branches_to_delete,
+            ),
+            '\u6b63\u5728\u5220\u9664\u672c\u5730\u4e0e\u8fdc\u7a0b\u5206\u652f\uff0c\u8bf7\u7a0d\u5019\u2026',
+            '\u6e05\u7406\u5206\u652f\u5931\u8d25',
+            show_cleanup_result,
+        )
 
     def _shortcut_service(self):
         return self.data_manager._service_factory.get_shortcut_operation_service()
