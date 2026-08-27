@@ -644,28 +644,34 @@ class MainWindowTaskActionsMixin:
         return True
 
     def create_agent_workspace(self, parent_shortcut_id):
-        """Create a ready-to-run child worktree without asking for any input."""
+        """Create a child worktree without freezing the Qt GUI thread."""
         service = self._workspace_service()
-        try:
-            workspace = service.create_or_reuse_workspace(parent_shortcut_id)
-        except Exception as error:
-            QMessageBox.warning(self, '创建工作区失败', str(error))
-            return
-        try:
-            result = self._vscode_workspace_service().add_folder_to_workspace_if_enabled(
-                workspace.get('worktree_path', ''),
-            )
-            if result is not None:
-                restore_window_focus(self)
-        except Exception as error:
-            QMessageBox.warning(
-                self,
-                '加入 VS Code 工作区失败',
-                '工作区已创建，但未能加入当前 VS Code 工作区：\n{}'.format(error),
-            )
-        self.load_shortcuts()
-        action = '已复用空闲工作区' if workspace.get('workspace_reused') else '已创建新工作区'
-        self.status_bar.showMessage(action, 5000)
+
+        def finish_creation(workspace):
+            # All widget work remains in the GUI thread. The actual Git fetch,
+            # status checks and worktree creation completed in the worker thread.
+            try:
+                result = self._vscode_workspace_service().add_folder_to_workspace_if_enabled(
+                    workspace.get('worktree_path', ''),
+                )
+                if result is not None:
+                    restore_window_focus(self)
+            except Exception as error:
+                QMessageBox.warning(
+                    self,
+                    '加入 VS Code 工作区失败',
+                    '工作区已创建，但未能加入当前 VS Code 工作区：\n{}'.format(error),
+                )
+            self.load_shortcuts()
+            action = '已复用空闲工作区' if workspace.get('workspace_reused') else '已创建新工作区'
+            self.status_bar.showMessage(action, 5000)
+
+        self._run_git_operation_in_background(
+            lambda: service.create_or_reuse_workspace(parent_shortcut_id),
+            '正在创建智能体子类工作区，请稍候…',
+            '创建工作区失败',
+            finish_creation,
+        )
 
     def set_agent_workspace_pool_size(self):
         service = self._workspace_service()
