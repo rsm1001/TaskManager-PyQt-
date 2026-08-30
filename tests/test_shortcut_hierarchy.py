@@ -83,6 +83,20 @@ def test_tree_widget_starts_expanded_and_keeps_child_items():
     app.processEvents()
 
 
+def test_force_delete_workspace_lock_error_shows_recovery_steps_without_paths():
+    raw_message = (
+        "Unable to delete workspace directory after stopping its project. "
+        "A process may still be using 'C:\\private\\workspace\\.venv\\Lib\\site-packages\\charset_normalizer\\cd.pyd'."
+    )
+
+    message = MainWindowTaskActionsMixin._format_force_delete_workspace_failure(raw_message)
+
+    assert '\u5173\u95ed\u8be5\u5de5\u4f5c\u533a\u7684\u7ec8\u7aef' in message
+    assert '\u7ba1\u7406\u5458\u8eab\u4efd\u91cd\u65b0\u6253\u5f00\u672c\u7a0b\u5e8f' in message
+    assert 'C:\\private' not in message
+    assert 'cd.pyd' not in message
+
+
 def test_workspace_name_uses_workspace_launcher_instead_of_opening_its_directory(monkeypatch):
     app = QApplication.instance() or QApplication([])
     tree = DraggableShortcutTree()

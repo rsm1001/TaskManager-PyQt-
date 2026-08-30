@@ -42,13 +42,17 @@ class _GitOperationWorker(QObject):
 class _GitOperationCallbacks(QObject):
     """Receive worker signals in the GUI thread and update Qt widgets safely."""
 
-    def __init__(self, owner, progress, failure_title, on_success, on_failure):
+    def __init__(
+        self, owner, progress, failure_title, on_success, on_failure,
+        failure_message_formatter=None,
+    ):
         super().__init__(owner)
         self._owner = owner
         self._progress = progress
         self._failure_title = failure_title
         self._on_success = on_success
         self._on_failure = on_failure
+        self._failure_message_formatter = failure_message_formatter
 
     @pyqtSlot(object)
     def handle_success(self, result):
@@ -58,7 +62,15 @@ class _GitOperationCallbacks(QObject):
     @pyqtSlot(str)
     def handle_failure(self, message):
         self._progress.close()
-        QMessageBox.warning(self._owner, self._failure_title, message)
+        display_message = message
+        if self._failure_message_formatter:
+            try:
+                display_message = self._failure_message_formatter(message)
+            except Exception:
+                # Never hide the original failure because formatting the user
+                # guidance itself failed.
+                logger.exception('Could not format Git operation failure message')
+        QMessageBox.warning(self._owner, self._failure_title, display_message)
         if self._on_failure:
             self._on_failure()
 
@@ -195,6 +207,7 @@ class MainWindowTaskActionsMixin:
         merge_provider_action = None
         merge_instruction_action = None
         reset_merge_instruction_action = None
+        proxy_pool_action = None
         vscode_add_action = menu.addAction('加入 VS Code 工作区')
         vscode_remove_action = menu.addAction('移出 VS Code 工作区')
         cleanup_branches_action = menu.addAction('\u6e05\u9664\u975e\u4e3b\u5206\u652f\uff08master/main\uff09')
@@ -220,6 +233,7 @@ class MainWindowTaskActionsMixin:
             merge_provider_action = menu.addAction('设置合并智能体（Codex / Claude Code）')
             merge_instruction_action = menu.addAction('编辑合并指令')
             reset_merge_instruction_action = menu.addAction('恢复默认合并指令')
+            proxy_pool_action = menu.addAction('Configure Git proxy pool')
             menu.addSeparator()
         else:
             add_child_action = menu.addAction('新增普通子快捷入口')
@@ -262,6 +276,8 @@ class MainWindowTaskActionsMixin:
             self.edit_agent_workspace_merge_instruction()
         elif chosen is reset_merge_instruction_action:
             self.reset_agent_workspace_merge_instruction()
+        elif chosen is proxy_pool_action:
+            self.configure_git_proxy_pool()
         elif chosen is add_child_action:
             self.add_child_shortcut()
         elif chosen is edit_action:
@@ -271,6 +287,7 @@ class MainWindowTaskActionsMixin:
 
     def _run_git_operation_in_background(
         self, operation, progress_text, failure_title, on_success, on_failure=None,
+        failure_message_formatter=None,
     ):
         """Keep long-running Git/network work from blocking the main window."""
         if getattr(self, '_git_operation_thread', None) is not None:
@@ -293,6 +310,7 @@ class MainWindowTaskActionsMixin:
         worker = _GitOperationWorker(operation)
         callbacks = _GitOperationCallbacks(
             self, progress, failure_title, on_success, on_failure,
+            failure_message_formatter,
         )
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
@@ -643,6 +661,32 @@ class MainWindowTaskActionsMixin:
         self.status_bar.showMessage('智能体仓库配置已保存', 3000)
         return True
 
+    def configure_git_proxy_pool(self):
+        """Save the Hysteria 2 subscription used only after a direct fetch fails."""
+        service = self._workspace_service()
+        subscription, accepted = QInputDialog.getText(
+            self, 'Configure Git proxy pool',
+            'Hysteria 2 subscription URL (blank disables proxy fallback):',
+            text=service.get_proxy_pool_subscription(),
+        )
+        if not accepted:
+            return
+        executable, accepted = QInputDialog.getText(
+            self, 'Configure Git proxy pool',
+            'Hysteria 2 executable path (blank uses hysteria from PATH):',
+            text=service.get_proxy_pool_hysteria_executable(),
+        )
+        if not accepted:
+            return
+        service.set_proxy_pool_subscription(subscription)
+        service.set_proxy_pool_hysteria_executable(executable)
+        if subscription.strip():
+            self.status_bar.showMessage(
+                'Git proxy pool saved; direct connections remain the first choice.', 5000,
+            )
+        else:
+            self.status_bar.showMessage('Git proxy-pool fallback disabled.', 5000)
+
     def create_agent_workspace(self, parent_shortcut_id):
         """Create a child worktree without freezing the Qt GUI thread."""
         service = self._workspace_service()
@@ -664,7 +708,14 @@ class MainWindowTaskActionsMixin:
                 )
             self.load_shortcuts()
             action = '已复用空闲工作区' if workspace.get('workspace_reused') else '已创建新工作区'
-            self.status_bar.showMessage(action, 5000)
+            sync_warning = workspace.get('sync_warning', '')
+            if sync_warning:
+                QMessageBox.warning(self, 'Workspace created from local cache', sync_warning)
+                self.status_bar.showMessage(
+                    '{} (remote sync failed; using local cache)'.format(action), 7000,
+                )
+            else:
+                self.status_bar.showMessage(action, 5000)
 
         self._run_git_operation_in_background(
             lambda: service.create_or_reuse_workspace(parent_shortcut_id),
@@ -794,29 +845,61 @@ class MainWindowTaskActionsMixin:
         count = result.get('terminated_processes', 0)
         self.status_bar.showMessage('已强制关闭本地项目（结束 {} 个进程）'.format(count), 4000)
 
+    @staticmethod
+    def _format_force_delete_workspace_failure(message: str) -> str:
+        """Turn Windows file-lock diagnostics into clear recovery steps."""
+        if 'Unable to delete workspace directory after stopping its project.' not in message:
+            return message
+        return (
+            'Windows \u6b63\u5728\u5360\u7528\u8be5\u5de5\u4f5c\u533a\uff0c\u6682\u65f6\u65e0\u6cd5\u5220\u9664\u3002\n\n'
+            '\u89e3\u51b3\u529e\u6cd5\uff1a\n'
+            '1. \u5173\u95ed\u8be5\u5de5\u4f5c\u533a\u7684\u7ec8\u7aef\u3001\u7f16\u8f91\u5668\u548c\u672c\u5730\u670d\u52a1\uff1b\n'
+            '2. \u5728\u4efb\u52a1\u7ba1\u7406\u5668\u7ed3\u675f\u76f8\u5173 Python \u8fdb\u7a0b\uff1b\n'
+            '3. \u518d\u6b21\u70b9\u51fb\u201c\u5f3a\u5236\u5220\u9664\u5de5\u4f5c\u533a\u201d\u3002\n\n'
+            '\u5982\u4ecd\u5931\u8d25\uff1a\u4ee5\u7ba1\u7406\u5458\u8eab\u4efd\u91cd\u65b0\u6253\u5f00\u672c\u7a0b\u5e8f\u540e\u91cd\u8bd5\uff0c'
+            '\u6216\u91cd\u542f Windows \u540e\u518d\u5220\u9664\u3002\n\n'
+            '\u5de5\u4f5c\u533a\u5c1a\u672a\u5220\u9664\uff0c\u7a0b\u5e8f\u4f1a\u4fdd\u7559\u8bb0\u5f55\uff0c'
+            '\u4ee5\u907f\u514d\u8bef\u6e05\u7406\u5176\u4ed6\u9879\u76ee\u3002'
+        )
+
     def force_delete_agent_workspace(self, shortcut_id):
         answer = QMessageBox.question(
             self,
             '\u5f3a\u5236\u5220\u9664\u667a\u80fd\u4f53\u5de5\u4f5c\u533a',
-            '\u8fd9\u5c06\u6c38\u4e45\u5220\u9664\u5de5\u4f5c\u533a\u76ee\u5f55\u548c\u529f\u80fd\u5206\u652f\uff0c\u5305\u62ec '
+            '\u8fd9\u4f1a\u6c38\u4e45\u5220\u9664\u5de5\u4f5c\u533a\u76ee\u5f55\u548c\u529f\u80fd\u5206\u652f\uff0c'
             '\u672a\u5408\u5e76\u7684\u63d0\u4ea4\u548c\u672a\u63d0\u4ea4\u6587\u4ef6\u90fd\u4f1a\u4e22\u5931\uff0c\u4e14\u4e0d\u53ef\u64a4\u9500\u3002\u7ee7\u7eed\u5417\uff1f',
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
-        try:
-            result = self._workspace_service().force_remove_workspace(shortcut_id)
-        except Exception as error:
-            QMessageBox.warning(self, '\u5f3a\u5236\u5220\u9664\u5931\u8d25', str(error))
-            return
-        if result.get('removed'):
-            # 强制删除不会经过普通快捷入口删除流程，因此这里也要清理引用。
-            # 否则工作区和功能分支虽然已删除，行程仍可能指向已移除的子类。
+
+        def finish_deletion(result):
+            if not result.get('removed'):
+                return
             self.data_manager.delete_itinerary_by_task_ref(shortcut_id, 'shortcut')
             self.data_manager.clear_itinerary_shortcut_bindings(shortcut_id)
             self.load_shortcuts()
             self.refresh_itinerary_after_task_deletion()
-            self.status_bar.showMessage('\u667a\u80fd\u4f53\u5de5\u4f5c\u533a\u5df2\u5f3a\u5236\u5220\u9664', 4000)
+            if result.get('cleanup_scheduled'):
+                QMessageBox.information(
+                    self, '\u5de5\u4f5c\u533a\u5df2\u79fb\u9664',
+                    'Git \u5206\u652f\u548c\u5de5\u4f5c\u533a\u8bb0\u5f55\u5df2\u5220\u9664\u3002Windows \u6b63\u5728\u5360\u7528\u5c11\u91cf\u6587\u4ef6\uff0c'
+                    '\u7a0b\u5e8f\u5df2\u5b89\u6392\u5728\u4e0b\u6b21\u91cd\u542f\u540e\u81ea\u52a8\u6e05\u7406\u3002',
+                )
+                self.status_bar.showMessage(
+                    '\u5de5\u4f5c\u533a\u5df2\u79fb\u9664\uff1b\u9501\u5b9a\u6587\u4ef6\u5c06\u5728\u4e0b\u6b21\u91cd\u542f\u540e\u81ea\u52a8\u5220\u9664',
+                    6000,
+                )
+            else:
+                self.status_bar.showMessage('\u667a\u80fd\u4f53\u5de5\u4f5c\u533a\u5df2\u5f3a\u5236\u5220\u9664', 4000)
+
+        self._run_git_operation_in_background(
+            lambda: self._workspace_service().force_remove_workspace(shortcut_id),
+            '\u6b63\u5728\u5f3a\u5236\u5220\u9664\u667a\u80fd\u4f53\u5de5\u4f5c\u533a\u2026',
+            '\u5f3a\u5236\u5220\u9664\u672a\u5b8c\u6210',
+            finish_deletion,
+            failure_message_formatter=self._format_force_delete_workspace_failure,
+        )
 
     def show_agent_workspace_status(self, shortcut_id):
         try:

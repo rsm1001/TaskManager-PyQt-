@@ -8,17 +8,23 @@ record for every feature branch.
 from __future__ import annotations
 
 import base64
+import ctypes
+from ctypes import wintypes
 from datetime import datetime
 import os
 import re
 import shutil
+import socket
 import stat
 import string
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
-from typing import Any, Dict, List, Optional, Sequence
+from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from services.shortcuts.shortcut_table_service import build_agent_command
 from services.shortcuts.terminal_service import (
@@ -32,6 +38,15 @@ class GitWorktreeError(RuntimeError):
     """A safe, user-displayable Git workspace failure."""
 
 
+class _BaseRefSyncResult(str):
+    """A base ref that remains string-compatible while carrying sync feedback."""
+
+    def __new__(cls, value: str, warning: str = "") -> "_BaseRefSyncResult":
+        result = str.__new__(cls, value)
+        result.warning = warning
+        return result
+
+
 class GitWorktreeService:
     """Manage an elastic pool of per-agent Git worktrees."""
 
@@ -40,6 +55,9 @@ class GitWorktreeService:
     ACTIVE_LIMIT_CONFIG_KEY = "agent_workspace_active_limit"
     DEFAULT_ACTIVE_LIMIT = 2  # 0 explicitly means unlimited concurrent children.
     MERGE_INSTRUCTION_CONFIG_KEY = "agent_workspace_merge_instruction"
+    PROXY_POOL_SUBSCRIPTION_CONFIG_KEY = "agent_workspace_proxy_pool_subscription"
+    PROXY_POOL_HYSTERIA_EXECUTABLE_CONFIG_KEY = "agent_workspace_proxy_pool_hysteria_executable"
+    PROXY_POOL_CONNECT_TIMEOUT_SECONDS = 8
     MERGE_PROVIDER_CONFIG_KEY = "agent_workspace_merge_provider"
     DEFAULT_MERGE_PROVIDER = "codex"
     DEFAULT_MERGE_INSTRUCTION = (
@@ -72,9 +90,11 @@ class GitWorktreeService:
         """
         try:
             with tempfile.TemporaryFile(mode="w+b") as output:
+                creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
                 raw_result = subprocess.run(
                     list(command), cwd=cwd, stdin=subprocess.DEVNULL,
                     stdout=output, stderr=output, check=False,
+                    creationflags=creationflags,
                 )
                 output.seek(0)
                 output_text = output.read().decode("utf-8", errors="replace")
@@ -185,23 +205,248 @@ class GitWorktreeService:
         """Return workspace metadata when this shortcut is an agent child."""
         return self._shortcuts.get_agent_workspace(shortcut_id)
 
-    def _sync_and_base_ref(self, profile: Dict[str, Any]) -> str:
+    def get_proxy_pool_subscription(self) -> str:
+        return str(self._data_manager.get_config(self.PROXY_POOL_SUBSCRIPTION_CONFIG_KEY, "") or "").strip()
+
+    def set_proxy_pool_subscription(self, subscription_url: str) -> None:
+        self._data_manager.set_config(self.PROXY_POOL_SUBSCRIPTION_CONFIG_KEY, (subscription_url or "").strip())
+
+    def get_proxy_pool_hysteria_executable(self) -> str:
+        return str(self._data_manager.get_config(self.PROXY_POOL_HYSTERIA_EXECUTABLE_CONFIG_KEY, "") or "").strip()
+
+    def set_proxy_pool_hysteria_executable(self, executable: str) -> None:
+        self._data_manager.set_config(
+            self.PROXY_POOL_HYSTERIA_EXECUTABLE_CONFIG_KEY, (executable or "").strip(),
+        )
+
+    def _sync_and_base_ref(self, profile: Dict[str, Any]) -> _BaseRefSyncResult:
+        """Sync directly first, then try subscription proxy nodes on network failure."""
         repository_root = profile["repository_root"]
         remote_name = profile.get("remote_name") or "origin"
-        self._git(repository_root, "fetch", "--prune", remote_name)
-        requested = (profile.get("base_ref") or "").strip()
-        if requested:
-            self._git(repository_root, "rev-parse", "--verify", requested)
-            return self._prefer_local_base(repository_root, remote_name, requested)
-        head = self._git(
-            repository_root, "symbolic-ref", "--quiet", "--short",
-            "refs/remotes/{}/HEAD".format(remote_name), check=False,
+        fetch, fetch_warning = self._fetch_remote(repository_root, remote_name)
+        base_ref = self._resolve_available_base_ref(repository_root, remote_name, profile)
+        if fetch.returncode == 0:
+            if base_ref:
+                return _BaseRefSyncResult(base_ref, fetch_warning)
+            raise GitWorktreeError(
+                "Remote sync succeeded, but no usable base branch was found. "
+                "Specify a base branch in the repository settings."
+            )
+        details = (fetch.stderr or fetch.stdout or "Git fetch failed").strip()
+        if base_ref:
+            warning = (
+                "Unable to update remote '{}'; created the workspace from local cached base '{}'. "
+                "It may not contain the latest remote commits.{}".format(
+                    remote_name, base_ref, "\n" + fetch_warning if fetch_warning else "",
+                )
+            )
+            if details:
+                warning += "\nGit: " + " ".join(details.splitlines()[:2])
+            return _BaseRefSyncResult(base_ref, warning)
+        raise GitWorktreeError(
+            "Unable to update remote '{}' and no usable local base branch is available. "
+            "Check the network or Git proxy, or configure an existing local base branch.\n{}".format(
+                remote_name, details,
+            )
         )
-        if head.returncode == 0 and head.stdout.strip():
-            return self._prefer_local_base(repository_root, remote_name, head.stdout.strip())
-        fallback = "{}/main".format(remote_name)
-        self._git(repository_root, "rev-parse", "--verify", fallback)
-        return self._prefer_local_base(repository_root, remote_name, fallback)
+
+    def _fetch_remote(self, repository_root: str, remote_name: str) -> Tuple[subprocess.CompletedProcess, str]:
+        """Fetch directly first; proxy nodes are a connection-failure fallback only."""
+        direct = self._git(
+            repository_root,
+            "-c", "http.connectTimeout={}".format(self.PROXY_POOL_CONNECT_TIMEOUT_SECONDS),
+            "-c", "http.lowSpeedLimit=1",
+            "-c", "http.lowSpeedTime=15",
+            "fetch", "--prune", remote_name,
+            check=False,
+        )
+        if direct.returncode == 0 or not self._is_connectivity_failure(direct):
+            return direct, ""
+        proxied, proxy_warning = self._fetch_via_proxy_pool(repository_root, remote_name)
+        if proxied is not None:
+            return proxied, proxy_warning
+        return direct, proxy_warning
+
+    @staticmethod
+    def _is_connectivity_failure(result: subprocess.CompletedProcess) -> bool:
+        details = "{}\n{}".format(result.stdout or "", result.stderr or "").lower()
+        markers = (
+            "unable to access", "failed to connect", "could not connect", "connection timed out",
+            "connection refused", "could not resolve host", "network is unreachable", "proxy error",
+            "recv failure", "send failure", "ssl connection timeout",
+        )
+        return any(marker in details for marker in markers)
+
+    def _fetch_via_proxy_pool(
+        self, repository_root: str, remote_name: str,
+    ) -> Tuple[Optional[subprocess.CompletedProcess], str]:
+        """Try every Hysteria 2 node in the configured subscription once."""
+        subscription_url = self.get_proxy_pool_subscription()
+        if not subscription_url:
+            return None, "Direct connection failed; no proxy-pool subscription is configured."
+        executable = self.get_proxy_pool_hysteria_executable() or shutil.which("hysteria") or ""
+        if not executable or not os.path.isfile(executable):
+            return None, "Direct connection failed; install Hysteria 2 or configure its executable path before using the proxy pool."
+        try:
+            nodes = self._load_hysteria_subscription(subscription_url)
+        except Exception as error:
+            return None, "Direct connection failed; unable to load the proxy subscription: {}".format(error)
+        if not nodes:
+            return None, "Direct connection failed; the proxy subscription contains no Hysteria 2 nodes."
+
+        failures = []
+        for index, node in enumerate(nodes, start=1):
+            process = None
+            config_path = ""
+            try:
+                process, config_path, proxy_url = self._start_hysteria_proxy(executable, node)
+                proxied = self._git(
+                    repository_root,
+                    "-c", "http.proxy={}".format(proxy_url),
+                    "-c", "https.proxy={}".format(proxy_url),
+                    "-c", "http.connectTimeout={}".format(self.PROXY_POOL_CONNECT_TIMEOUT_SECONDS),
+                    "-c", "http.lowSpeedLimit=1",
+                    "-c", "http.lowSpeedTime=15",
+                    "fetch", "--prune", remote_name,
+                    check=False,
+                )
+                if proxied.returncode == 0:
+                    return proxied, "Direct connection failed; remote sync succeeded through proxy node {} of {}.".format(index, len(nodes))
+                failures.append("node {}: {}".format(index, self._compact_git_error(proxied)))
+            except Exception as error:
+                failures.append("node {}: {}".format(index, error))
+            finally:
+                self._stop_proxy_process(process)
+                if config_path:
+                    try:
+                        os.remove(config_path)
+                    except OSError:
+                        pass
+        summary = "; ".join(failures[:3])
+        if len(failures) > 3:
+            summary += "; {} more nodes failed".format(len(failures) - 3)
+        return None, "Direct connection failed; all {} proxy nodes failed. {}".format(len(nodes), summary)
+
+    @staticmethod
+    def _compact_git_error(result: subprocess.CompletedProcess) -> str:
+        details = (result.stderr or result.stdout or "Git fetch failed").strip()
+        return " ".join(details.splitlines()[:2])[:300]
+
+    @staticmethod
+    def _load_hysteria_subscription(subscription_url: str) -> List[str]:
+        request = Request(subscription_url, headers={"User-Agent": "TaskManager-PyQt/1.0"})
+        with urlopen(request, timeout=15) as response:
+            payload = response.read()
+        return GitWorktreeService._parse_hysteria_subscription(
+            payload.decode("utf-8", errors="replace"),
+        )
+
+    @staticmethod
+    def _parse_hysteria_subscription(payload: str) -> List[str]:
+        raw = (payload or "").strip()
+        compact = "".join(raw.split())
+        try:
+            decoded = base64.b64decode(compact + "=" * (-len(compact) % 4), validate=True)
+            raw = decoded.decode("utf-8", errors="replace")
+        except (ValueError, UnicodeError):
+            pass
+        return [
+            line.strip() for line in raw.splitlines()
+            if line.strip().lower().startswith(("hysteria2://", "hy2://"))
+        ]
+
+    @staticmethod
+    def _hysteria_client_config(node_uri: str, listen_port: int) -> str:
+        """Create a client config that preserves every option in the share URI."""
+        parsed = urlsplit(node_uri)
+        if parsed.scheme.lower() not in ("hysteria2", "hy2") or not parsed.hostname:
+            raise GitWorktreeError("Invalid Hysteria 2 proxy node.")
+        quote = lambda value: '"{}"'.format(str(value).replace('\\', '\\\\').replace('"', '\\"'))
+        return "\n".join((
+            "server: " + quote(node_uri),
+            "http:",
+            "  listen: " + quote("127.0.0.1:{}".format(listen_port)),
+            "",
+        ))
+
+    @staticmethod
+    def _unused_local_port() -> int:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.bind(("127.0.0.1", 0))
+            return int(listener.getsockname()[1])
+
+    def _start_hysteria_proxy(self, executable: str, node_uri: str) -> Tuple[subprocess.Popen, str, str]:
+        port = self._unused_local_port()
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".yaml", delete=False) as config:
+            config.write(self._hysteria_client_config(node_uri, port))
+            config_path = config.name
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+        try:
+            process = subprocess.Popen(
+                [executable, "client", "-c", config_path],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                creationflags=creationflags,
+            )
+            deadline = time.monotonic() + self.PROXY_POOL_CONNECT_TIMEOUT_SECONDS
+            while time.monotonic() < deadline:
+                if process.poll() is not None:
+                    raise GitWorktreeError("Hysteria 2 exited before its local proxy started.")
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                    probe.settimeout(0.2)
+                    if probe.connect_ex(("127.0.0.1", port)) == 0:
+                        return process, config_path, "http://127.0.0.1:{}".format(port)
+                time.sleep(0.1)
+            raise GitWorktreeError("Timed out while starting the local Hysteria 2 proxy.")
+        except Exception:
+            self._stop_proxy_process(locals().get("process"))
+            try:
+                os.remove(config_path)
+            except OSError:
+                pass
+            raise
+
+    @staticmethod
+    def _stop_proxy_process(process: Optional[subprocess.Popen]) -> None:
+        if process is None or process.poll() is not None:
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=3)
+
+    def _resolve_available_base_ref(
+        self, repository_root: str, remote_name: str, profile: Dict[str, Any],
+    ) -> str:
+        """Return a locally resolvable configured/default base ref, if any."""
+        requested = (profile.get("base_ref") or "").strip()
+        candidates = [requested] if requested else []
+        if not requested:
+            head = self._git(
+                repository_root, "symbolic-ref", "--quiet", "--short",
+                "refs/remotes/{}/HEAD".format(remote_name), check=False,
+            )
+            if head.returncode == 0 and head.stdout.strip():
+                candidates.append(head.stdout.strip())
+            candidates.extend(("{}/main".format(remote_name), "main", "master"))
+            local_head = self._git(
+                repository_root, "symbolic-ref", "--quiet", "--short", "HEAD", check=False,
+            )
+            if local_head.returncode == 0 and local_head.stdout.strip():
+                candidates.append(local_head.stdout.strip())
+
+        seen = set()
+        for candidate in candidates:
+            if not candidate or candidate in seen:
+                continue
+            seen.add(candidate)
+            exists = self._git(
+                repository_root, "rev-parse", "--verify", "--quiet", candidate, check=False,
+            )
+            if exists.returncode == 0:
+                return self._prefer_local_base(repository_root, remote_name, candidate)
+        return ""
 
     def _prefer_local_base(
         self, repository_root: str, remote_name: str, remote_ref: str,
@@ -350,6 +595,7 @@ class GitWorktreeService:
             raise GitWorktreeError("只能为处于开发状态的智能体工作区启动合并。")
         profile = self._profile(workspace["parent_shortcut_id"])
         base_branch = self._sync_and_base_ref(profile)
+        sync_warning = base_branch.warning
         branch = workspace.get("branch_name", "").strip()
         if not branch:
             raise GitWorktreeError("该工作区没有可合并的功能分支。")
@@ -377,6 +623,7 @@ class GitWorktreeService:
             "instruction": instruction,
             "base_branch": base_branch,
             "branch": branch,
+            "sync_warning": sync_warning,
         }
 
     def create_or_reuse_workspace(
@@ -394,7 +641,9 @@ class GitWorktreeService:
                 "该父项目的同时开发子类已达上限（{}/{}）。"
                 "请先归还、删除一个子类，或提高上限。".format(active_count, active_limit)
             )
-        base_ref = self._sync_and_base_ref(profile)
+        base_ref_result = self._sync_and_base_ref(profile)
+        base_ref = str(base_ref_result)
+        sync_warning = base_ref_result.warning
         branch_name = self._new_branch_name(feature_name)
         agent_number = self._shortcuts.count_agent_workspaces(parent_shortcut_id) + 1
         # Keep the display title independent from the on-disk worktree name.
@@ -416,6 +665,7 @@ class GitWorktreeService:
             self._shortcuts.update(workspace["shortcut_id"], title=title)
             result = self._shortcuts.get_by_id(workspace["shortcut_id"])
             result["workspace_reused"] = True
+            result["sync_warning"] = sync_warning
             return result
 
         worktree_path = self._workspace_path(profile["repository_root"], agent_number)
@@ -428,6 +678,7 @@ class GitWorktreeService:
             self._git(profile["repository_root"], "worktree", "remove", worktree_path, check=False)
             raise
         result["workspace_reused"] = False
+        result["sync_warning"] = sync_warning
         return result
 
     def workspace_status(self, shortcut_id: str) -> Dict[str, Any]:
@@ -773,14 +1024,19 @@ class GitWorktreeService:
         # The script path is data, not executable PowerShell text.  Doubling
         # single quotes keeps it a single literal inside the encoded command.
         script_literal = script.replace("'", "''")
+        workspace_literal = workspace["worktree_path"].replace("'", "''")
         query = (
             "$ErrorActionPreference = 'Stop'; "
             "$scriptPath = '{}'; "
+            "$workspacePath = '{}'; "
             "Get-CimInstance Win32_Process | Where-Object {{ "
-            "$_.CommandLine -and $_.CommandLine.IndexOf($scriptPath, "
-            "[System.StringComparison]::OrdinalIgnoreCase) -ge 0 "
+            "($_.CommandLine -and ("
+            "$_.CommandLine.IndexOf($scriptPath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 "
+            "-or $_.CommandLine.IndexOf($workspacePath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)) "
+            "-or ($_.ExecutablePath -and $_.ExecutablePath.IndexOf($workspacePath, "
+            "[System.StringComparison]::OrdinalIgnoreCase) -ge 0) "
             "}} | Select-Object -ExpandProperty ProcessId"
-        ).format(script_literal)
+        ).format(script_literal, workspace_literal)
         result = self._run([
             "powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand",
             self._powershell_encoded_command(query),
@@ -826,7 +1082,7 @@ class GitWorktreeService:
         if workspace.get("runtime_state") == "running":
             raise GitWorktreeError("请先关闭该子类启动的本地项目，并标记项目已停止。")
         profile = self._profile(workspace["parent_shortcut_id"])
-        base_ref = self._sync_and_base_ref(profile)
+        base_ref = str(self._sync_and_base_ref(profile))
         path = workspace["worktree_path"]
         status = self._git(path, "status", "--porcelain").stdout
         if status.strip():
@@ -869,7 +1125,7 @@ class GitWorktreeService:
             raise GitWorktreeError("è¯¥å·¥ä½åºå½åä¸å¤äºå¼åç¶æã")
 
         profile = self._profile(workspace["parent_shortcut_id"])
-        base_ref = self._sync_and_base_ref(profile)
+        base_ref = str(self._sync_and_base_ref(profile))
         branch_name = workspace.get("branch_name", "")
         if not branch_name:
             raise GitWorktreeError("å·¥ä½åºç¼ºå°åè½åæ¯ä¿¡æ¯ï¼æ æ³å®å¨å é¤ã")
@@ -977,18 +1233,204 @@ class GitWorktreeService:
 
 
     @staticmethod
-    def _remove_directory_with_readonly_retry(path: str) -> None:
-        """Remove a workspace directory, including read-only Git objects on Windows."""
-        def _remove_readonly(func, target, _exc_info):
-            os.chmod(target, stat.S_IWRITE)
-            func(target)
+    def _find_windows_locking_processes(path: str) -> List[int]:
+        """Return process IDs holding the exact Windows resource at *path*.
+
+        Restart Manager accepts individual paths, not recursive directory
+        searches.  Registering only an arbitrary first batch of files from a
+        virtual environment can miss a later extension module such as
+        ``charset_normalizer\\cd.pyd``.  Callers therefore pass the exact path
+        reported by ``shutil.rmtree`` when deletion fails.
+        """
+        if os.name != "nt":
+            return []
+
+        class _RMUniqueProcess(ctypes.Structure):
+            _fields_ = [
+                ("dwProcessId", wintypes.DWORD),
+                ("ProcessStartTime", wintypes.FILETIME),
+            ]
+
+        class _RMProcessInfo(ctypes.Structure):
+            _fields_ = [
+                ("Process", _RMUniqueProcess),
+                ("strAppName", wintypes.WCHAR * 256),
+                ("strServiceShortName", wintypes.WCHAR * 64),
+                ("ApplicationType", wintypes.DWORD),
+                ("AppStatus", wintypes.DWORD),
+                ("TSSessionId", wintypes.DWORD),
+                ("bRestartable", wintypes.BOOL),
+            ]
 
         try:
-            shutil.rmtree(path, onerror=_remove_readonly)
-        except OSError as error:
-            raise GitWorktreeError(
-                "Unable to delete workspace directory: {}".format(error)
-            ) from error
+            rm = ctypes.WinDLL("Rstrtmgr")
+        except OSError:
+            return []
+        rm.RmStartSession.argtypes = [ctypes.POINTER(wintypes.DWORD), wintypes.DWORD, wintypes.LPWSTR]
+        rm.RmStartSession.restype = wintypes.DWORD
+        rm.RmRegisterResources.argtypes = [
+            wintypes.DWORD, wintypes.UINT, ctypes.POINTER(wintypes.LPCWSTR),
+            wintypes.UINT, ctypes.c_void_p, wintypes.UINT, ctypes.POINTER(wintypes.LPCWSTR),
+        ]
+        rm.RmRegisterResources.restype = wintypes.DWORD
+        rm.RmGetList.argtypes = [
+            wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), ctypes.POINTER(wintypes.DWORD),
+            ctypes.POINTER(_RMProcessInfo), ctypes.POINTER(wintypes.DWORD),
+        ]
+        rm.RmGetList.restype = wintypes.DWORD
+        rm.RmEndSession.argtypes = [wintypes.DWORD]
+        rm.RmEndSession.restype = wintypes.DWORD
+        session = wintypes.DWORD()
+        session_key = ctypes.create_unicode_buffer(33)
+        absolute = os.path.abspath(path)
+        resource_array = (wintypes.LPCWSTR * 1)(absolute)
+        result = rm.RmStartSession(ctypes.byref(session), 0, session_key)
+        if result != 0:
+            return []
+        try:
+            result = rm.RmRegisterResources(
+                session, 1, resource_array, 0, None, 0, None,
+            )
+            if result != 0:
+                return []
+            needed = wintypes.DWORD(0)
+            count = wintypes.DWORD(0)
+            reboot_reason = wintypes.DWORD(0)
+            result = rm.RmGetList(
+                session, ctypes.byref(needed), ctypes.byref(count), None,
+                ctypes.byref(reboot_reason),
+            )
+            if result != 234 or not needed.value:
+                return []
+            processes = (_RMProcessInfo * needed.value)()
+            count.value = needed.value
+            result = rm.RmGetList(
+                session, ctypes.byref(needed), ctypes.byref(count), processes,
+                ctypes.byref(reboot_reason),
+            )
+            if result != 0:
+                return []
+            return list(dict.fromkeys(
+                int(processes[index].Process.dwProcessId)
+                for index in range(count.value)
+                if processes[index].Process.dwProcessId
+            ))
+        finally:
+            rm.RmEndSession(session)
+
+    def _stop_windows_file_lockers(self, path: str) -> int:
+        """Terminate processes holding workspace files, excluding this app."""
+        terminated = 0
+        for process_id in self._find_windows_locking_processes(path):
+            if process_id == os.getpid():
+                continue
+            result = self._run(
+                ["taskkill", "/PID", str(process_id), "/T", "/F"], check=False,
+            )
+            if result.returncode == 0:
+                terminated += 1
+        return terminated
+
+    @staticmethod
+    def _schedule_windows_delete(path: str) -> bool:
+        """Schedule a locked file/directory for deletion at the next reboot."""
+        if os.name != "nt":
+            return False
+        try:
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            move_file_ex = kernel32.MoveFileExW
+            move_file_ex.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
+            move_file_ex.restype = wintypes.BOOL
+        except OSError:
+            return False
+
+        absolute = os.path.abspath(path)
+        entries = []
+        if os.path.isdir(absolute):
+            for root, directories, files in os.walk(absolute, topdown=False):
+                entries.extend(os.path.join(root, name) for name in files)
+                entries.extend(os.path.join(root, name) for name in directories)
+        entries.append(absolute)
+        scheduled = False
+        for entry in entries:
+            if os.path.exists(entry) and move_file_ex(entry, None, 0x00000004):
+                scheduled = True
+        return scheduled
+
+    @staticmethod
+    def _is_windows_lock_error(error: BaseException) -> bool:
+        """Whether *error* is a Windows sharing/access violation."""
+        return (
+            getattr(error, "winerror", None) in (5, 32, 33)
+            or getattr(error, "errno", None) == 13
+        )
+
+    def _remove_directory_with_readonly_retry(
+        self, path: str, defer_on_failure: bool = False,
+    ) -> bool:
+        """Remove a workspace directory, releasing exact Windows file locks.
+
+        A virtual environment commonly contains far more than 128 files, so a
+        broad folder scan is not dependable for locating the process that has a
+        native module mapped.  ``rmtree`` exposes the exact entry that failed;
+        on a sharing violation, query Restart Manager for that entry, terminate
+        its process tree, and retry it immediately before retrying the complete
+        directory removal.
+        """
+        def _make_writable(target: str) -> None:
+            try:
+                os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
+            except OSError:
+                pass
+
+        lock_targets = {os.path.abspath(path)}
+
+        def _remove_readonly(func, target, exc_info):
+            _make_writable(target)
+            error = exc_info[1]
+            if os.name == "nt" and self._is_windows_lock_error(error):
+                exact_target = os.path.abspath(target)
+                lock_targets.add(exact_target)
+                # ``target`` is the actual locked file (for example the venv's
+                # charset_normalizer\cd.pyd), unlike the workspace root which
+                # may contain thousands of unrelated files.
+                if self._stop_windows_file_lockers(exact_target):
+                    # taskkill returning does not guarantee that a mapped .pyd
+                    # has been released by the kernel yet.
+                    time.sleep(0.15)
+            func(target)
+
+        last_error = None
+        for attempt in range(5):
+            try:
+                if os.name == "nt":
+                    # First release any known exact failure targets from a prior
+                    # attempt.  The root path also covers a process that holds
+                    # the directory itself rather than an individual file.
+                    for lock_target in tuple(lock_targets):
+                        self._stop_windows_file_lockers(lock_target)
+                if not os.path.exists(path):
+                    return False
+                # Git-created files can carry the read-only attribute. Clear it
+                # before each retry; this is harmless for normal files.
+                for root, directories, files in os.walk(path, topdown=False):
+                    for name in files + directories:
+                        _make_writable(os.path.join(root, name))
+                shutil.rmtree(path, onerror=_remove_readonly)
+                return False
+            except OSError as error:
+                last_error = error
+                if not self._is_windows_lock_error(error):
+                    break
+                time.sleep(0.4 * (attempt + 1))
+        if defer_on_failure and self._schedule_windows_delete(path):
+            return True
+        raise GitWorktreeError(
+            "Unable to delete workspace directory after stopping its project. "
+            "A process may still be using '{}'; close the project/terminal and retry. ({})".format(
+                path, last_error,
+            )
+        ) from last_error
 
     def force_remove_workspace(self, shortcut_id: str) -> Dict[str, Any]:
         """Permanently remove a workspace without requiring branch integration.
@@ -999,10 +1441,10 @@ class GitWorktreeService:
         workspace = self._shortcuts.get_agent_workspace(shortcut_id)
         if not workspace:
             return {"removed": False, "reason": "not_found"}
-        if workspace.get("runtime_state") == "running":
-            raise GitWorktreeError(
-                "Close the running workspace project before force deletion."
-            )
+        # Do not trust the persisted runtime marker: Windows Terminal or a
+        # child Python process can survive after the marker was set to stopped.
+        # Force deletion is explicitly destructive, so stop matching processes
+        # automatically instead of asking the user to repeat the operation.
 
         profile = self._shortcuts.get_repository_profile(workspace["parent_shortcut_id"])
         if not profile:
@@ -1010,6 +1452,19 @@ class GitWorktreeService:
         repository_root = profile["repository_root"]
         path = workspace["worktree_path"]
         branch_name = (workspace.get("branch_name") or "").strip()
+        cleanup_scheduled = False
+
+        # The runtime marker can be stale when Windows Terminal or a child
+        # Python process survived the UI. Stop matching processes even when the
+        # marker says "stopped", otherwise files in a virtualenv can remain
+        # locked and rmtree fails with WinError 5.
+        if os.name == "nt":
+            try:
+                self.force_stop_workspace_project(shortcut_id)
+            except GitWorktreeError:
+                # A missing launcher should not prevent cleanup; the directory
+                # removal below will still provide the precise lock error.
+                pass
 
         registration = self._git(
             repository_root, "worktree", "list", "--porcelain",
@@ -1021,11 +1476,20 @@ class GitWorktreeService:
             if line.startswith("worktree ")
         )
         if is_registered:
-            self._git(repository_root, "worktree", "remove", "--force", path)
+            remove_result = self._git(
+                repository_root, "worktree", "remove", "--force", path, check=False,
+            )
+            if remove_result.returncode != 0 and os.path.isdir(path):
+                cleanup_scheduled = self._remove_directory_with_readonly_retry(
+                    path, defer_on_failure=True,
+                )
+                self._git(repository_root, "worktree", "prune", check=False)
         elif os.path.isdir(path):
             # Handles stale metadata or a separately-cloned checkout that is
             # no longer registered in the parent repository.
-            self._remove_directory_with_readonly_retry(path)
+            cleanup_scheduled = self._remove_directory_with_readonly_retry(
+                path, defer_on_failure=True,
+            )
             self._git(repository_root, "worktree", "prune", check=False)
 
         if branch_name:
@@ -1049,7 +1513,11 @@ class GitWorktreeService:
             raise GitWorktreeError(
                 "Git workspace was deleted, but the shortcut record could not be removed."
             )
-        return {"removed": True, "forced": True}
+        return {
+            "removed": True,
+            "forced": True,
+            "cleanup_scheduled": cleanup_scheduled,
+        }
 
 
     def _trim_idle_pool(self, parent_shortcut_id: str) -> int:

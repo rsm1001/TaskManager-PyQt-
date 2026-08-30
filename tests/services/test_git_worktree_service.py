@@ -1,5 +1,6 @@
 """Integration tests for the reusable local Git worktree pool."""
 
+import base64
 import os
 import re
 import shutil
@@ -516,7 +517,7 @@ def test_force_workspace_deletion_discards_unmerged_and_dirty_workspace(tmp_path
 
     result = service.force_remove_workspace(created['id'])
 
-    assert result == {'removed': True, 'forced': True}
+    assert result == {'removed': True, 'forced': True, 'cleanup_scheduled': False}
     assert not worktree_path.exists()
     assert not _git(repository, 'branch', '--list', branch_name).stdout.strip()
     assert manager.get_agent_workspace(created['id']) is None
@@ -600,6 +601,36 @@ def test_force_stop_workspace_project_terminates_only_matching_process_trees(tmp
     connection.close()
 
 
+def test_force_delete_releases_the_exact_file_reported_by_rmtree(tmp_path, monkeypatch):
+    """A .pyd lock must be resolved even when it is deep inside a large venv."""
+    workspace = tmp_path / 'workspace'
+    locked_module = workspace / '.venv' / 'Lib' / 'site-packages' / 'charset_normalizer' / 'cd.pyd'
+    locked_module.parent.mkdir(parents=True)
+    locked_module.write_bytes(b'extension module')
+    service = GitWorktreeService(Mock())
+    stopped_targets = []
+    retried_targets = []
+
+    error = PermissionError(13, 'The process cannot access the file')
+    error.winerror = 32
+
+    def fake_rmtree(_path, onerror):
+        onerror(lambda target: retried_targets.append(target), str(locked_module), (PermissionError, error, None))
+
+    monkeypatch.setattr(git_worktree_service.os, 'name', 'nt')
+    monkeypatch.setattr(git_worktree_service.shutil, 'rmtree', fake_rmtree)
+    monkeypatch.setattr(
+        service, '_stop_windows_file_lockers',
+        lambda target: stopped_targets.append(os.path.normcase(os.path.abspath(target))) or 1,
+    )
+    monkeypatch.setattr(git_worktree_service.time, 'sleep', lambda _seconds: None)
+
+    assert service._remove_directory_with_readonly_retry(str(workspace)) is False
+    normalized_module = os.path.normcase(os.path.abspath(locked_module))
+    assert normalized_module in stopped_targets
+    assert retried_targets == [str(locked_module)]
+
+
 def test_recycle_reports_the_files_that_make_a_workspace_dirty(tmp_path):
     repository = _make_repository(tmp_path)
     connection = sqlite3.connect(':memory:')
@@ -658,4 +689,91 @@ def test_merge_agent_opens_in_parent_repository_with_formatted_instruction(tmp_p
     ]
     assert os.path.normcase(terminal.call_args.args[1]) == os.path.normcase(str(repository))
     assert result['base_branch'] == 'main'
+    connection.close()
+
+
+def test_proxy_fetch_is_attempted_only_after_direct_connectivity_failure(monkeypatch):
+    direct_failure = subprocess.CompletedProcess(
+        ['git'], 128, stdout='', stderr='Failed to connect to github.com port 443',
+    )
+    proxy_success = subprocess.CompletedProcess(['git'], 0, stdout='', stderr='')
+    service = GitWorktreeService(Mock())
+    git_calls = []
+
+    def fake_git(repository_root, *arguments, **kwargs):
+        git_calls.append(arguments)
+        return direct_failure
+
+    monkeypatch.setattr(service, '_git', fake_git)
+    monkeypatch.setattr(
+        service, '_fetch_via_proxy_pool',
+        lambda repository_root, remote_name: (proxy_success, 'proxy node succeeded'),
+    )
+
+    result, warning = service._fetch_remote('/repository', 'origin')
+
+    assert result is proxy_success
+    assert warning == 'proxy node succeeded'
+    assert len(git_calls) == 1
+    assert 'http.proxy=' not in ' '.join(git_calls[0])
+
+
+def test_proxy_fetch_is_not_attempted_for_non_connectivity_failure(monkeypatch):
+    authentication_failure = subprocess.CompletedProcess(
+        ['git'], 128, stdout='', stderr='remote: Repository not found.',
+    )
+    service = GitWorktreeService(Mock())
+    attempted_proxy = []
+
+    monkeypatch.setattr(service, '_git', lambda *args, **kwargs: authentication_failure)
+    monkeypatch.setattr(
+        service, '_fetch_via_proxy_pool',
+        lambda *args: attempted_proxy.append(True),
+    )
+
+    result, warning = service._fetch_remote('/repository', 'origin')
+
+    assert result is authentication_failure
+    assert warning == ''
+    assert attempted_proxy == []
+
+
+def test_hysteria_subscription_parser_accepts_base64_node_lists():
+    nodes = (
+        'hysteria2://token@example.com:443?sni=example.com#one\n'
+        'hy2://another@example.org:8443#two\n'
+        'ss://not-a-hysteria-node\n'
+    )
+    payload = base64.b64encode(nodes.encode('utf-8')).decode('ascii')
+
+    assert GitWorktreeService._parse_hysteria_subscription(payload) == [
+        'hysteria2://token@example.com:443?sni=example.com#one',
+        'hy2://another@example.org:8443#two',
+    ]
+
+
+def test_hysteria_client_config_preserves_the_subscription_uri():
+    node = 'hysteria2://token@example.com:443?sni=cdn.example.com&insecure=1#node'
+
+    config = GitWorktreeService._hysteria_client_config(node, 18080)
+
+    assert 'server: "{}"'.format(node) in config
+    assert 'listen: "127.0.0.1:18080"' in config
+
+
+def test_workspace_creation_uses_local_cache_after_direct_and_proxy_failure(tmp_path):
+    repository = _make_repository(tmp_path)
+    connection = sqlite3.connect(':memory:')
+    manager = ShortcutManager(connection=connection)
+    assert manager.create('todo', 'Repository', str(repository))
+    parent = manager.get_all()[0]
+    service = GitWorktreeService(_DataManager(manager))
+    service.configure_repository(parent['id'], 'launch.py')
+    _git(repository, 'remote', 'set-url', 'origin', 'http://127.0.0.1:1/unavailable.git')
+
+    created = service.create_or_reuse_workspace(parent['id'], 'offline feature')
+
+    assert created['workspace_reused'] is False
+    assert 'local cached base' in created['sync_warning']
+    assert manager.get_agent_workspace(created['id'])['base_ref'] == 'main'
     connection.close()
